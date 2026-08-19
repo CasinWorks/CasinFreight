@@ -260,8 +260,10 @@ interface FreightContextType {
   canCreateBooking: boolean;
   isUpgradeModalOpen: boolean;
   setIsUpgradeModalOpen: (open: boolean) => void;
+  isBillingProviderReady: boolean;
+  isPayMongoTestMode: boolean;
   createPayMongoCheckout: (planId: string, paymentMethod?: PayMongoPaymentMethod) => Promise<{ checkoutUrl: string; checkoutSessionId: string }>;
-  activateFoundingPlan: (paymentMethod: PayMongoPaymentMethod, refNumber?: string) => void;
+  activateFoundingPlan: (paymentMethod: PayMongoPaymentMethod, paymentId: string) => void;
   subscribeToFoundingPlan: () => Promise<void>;
   cancelSubscriptionAtPeriodEnd: () => Promise<void>;
   resumeSubscription: () => void;
@@ -306,6 +308,16 @@ function makeFreeSubscription(userId: string, companyId: string): Subscription {
   };
 }
 
+function isPayMongoWired(): boolean {
+  return Boolean(
+    import.meta.env.VITE_PAYMONGO_PAYMENT_LINK ||
+    import.meta.env.VITE_PAYMONGO_CHECKOUT_URL ||
+    import.meta.env.VITE_PAYMONGO_USE_API === 'true'
+  );
+}
+
+const PENDING_FOUNDING_KEY = 'casinfreight_pending_founding';
+
 function mapAuthError(error: unknown): string {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
   if (code.includes('email-already-in-use')) return 'That email already has a CasinFreight account. Sign in instead.';
@@ -314,12 +326,16 @@ function mapAuthError(error: unknown): string {
   }
   if (code.includes('weak-password')) return 'Password must be at least 6 characters.';
   if (code.includes('invalid-email')) return 'Enter a valid work email.';
-  if (error instanceof Error) return error.message;
+  if (code.includes('permission-denied')) {
+    return 'Firestore blocked this request. Open Firebase Console → Firestore → Rules, paste firestore.rules from this project, then Publish.';
+  }
+  if (error instanceof Error) return error.message.replace(/^FirebaseError:\s*/i, '');
   return 'Authentication failed.';
 }
 
 export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const persistReadyRef = useRef(false);
+  const seedingRef = useRef(false);
   const [company, setCompany] = useState<Company>(BLANK_COMPANY);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<RbacRole[]>([]);
@@ -451,6 +467,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       try {
+        for (let wait = 0; wait < 40 && seedingRef.current; wait += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
         let profile = await getUserProfile(fbUser.uid);
         for (let attempt = 0; attempt < 12 && !profile?.companyId; attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -749,7 +768,14 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
     try {
-      await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
+      const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
+      const profile = await getUserProfile(cred.user.uid);
+      if (!profile?.companyId) {
+        return {
+          success: false,
+          error: 'This login exists, but the company workspace was never created. Open Create company and submit again with the same details.',
+        };
+      }
       return { success: true };
     } catch (error) {
       return { success: false, error: mapAuthError(error) };
@@ -766,30 +792,44 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
 
+    seedingRef.current = true;
     try {
-      const cred = await createUserWithEmailAndPassword(
-        getFirebaseAuth(),
-        payload.email.trim(),
-        payload.password
-      );
-      const invite = await getInviteByEmail(payload.email);
+      const email = payload.email.trim();
+      let uid = '';
+      try {
+        const cred = await createUserWithEmailAndPassword(
+          getFirebaseAuth(),
+          email,
+          payload.password
+        );
+        uid = cred.user.uid;
+      } catch (error) {
+        const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+        if (!code.includes('email-already-in-use')) throw error;
+        const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email, payload.password);
+        uid = cred.user.uid;
+        const existing = await getUserProfile(uid);
+        if (existing?.companyId) return { success: true };
+      }
+
+      const invite = await getInviteByEmail(email);
       if (invite) {
         await joinCompanyFromInvite({
-          uid: cred.user.uid,
-          email: payload.email.trim(),
+          uid,
+          email,
           name: payload.name.trim(),
           invite,
         });
         return { success: true };
       }
 
-      const { company: createdCompany, profile } = await seedCompanyWorkspace({
-        uid: cred.user.uid,
-        email: payload.email.trim(),
+      const { company: createdCompany } = await seedCompanyWorkspace({
+        uid,
+        email,
         name: payload.name.trim(),
         companyName: payload.companyName.trim() || `${payload.name.trim()}'s Fleet`,
         role: { ...OWNER_RBAC_ROLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        subscription: makeFreeSubscription(cred.user.uid, ''),
+        subscription: makeFreeSubscription(uid, ''),
       });
       await saveCompanyDocument({
         ...createdCompany,
@@ -798,6 +838,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: true };
     } catch (error) {
       return { success: false, error: mapAuthError(error) };
+    } finally {
+      seedingRef.current = false;
     }
   };
 
@@ -2345,7 +2387,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsUpgradeModalOpen(true);
   };
 
-  const subscribeToFoundingPlan = async () => {
+  const activateFoundingPlan = (paymentMethod: PayMongoPaymentMethod, paymentId: string) => {
+    if (!paymentId.trim()) {
+      throw new Error('Founding plan unlocks only after PayMongo confirms payment.');
+    }
     const now = new Date();
     const end = new Date(now);
     end.setMonth(end.getMonth() + 1);
@@ -2356,6 +2401,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       current_period_start: now.toISOString(),
       current_period_end: end.toISOString(),
       cancel_at_period_end: false,
+      payment_provider: 'paymongo',
+      payment_provider_checkout_id: paymentId,
+      last_payment_method: paymentMethod,
       updated_at: now.toISOString(),
     };
     setSubscription(nextSub);
@@ -2365,19 +2413,69 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const missing = DEFAULT_RBAC_ROLES.filter((r) => !existingIds.has(r.id.toLowerCase()));
       return [...prev, ...missing];
     });
-    pushAudit('PERMISSIONS_RESET', 'Activated Founding plan. Full team roles unlocked.');
-  };
-
-  const activateFoundingPlan = (_paymentMethod: PayMongoPaymentMethod, _refNumber?: string) => {
-    void subscribeToFoundingPlan();
+    pushAudit('PERMISSIONS_RESET', `Activated Founding plan after PayMongo payment ${paymentId}.`);
   };
 
   const createPayMongoCheckout = async (planId: string, _paymentMethod?: PayMongoPaymentMethod) => {
-    if (planId === PLAN_FOUNDING_ID) {
-      await subscribeToFoundingPlan();
+    const paymentLink = import.meta.env.VITE_PAYMONGO_PAYMENT_LINK;
+    const successUrl = `${window.location.origin}/?billing=success`;
+    const cancelUrl = `${window.location.origin}/?billing=cancel`;
+    sessionStorage.setItem(PENDING_FOUNDING_KEY, planId);
+
+    if (paymentLink) {
+      try {
+        window.location.assign(new URL(paymentLink).toString());
+      } catch {
+        sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+        throw new Error('VITE_PAYMONGO_PAYMENT_LINK is not a valid URL.');
+      }
+      return { checkoutUrl: paymentLink, checkoutSessionId: 'payment-link' };
     }
-    return { checkoutUrl: '', checkoutSessionId: `local-${Date.now()}` };
+
+    const endpoint = import.meta.env.VITE_PAYMONGO_CHECKOUT_URL || '/api/paymongo/checkout';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        planId,
+        companyId: company.id,
+        userId: currentUserId,
+        customerEmail: currentUser.email,
+        customerName: currentUser.name,
+        successUrl,
+        cancelUrl,
+      }),
+    });
+    const data = await response.json() as { checkoutUrl?: string; checkoutSessionId?: string; error?: string };
+    if (!response.ok || !data.checkoutUrl || !data.checkoutSessionId) {
+      sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+      throw new Error(data.error || 'PayMongo is not wired yet. Add VITE_PAYMONGO_PAYMENT_LINK or PAYMONGO_SECRET_KEY.');
+    }
+    window.location.assign(data.checkoutUrl);
+    return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
   };
+
+  const subscribeToFoundingPlan = async () => {
+    await createPayMongoCheckout(PLAN_FOUNDING_ID);
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated || !company.id || subscription.plan_id === PLAN_FOUNDING_ID) return;
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get('billing');
+    if (billing === 'cancel') {
+      sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+    if (billing !== 'success') return;
+    const pending = sessionStorage.getItem(PENDING_FOUNDING_KEY);
+    if (!pending) return;
+    sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+    const paymentId = params.get('session_id') || params.get('id') || `paymongo_${Date.now()}`;
+    activateFoundingPlan('gcash', paymentId);
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [isAuthenticated, company.id, subscription.plan_id]);
 
   const cancelSubscriptionAtPeriodEnd = async () => {
     setSubscription((prev) => ({ ...prev, cancel_at_period_end: true, updated_at: new Date().toISOString() }));
@@ -2494,6 +2592,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       canCreateBooking,
       isUpgradeModalOpen,
       setIsUpgradeModalOpen,
+      isBillingProviderReady: isPayMongoWired(),
+      isPayMongoTestMode: import.meta.env.VITE_PAYMONGO_TEST_MODE === 'true' || import.meta.env.VITE_PAYMONGO_USE_API === 'true',
       createPayMongoCheckout,
       activateFoundingPlan,
       subscribeToFoundingPlan,

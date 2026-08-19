@@ -8,6 +8,8 @@ export const UpgradeModal: React.FC = () => {
     isUpgradeModalOpen,
     setIsUpgradeModalOpen,
     subscribeToFoundingPlan,
+    isBillingProviderReady,
+    isPayMongoTestMode,
     subscriptionUsage,
     activePlan,
   } = useFreight();
@@ -18,13 +20,16 @@ export const UpgradeModal: React.FC = () => {
   if (!isUpgradeModalOpen) return null;
 
   const handleSubscribe = async () => {
+    if (!isBillingProviderReady) {
+      setError('Founding stays locked until PayMongo checkout is wired. Free caps remain in effect.');
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     try {
       await subscribeToFoundingPlan();
-      setIsUpgradeModalOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not activate Founding plan.');
+      setError(err instanceof Error ? err.message : 'Could not start PayMongo checkout.');
     } finally {
       setIsSubmitting(false);
     }
@@ -40,8 +45,13 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Subscribe to add team, trucks, and volume.
+              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding unlocks only after PayMongo confirms payment.
             </p>
+            {isPayMongoTestMode && (
+              <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
+                PayMongo test mode — no real charges. Use a test card or Authorize on the e-wallet test page.
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -92,12 +102,18 @@ export const UpgradeModal: React.FC = () => {
                 {isPaid ? (
                   <button
                     type="button"
-                    disabled={isSubmitting || isCurrent}
+                    disabled={isSubmitting || isCurrent || !isBillingProviderReady}
                     onClick={handleSubscribe}
                     className="mt-5 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
                   >
-                    {isSubmitting ? 'Activating…' : isCurrent ? 'Already subscribed' : 'Subscribe — ₱499/mo'}
-                    {!isCurrent && <Zap className="w-3.5 h-3.5" />}
+                    {isCurrent
+                      ? 'Already subscribed'
+                      : !isBillingProviderReady
+                        ? 'Available after PayMongo is wired'
+                        : isSubmitting
+                          ? 'Opening checkout…'
+                          : 'Pay ₱499/mo with PayMongo'}
+                    {isBillingProviderReady && !isCurrent && <Zap className="w-3.5 h-3.5" />}
                   </button>
                 ) : (
                   <div className="mt-5 w-full py-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-bold text-center">

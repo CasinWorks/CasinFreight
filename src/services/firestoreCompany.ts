@@ -80,8 +80,14 @@ export async function saveCompanyDocument(company: CompanyDocument): Promise<voi
 }
 
 export async function getInviteByEmail(email: string): Promise<TeamInvite | null> {
-  const snap = await getDoc(doc(getFirebaseDb(), 'invites', emailKey(email)));
-  return snap.exists() ? (snap.data() as TeamInvite) : null;
+  try {
+    const snap = await getDoc(doc(getFirebaseDb(), 'invites', emailKey(email)));
+    return snap.exists() ? (snap.data() as TeamInvite) : null;
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+    if (code.includes('permission-denied')) return null;
+    throw error;
+  }
 }
 
 export async function saveInvite(invite: TeamInvite): Promise<void> {
@@ -180,10 +186,17 @@ export async function seedCompanyWorkspace(params: {
     has_seen_tutorial: false,
   };
 
-  await saveCompanyDocument(company);
+  // User profile first so company/subcollection rules can authorize via companyId.
   await saveUserProfile(profile);
-  await replaceCollection<RbacRole>(companyId, 'roles', [params.role]);
-  await replaceCollection<UserProfile>(companyId, 'members', [profile]);
+  await saveCompanyDocument(company);
+  await setDoc(
+    doc(getFirebaseDb(), 'companies', companyId, 'roles', params.role.id),
+    stripUndefined(params.role as unknown as Record<string, unknown>)
+  );
+  await setDoc(
+    doc(getFirebaseDb(), 'companies', companyId, 'members', profile.id),
+    stripUndefined(profile as unknown as Record<string, unknown>)
+  );
 
   return { company, profile };
 }
@@ -194,11 +207,6 @@ export async function joinCompanyFromInvite(params: {
   name: string;
   invite: TeamInvite;
 }): Promise<{ company: CompanyDocument; profile: UserProfile }> {
-  const company = await getCompanyDocument(params.invite.companyId);
-  if (!company) {
-    throw new Error('The company on this invite no longer exists.');
-  }
-
   const profile: UserProfile = {
     id: params.uid,
     uid: params.uid,
@@ -211,6 +219,12 @@ export async function joinCompanyFromInvite(params: {
   };
 
   await saveUserProfile(profile);
+
+  const company = await getCompanyDocument(params.invite.companyId);
+  if (!company) {
+    throw new Error('The company on this invite no longer exists.');
+  }
+
   await setDoc(
     doc(getFirebaseDb(), 'companies', params.invite.companyId, 'members', params.uid),
     stripUndefined(profile as unknown as Record<string, unknown>)

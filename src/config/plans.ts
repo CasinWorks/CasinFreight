@@ -58,7 +58,7 @@ export const SAAS_PLANS: Plan[] = [
       'Unlimited trucks and trip transactions',
       'Unlimited team accounts and custom roles',
       'Full RBAC, BIR ledger, and dual-control billing',
-      'PayMongo-ready GCash, Maya, cards & QR PH',
+      'Unlocks after a confirmed PayMongo payment',
       'Locked founding rate: ₱499/month',
     ],
     badge: 'FOUNDING',

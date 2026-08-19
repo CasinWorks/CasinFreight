@@ -44,10 +44,38 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 ```
 
-5. In Firestore → Rules, paste `firestore.rules` from this repo and publish.
+5. Publish Firestore rules (required — production mode denies all writes until you do):
+   - Console: Firestore → Rules → paste `firestore.rules` → **Publish**
+   - Or CLI: `npx -p firebase-tools firebase deploy --only firestore:rules --project casinfreight`
 6. Restart `npm run dev`.
 
 Create a company from the login screen. Invited teammates sign up with the same email to join.
+
+## PayMongo billing
+
+Founding (₱499/mo) stays locked until PayMongo confirms payment. Wire it with **one** of these:
+
+### A. Payment Link (dashboard)
+
+1. In [PayMongo Dashboard](https://dashboard.paymongo.com) open **Payment Links**.
+2. Create a ₱499 PHP link for CasinFreight Founding.
+3. Set the success redirect to `http://localhost:3000/?billing=success` (and your Vercel URL in production).
+4. Paste the link into `.env`:
+
+```
+VITE_PAYMONGO_PAYMENT_LINK=https://paymongo.com/your-link
+```
+
+5. Restart `npm run dev`. Subscribe now opens that link. After payment, PayMongo returns to the app and Founding unlocks.
+
+### B. Secret API key (checkout session)
+
+1. Copy **Secret Key** from PayMongo → Developers → API Keys (`sk_test_...` or `sk_live_...`).
+2. Put it in `.env` as `PAYMONGO_SECRET_KEY` — **not** a `VITE_` variable.
+3. Also set `VITE_PAYMONGO_USE_API=true`.
+4. Restart `npm run dev`. Subscribe creates a hosted checkout session via `/api/paymongo/checkout`.
+
+On Vercel, add the same `PAYMONGO_SECRET_KEY` and `VITE_PAYMONGO_USE_API` (or the payment link) under Project → Settings → Environment Variables, then redeploy.
 
 ## Run locally
 
