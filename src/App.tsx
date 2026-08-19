@@ -24,6 +24,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { Trip } from './types';
 import { KanbanSquare, PlusCircle, Receipt, Truck, LayoutDashboard, Menu } from 'lucide-react';
 import { AdminSubscriptionsView } from './components/admin/AdminSubscriptionsView';
+import { UpgradeModal } from './components/billing/UpgradeModal';
 import { TutorialProvider, useTutorial } from './components/tutorial';
 
 function MainLayout() {
