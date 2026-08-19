@@ -2417,12 +2417,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const createPayMongoCheckout = async (planId: string, _paymentMethod?: PayMongoPaymentMethod) => {
+    const useApiCheckout = import.meta.env.VITE_PAYMONGO_USE_API === 'true';
     const paymentLink = import.meta.env.VITE_PAYMONGO_PAYMENT_LINK;
     const successUrl = `${window.location.origin}/?billing=success`;
     const cancelUrl = `${window.location.origin}/?billing=cancel`;
     sessionStorage.setItem(PENDING_FOUNDING_KEY, planId);
 
-    if (paymentLink) {
+    // Payment Links have no success redirect. Prefer API checkout so PayMongo
+    // sends the customer back to /?billing=success after they pay.
+    if (!useApiCheckout && paymentLink) {
       try {
         window.location.assign(new URL(paymentLink).toString());
       } catch {
