@@ -8,9 +8,9 @@ export const UpgradeModal: React.FC = () => {
     isUpgradeModalOpen,
     setIsUpgradeModalOpen,
     subscribeToFoundingPlan,
-    confirmFoundingPayment,
     isBillingProviderReady,
     isPayMongoTestMode,
+    isWaitingForPayMongo,
     subscriptionUsage,
     activePlan,
     resetCurrentPlanToFree,
@@ -18,7 +18,6 @@ export const UpgradeModal: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [paymentRef, setPaymentRef] = React.useState('');
 
   if (!isUpgradeModalOpen) return null;
 
@@ -38,18 +37,7 @@ export const UpgradeModal: React.FC = () => {
     }
   };
 
-  const handleConfirmPaid = async () => {
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await confirmFoundingPayment(paymentRef.trim() || undefined);
-      setIsUpgradeModalOpen(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not confirm PayMongo payment.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const waiting = isWaitingForPayMongo || isSubmitting;
 
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -61,11 +49,16 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding unlocks only after PayMongo confirms payment.
+              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding unlocks automatically after PayMongo confirms payment.
             </p>
             {isPayMongoTestMode && (
               <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
-                PayMongo test mode — no real charges. QRPh stays on PayMongo’s “Payment Received” page; return here and confirm to unlock Founding.
+                PayMongo test mode — no real charges. Keep this tab open; QRPh stays on PayMongo and CasinFreight upgrades itself.
+              </p>
+            )}
+            {isWaitingForPayMongo && (
+              <p className="text-[11px] font-semibold text-blue-700 mt-1.5">
+                Waiting for PayMongo to confirm payment. This workspace will switch to Founding on its own.
               </p>
             )}
           </div>
@@ -116,42 +109,23 @@ export const UpgradeModal: React.FC = () => {
                   ))}
                 </ul>
                 {isPaid ? (
-                  <div className="mt-5 space-y-2">
-                    <button
-                      type="button"
-                      disabled={isSubmitting || isCurrent || !isBillingProviderReady}
-                      onClick={handleSubscribe}
-                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
-                    >
-                      {isCurrent
-                        ? 'Already subscribed'
-                        : !isBillingProviderReady
-                          ? 'Available after PayMongo is wired'
+                  <button
+                    type="button"
+                    disabled={waiting || isCurrent || !isBillingProviderReady}
+                    onClick={handleSubscribe}
+                    className="mt-5 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {isCurrent
+                      ? 'Already subscribed'
+                      : !isBillingProviderReady
+                        ? 'Available after PayMongo is wired'
+                        : isWaitingForPayMongo
+                          ? 'Waiting for PayMongo…'
                           : isSubmitting
                             ? 'Opening checkout…'
                             : 'Pay ₱499/mo with PayMongo'}
-                      {isBillingProviderReady && !isCurrent && <Zap className="w-3.5 h-3.5" />}
-                    </button>
-                    {!isCurrent && (
-                      <div className="space-y-2">
-                        <input
-                          type="text"
-                          value={paymentRef}
-                          onChange={(event) => setPaymentRef(event.target.value)}
-                          placeholder="Optional: pay_… or link ref M8sj3U4"
-                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400"
-                        />
-                        <button
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={handleConfirmPaid}
-                          className="w-full py-2.5 rounded-xl border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-50 disabled:opacity-60"
-                        >
-                          {isSubmitting ? 'Confirming PayMongo payment…' : 'I already paid — unlock Founding'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    {isBillingProviderReady && !isCurrent && !waiting && <Zap className="w-3.5 h-3.5" />}
+                  </button>
                 ) : (
                   <div className="mt-5 w-full py-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-bold text-center">
                     Included at signup

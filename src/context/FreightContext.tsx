@@ -270,6 +270,7 @@ interface FreightContextType {
   activateFoundingPlan: (paymentMethod: PayMongoPaymentMethod, paymentId: string) => void;
   subscribeToFoundingPlan: () => Promise<void>;
   confirmFoundingPayment: (paymentId?: string) => Promise<void>;
+  isWaitingForPayMongo: boolean;
   cancelSubscriptionAtPeriodEnd: () => Promise<void>;
   resumeSubscription: () => void;
   updatePlanDetails: (planId: string, updates: Partial<Plan>) => void;
@@ -358,6 +359,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [isWaitingForPayMongo, setIsWaitingForPayMongo] = useState(false);
+  const unlockingFoundingRef = useRef(false);
 
   const resetWorkspace = () => {
     persistReadyRef.current = false;
@@ -381,6 +384,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSubscription(makeFreeSubscription('', ''));
     setBillingHistory([]);
     setIsOnboardingOpen(false);
+    setIsWaitingForPayMongo(false);
   };
 
   const hydrateCompany = async (companyId: string, uid: string, profile?: UserProfile | null) => {
@@ -2489,6 +2493,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
     }
     pushAudit('PERMISSIONS_RESET', `Activated Founding plan after PayMongo payment ${paymentId}.`);
+    setIsWaitingForPayMongo(false);
+    setIsUpgradeModalOpen(false);
   };
 
   const createPayMongoCheckout = async (planId: string, _paymentMethod?: PayMongoPaymentMethod) => {
@@ -2516,54 +2522,113 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error(data.error || 'PayMongo checkout is not available. Set PAYMONGO_SECRET_KEY and VITE_PAYMONGO_USE_API=true on Vercel.');
     }
     sessionStorage.setItem(`${PENDING_FOUNDING_KEY}_session`, data.checkoutSessionId);
-    window.location.assign(data.checkoutUrl);
     return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
   };
 
   const subscribeToFoundingPlan = async () => {
-    await createPayMongoCheckout(PLAN_FOUNDING_ID);
+    const checkoutWindow = window.open('about:blank', 'casinfreight-paymongo');
+    try {
+      const result = await createPayMongoCheckout(PLAN_FOUNDING_ID);
+      setIsWaitingForPayMongo(true);
+      if (checkoutWindow && !checkoutWindow.closed) {
+        checkoutWindow.location.replace(result.checkoutUrl);
+      } else {
+        window.location.assign(result.checkoutUrl);
+      }
+    } catch (error) {
+      checkoutWindow?.close();
+      sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+      sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
+      setIsWaitingForPayMongo(false);
+      throw error;
+    }
+  };
+
+  const tryUnlockFounding = async (paymentId?: string): Promise<boolean> => {
+    if (unlockingFoundingRef.current || subscription.plan_id === PLAN_FOUNDING_ID) return false;
+    unlockingFoundingRef.current = true;
+    try {
+      const lookup = (paymentId || '').trim();
+      const response = await fetch('/api/paymongo/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentId: lookup,
+          referenceNumber: lookup && !lookup.startsWith('pay_') && !lookup.startsWith('cs_') ? lookup : '',
+          checkoutSessionId: sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '',
+        }),
+      });
+      const data = await response.json() as { paid?: boolean; paymentId?: string; method?: string; error?: string };
+      if (!response.ok || !data.paid || !data.paymentId) return false;
+      activateFoundingPlan(asPayMongoMethod(data.method), data.paymentId);
+      sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+      sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
+      return true;
+    } catch (error) {
+      console.error('PayMongo verify failed', error);
+      return false;
+    } finally {
+      unlockingFoundingRef.current = false;
+    }
   };
 
   const confirmFoundingPayment = async (paymentId?: string) => {
-    const lookup = (paymentId || '').trim();
-    const response = await fetch('/api/paymongo/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        paymentId: lookup,
-        referenceNumber: lookup && !lookup.startsWith('pay_') && !lookup.startsWith('cs_') ? lookup : '',
-        checkoutSessionId: sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '',
-      }),
-    });
-    const data = await response.json() as { paid?: boolean; paymentId?: string; method?: string; error?: string };
-    if (!response.ok || !data.paid || !data.paymentId) {
-      throw new Error(data.error || 'PayMongo has not confirmed a ₱499 Founding payment yet.');
+    const unlocked = await tryUnlockFounding(paymentId);
+    if (!unlocked) {
+      throw new Error('PayMongo has not confirmed a ₱499 Founding payment yet.');
     }
-    activateFoundingPlan(asPayMongoMethod(data.method), data.paymentId);
-    sessionStorage.removeItem(PENDING_FOUNDING_KEY);
-    sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
   };
 
   useEffect(() => {
-    if (!isAuthenticated || !company.id || subscription.plan_id === PLAN_FOUNDING_ID) return;
+    if (!isAuthenticated || !company.id || subscription.plan_id === PLAN_FOUNDING_ID) {
+      setIsWaitingForPayMongo(false);
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
-    const billing = params.get('billing');
-    if (billing === 'cancel') {
+    if (params.get('billing') === 'cancel') {
       sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+      sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
+      setIsWaitingForPayMongo(false);
       window.history.replaceState({}, '', window.location.pathname);
       return;
     }
-    const pending = sessionStorage.getItem(PENDING_FOUNDING_KEY);
-    if (billing === 'success' || pending) {
-      void confirmFoundingPayment().then(() => {
-        window.history.replaceState({}, '', window.location.pathname);
-      }).catch((error) => {
-        if (billing === 'success') {
-          console.error('PayMongo success return did not verify yet', error);
-        }
-      });
+
+    const pending = Boolean(sessionStorage.getItem(PENDING_FOUNDING_KEY));
+    if (pending || params.get('billing') === 'success') {
+      setIsWaitingForPayMongo(true);
     }
-  }, [isAuthenticated, company.id, subscription.plan_id]);
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      void tryUnlockFounding().then((unlocked) => {
+        if (unlocked) window.history.replaceState({}, '', window.location.pathname);
+      });
+    };
+
+    run();
+
+    const shouldPoll = pending || isWaitingForPayMongo || params.get('billing') === 'success';
+    const interval = shouldPoll ? window.setInterval(run, 3000) : undefined;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') run();
+    };
+    window.addEventListener('focus', run);
+    document.addEventListener('visibilitychange', onVisible);
+
+    const stop = window.setTimeout(() => {
+      if (interval) window.clearInterval(interval);
+    }, 10 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      if (interval) window.clearInterval(interval);
+      window.clearTimeout(stop);
+      window.removeEventListener('focus', run);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [isAuthenticated, company.id, subscription.plan_id, isWaitingForPayMongo]);
 
   const cancelSubscriptionAtPeriodEnd = async () => {
     setSubscription((prev) => ({ ...prev, cancel_at_period_end: true, updated_at: new Date().toISOString() }));
@@ -2686,6 +2751,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       activateFoundingPlan,
       subscribeToFoundingPlan,
       confirmFoundingPayment,
+      isWaitingForPayMongo,
       cancelSubscriptionAtPeriodEnd,
       resumeSubscription,
       updatePlanDetails,
