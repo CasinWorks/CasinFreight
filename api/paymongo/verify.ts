@@ -46,6 +46,8 @@ export default async function handler(req: VercelLikeRequest, res: VercelLikeRes
       paymentId: body.paymentId,
       referenceNumber: body.referenceNumber,
       checkoutSessionId: body.checkoutSessionId,
+      excludePaymentIds: (body.excludePaymentIds || '').split(',').map((id) => id.trim()).filter(Boolean),
+      sessionOnly: body.sessionOnly === 'true',
     });
     if (!paid) {
       res.statusCode = 200;

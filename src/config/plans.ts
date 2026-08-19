@@ -79,10 +79,18 @@ export function hasReachedLimit(used: number, limit: number | null | undefined):
   return used >= (limit || 0);
 }
 
-export function makeFreeSubscription(userId: string, companyId: string): Subscription {
+export function makeFreeSubscription(
+  userId: string,
+  companyId: string,
+  previous?: Pick<Subscription, 'consumed_payment_ids' | 'payment_provider_checkout_id'>
+): Subscription {
   const start = new Date();
   const end = new Date(start);
   end.setMonth(end.getMonth() + 1);
+  const consumed = [
+    ...(previous?.consumed_payment_ids || []),
+    previous?.payment_provider_checkout_id || '',
+  ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
   return {
     id: `sub-${userId.slice(0, 8) || 'free'}`,
     user_id: userId,
@@ -93,6 +101,7 @@ export function makeFreeSubscription(userId: string, companyId: string): Subscri
     current_period_end: end.toISOString(),
     cancel_at_period_end: false,
     payment_provider: 'paymongo',
+    consumed_payment_ids: consumed.length ? consumed : undefined,
     created_at: start.toISOString(),
     updated_at: start.toISOString(),
   };

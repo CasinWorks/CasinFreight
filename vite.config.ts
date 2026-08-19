@@ -85,6 +85,8 @@ function paymongoDevApi(): Plugin {
             paymentId: body.paymentId,
             referenceNumber: body.referenceNumber,
             checkoutSessionId: body.checkoutSessionId,
+            excludePaymentIds: (body.excludePaymentIds || '').split(',').map((id) => id.trim()).filter(Boolean),
+            sessionOnly: body.sessionOnly === 'true',
           });
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');

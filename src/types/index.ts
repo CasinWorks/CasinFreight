@@ -490,6 +490,7 @@ export interface Subscription {
   payment_provider_subscription_id?: string;
   payment_provider_checkout_id?: string;
   last_payment_method?: PayMongoPaymentMethod;
+  consumed_payment_ids?: string[];
   created_at: string;
   updated_at: string;
 }

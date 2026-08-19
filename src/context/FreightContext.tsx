@@ -310,7 +310,6 @@ function asPayMongoMethod(value?: string): PayMongoPaymentMethod {
 
 function isPayMongoWired(): boolean {
   return Boolean(
-    import.meta.env.VITE_PAYMONGO_PAYMENT_LINK ||
     import.meta.env.VITE_PAYMONGO_CHECKOUT_URL ||
     import.meta.env.VITE_PAYMONGO_USE_API === 'true'
   );
@@ -748,10 +747,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           payment_provider: 'paymongo',
           payment_provider_checkout_id: existing.subscription?.payment_provider_checkout_id,
           last_payment_method: existing.subscription?.last_payment_method,
+          consumed_payment_ids: existing.subscription?.consumed_payment_ids,
           created_at: existing.subscription?.created_at || now.toISOString(),
           updated_at: now.toISOString(),
         }
-      : makeFreeSubscription(existing.createdBy || existing.subscription?.user_id || '', companyId);
+      : makeFreeSubscription(existing.createdBy || existing.subscription?.user_id || '', companyId, existing.subscription);
     const tier = planId === PLAN_FOUNDING_ID ? 'Growth' : 'Free';
     await saveCompanySubscription(companyId, nextSub, tier);
     if (companyId === company.id) {
@@ -764,6 +764,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!company.id) {
       throw new Error('No company workspace is loaded.');
     }
+    sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+    sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
+    setIsWaitingForPayMongo(false);
     await setCompanyPlanByAdmin(company.id, PLAN_FREE_ID);
   };
 
@@ -2468,6 +2471,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const now = new Date();
     const end = new Date(now);
     end.setMonth(end.getMonth() + 1);
+    const consumed = [
+      ...(subscription.consumed_payment_ids || []),
+      paymentId,
+    ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
     const nextSub: Subscription = {
       ...subscription,
       plan_id: PLAN_FOUNDING_ID,
@@ -2478,6 +2485,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       payment_provider: 'paymongo',
       payment_provider_checkout_id: paymentId,
       last_payment_method: paymentMethod,
+      consumed_payment_ids: consumed,
       updated_at: now.toISOString(),
     };
     setSubscription(nextSub);
@@ -2526,7 +2534,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const subscribeToFoundingPlan = async () => {
-    const checkoutWindow = window.open('about:blank', 'casinfreight-paymongo');
+    const checkoutWindow = window.open('about:blank', `casinfreight-paymongo-${Date.now()}`);
     try {
       const result = await createPayMongoCheckout(PLAN_FOUNDING_ID);
       setIsWaitingForPayMongo(true);
@@ -2544,22 +2552,31 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const consumedPaymentIds = () => [
+    ...(subscription.consumed_payment_ids || []),
+    subscription.payment_provider_checkout_id || '',
+  ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
+
   const tryUnlockFounding = async (paymentId?: string): Promise<boolean> => {
     if (unlockingFoundingRef.current || subscription.plan_id === PLAN_FOUNDING_ID) return false;
     unlockingFoundingRef.current = true;
     try {
       const lookup = (paymentId || '').trim();
+      const checkoutSessionId = sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '';
       const response = await fetch('/api/paymongo/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paymentId: lookup,
           referenceNumber: lookup && !lookup.startsWith('pay_') && !lookup.startsWith('cs_') ? lookup : '',
-          checkoutSessionId: sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '',
+          checkoutSessionId,
+          excludePaymentIds: consumedPaymentIds().join(','),
+          sessionOnly: checkoutSessionId ? 'true' : 'false',
         }),
       });
       const data = await response.json() as { paid?: boolean; paymentId?: string; method?: string; error?: string };
       if (!response.ok || !data.paid || !data.paymentId) return false;
+      if (consumedPaymentIds().includes(data.paymentId)) return false;
       activateFoundingPlan(asPayMongoMethod(data.method), data.paymentId);
       sessionStorage.removeItem(PENDING_FOUNDING_KEY);
       sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);

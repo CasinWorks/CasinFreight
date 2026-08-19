@@ -49,11 +49,11 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding unlocks automatically after PayMongo confirms payment.
+              Free includes every module — 1 truck, 1 account, and 10 transactions. Each Subscribe opens a new PayMongo checkout. Founding unlocks automatically after that checkout is paid.
             </p>
             {isPayMongoTestMode && (
               <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
-                PayMongo test mode — no real charges. Keep this tab open; QRPh stays on PayMongo and CasinFreight upgrades itself.
+                PayMongo test mode — no real charges. Keep this tab open. QRPh stays on PayMongo; this tab upgrades when the new checkout is paid.
               </p>
             )}
             {isWaitingForPayMongo && (
