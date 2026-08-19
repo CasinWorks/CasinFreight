@@ -1,0 +1,529 @@
+export * from './rbac';
+
+export type StandardUserRole = 'Owner' | 'Dispatcher' | 'Loading Staff' | 'Billing' | 'Fleet Manager' | 'Auditor' | 'Driver';
+export type UserRole = string;
+
+export interface RolePermissionCheck {
+  allowed: boolean;
+  reason?: string;
+  allowedRoles: string[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  companyId: string;
+  avatarUrl?: string;
+  phone?: string;
+  password?: string;
+  department?: string;
+}
+
+export type SubscriptionTier = 'Free' | 'Starter' | 'Growth' | 'Fleet';
+
+export interface Company {
+  id: string;
+  name: string;
+  tin: string;
+  address: string;
+  contactNumber: string;
+  email: string;
+  subscriptionTier: SubscriptionTier;
+  currency: string;
+  logoUrl?: string;
+  registeredDate: string;
+}
+
+export type TruckType = 
+  | '4-Wheeler Closed Van'
+  | '6-Wheeler Closed Van'
+  | '6-Wheeler Dropside/Wingvan'
+  | '10-Wheeler Wingvan'
+  | '10-Wheeler Dump Truck'
+  | '20ft Container Chassis'
+  | '40ft Container Chassis'
+  | 'Tractor Head / 14-Wheeler';
+
+export type TruckStatus = 'Available' | 'On Trip' | 'Loading' | 'Maintenance';
+
+export interface Truck {
+  id: string;
+  companyId: string;
+  plateNumber: string;
+  type: TruckType;
+  brandModel: string;
+  gvwrKg: number; // Gross Vehicle Weight Rating
+  tareWeightKg: number; // Empty truck weight
+  netPayloadKg: number; // gvwrKg - tareWeightKg
+  maxVolumeCbm: number; // Cubic meters capacity
+  status: TruckStatus;
+  assignedDriverId?: string;
+  currentTripId?: string;
+  lastOdometerKm: number;
+  fuelType: 'Diesel' | 'Euro 4 Diesel';
+  yearModel: number;
+  maintenanceNote?: string;
+}
+
+export type FuelPaymentMethod = 
+  | 'Petron Fleet Card'
+  | 'Shell Fleet Card'
+  | 'Caltex StarCard'
+  | 'Cash Advance'
+  | 'Corporate GCash'
+  | 'Company Credit Card';
+
+export interface FuelLog {
+  id: string;
+  truckId: string;
+  driverId?: string;
+  tripId?: string;
+  date: string;
+  odometerKm: number;
+  previousOdometerKm: number;
+  distanceKm: number;
+  liters: number;
+  costPhp: number;
+  pricePerLiterPhp: number;
+  fuelStation: string;
+  fuelGrade: string;
+  fullTank: boolean;
+  paymentMethod: FuelPaymentMethod;
+  receiptNumber?: string;
+  kmPerLiter: number;
+  costPerKmPhp: number;
+  notes?: string;
+  loggedBy: string;
+  createdAt: string;
+}
+
+export interface TruckFuelSummary {
+  truckId: string;
+  plateNumber: string;
+  brandModel: string;
+  truckType: TruckType;
+  totalLogs: number;
+  totalLiters: number;
+  totalCostPhp: number;
+  totalDistanceKm: number;
+  avgKmPerLiter: number;
+  avgCostPerKmPhp: number;
+  avgPricePerLiterPhp: number;
+  lastLogDate?: string;
+  efficiencyRating: 'Optimal' | 'Normal' | 'High Consumption' | 'Needs Service';
+  targetKmPerLiter: number;
+}
+
+export type DriverStatus = 'Available' | 'On Duty' | 'Off Duty' | 'Leave';
+
+export interface Driver {
+  id: string;
+  companyId: string;
+  name: string;
+  phone: string;
+  licenseNo: string;
+  licenseRestrictions: string; // e.g. "1, 2, 3" or "Heavy Articulated (8)"
+  licenseExpiry: string;
+  assignedTruckId?: string;
+  status: DriverStatus;
+  approvalStatus?: 'Approved' | 'Pending' | 'Requires Review';
+  clearanceNote?: string;
+  emergencyContact: string;
+  totalTripsCompleted: number;
+  rating: number; // 1 to 5
+}
+
+export type NotificationCategory = 'trip_update' | 'driver_approval' | 'invoice_payment' | 'invoice_retraction' | 'ledger_entry';
+
+export interface AppNotification {
+  id: string;
+  category: NotificationCategory;
+  title: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+  severity?: 'info' | 'success' | 'warning' | 'error';
+  tripId?: string;
+  driverId?: string;
+  invoiceId?: string;
+  actionType?: 'view_trip' | 'approve_driver' | 'view_invoice' | 'view_drivers' | 'view_ledger';
+  actionLabel?: string;
+  metadata?: {
+    plateNumber?: string;
+    clientName?: string;
+    amountPhp?: number;
+    driverName?: string;
+    statusBadge?: string;
+    licenseRestriction?: string;
+  };
+}
+
+export interface Client {
+  id: string;
+  companyId: string;
+  name: string;
+  tin: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  billingAddress: string;
+  paymentTermsDays: number; // e.g. 15, 30, 45
+  activeContractsCount: number;
+}
+
+export interface RateCard {
+  id: string;
+  companyId: string;
+  originZone: string;
+  destinationZone: string;
+  truckType: TruckType;
+  baseRatePhp: number;
+  tollEstimatePhp: number;
+  standardLeadHours: number;
+  effectiveDate: string;
+}
+
+export type AccessorialType = 
+  | 'fuel_surcharge'
+  | 'demurrage'
+  | 'overweight'
+  | 'multi_stop'
+  | 'port_wharfage'
+  | 'toll_reimbursement'
+  | 'helper_crew'
+  | 'overnight_parking';
+
+export interface TripAccessorial {
+  id: string;
+  tripId: string;
+  type: AccessorialType;
+  name: string;
+  calculationDetail: string;
+  amountPhp: number;
+  isAutoTriggered: boolean;
+  approved: boolean;
+}
+
+export type TripStatus = 'Pending' | 'Loaded' | 'In Transit' | 'Delivered' | 'Invoiced';
+
+export interface TripTimelineEvent {
+  id: string;
+  tripId: string;
+  status: TripStatus;
+  timestamp: string;
+  note?: string;
+  updatedBy: string;
+  location?: string;
+}
+
+export interface POD {
+  id: string;
+  tripId: string;
+  receiverName: string;
+  receiverRole: string;
+  receiverIdNumber?: string;
+  signedAt: string;
+  signatureDataUrl?: string;
+  photoUrls: string[];
+  notes?: string;
+  conditionStatus: 'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy';
+}
+
+export interface DeliveryPrerequisites {
+  tareWeightVerified?: boolean;
+  securitySealNumber?: string;
+  loadingTallyDocRef?: string;
+  deliveryNoteNumber?: string;
+  deliveryNoteIssuedAt?: string;
+  gatePassNumber?: string;
+  departureOdometerKm?: number;
+  podReceiverName?: string;
+  podReceiverRole?: string;
+  podReceiverIdNumber?: string;
+  podSignedAt?: string;
+  podCondition?: 'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy';
+  billingAuditApproved?: boolean;
+}
+
+export interface DeliveryNote {
+  id: string;
+  deliveryNoteNumber: string;
+  tripId: string;
+  waybillNumber: string;
+  issuedDate: string;
+  consignorName: string;
+  consignorAddress: string;
+  consigneeName: string;
+  consigneeAddress: string;
+  truckPlateNumber: string;
+  truckType: string;
+  driverName: string;
+  driverLicenseNo: string;
+  cargoDescription: string;
+  cargoWeightKg: number;
+  cargoVolumeCbm: number;
+  securitySealNumber: string;
+  gatePassNumber: string;
+  specialInstructions?: string;
+}
+
+export interface Trip {
+  id: string;
+  tripNumber: string;
+  waybillNumber: string;
+  companyId: string;
+  truckId: string;
+  driverId: string;
+  clientId: string;
+  originZone: string;
+  originAddress: string;
+  destinationZone: string;
+  destinationAddress: string;
+  cargoDescription: string;
+  cargoWeightKg: number;
+  cargoVolumeCbm: number;
+  scheduledPickup: string;
+  scheduledDelivery: string;
+  actualDelivery?: string;
+  status: TripStatus;
+  timeline: TripTimelineEvent[];
+  accessorials: TripAccessorial[];
+  rateCardId?: string;
+  baseRatePhp: number;
+  tollEstimatePhp: number;
+  fuelSurchargePercent: number;
+  multiStopCount: number;
+  demurrageHours: number;
+  demurrageRatePerHour: number;
+  overweightSurchargePerKg: number;
+  isOverweight: boolean;
+  overweightKg: number;
+  deliveryNoteNumber?: string;
+  securitySealNumber?: string;
+  gatePassNumber?: string;
+  prerequisites?: DeliveryPrerequisites;
+  pod?: POD;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  description: string;
+  qty: number;
+  unitPrice: number;
+  total: number;
+  isAccessorial?: boolean;
+  accessorialType?: AccessorialType;
+}
+
+export type InvoiceStatus = 'Draft' | 'Sent' | 'Paid' | 'Retraction_Pending' | 'Voided';
+
+export type RetractionReasonCategory = 
+  | 'Rate Calculation / Line Item Error'
+  | 'Incorrect Billing Client Entity'
+  | 'Duplicate Invoice Issued'
+  | 'Accessorial / Demurrage Surcharge Dispute'
+  | 'Waybill / Cargo Detail Correction'
+  | 'Other Administrative Error';
+
+export interface InvoiceRetractionRequest {
+  id: string;
+  invoiceId: string;
+  requestedBy: string; // Operator name (e.g. Clarisse Anne Mendoza)
+  requestedByRole: string;
+  requestedAt: string;
+  reasonCategory: RetractionReasonCategory;
+  detailedReason: string; // Written justification by operator
+  status: 'Pending_Owner_Approval' | 'Approved' | 'Rejected';
+  reviewedBy?: string; // Owner (e.g. Tusherd "TJ" Casin)
+  reviewedAt?: string;
+  ownerReviewNote?: string;
+}
+
+export type PaymentMethodType = 
+  | 'Bank Transfer (BDO)' 
+  | 'Bank Transfer (BPI)' 
+  | 'PDC Check' 
+  | 'GCash Biz' 
+  | 'Online Banking' 
+  | 'BIR 2307 Withholding + Balance'
+  | 'Bank Transfer (BDO/BPI)';
+
+export interface ProofOfPayment {
+  paymentReference: string; // e.g. BDO-FT-2026-94821 or Check #491028
+  paymentMethod: PaymentMethodType;
+  paymentDate: string;
+  amountPaidPhp: number;
+  ewtDeductedPhp?: number; // 2% BIR 2307 Creditable Withholding Tax Certificate
+  officialReceiptNo?: string; // BIR OR #
+  popFileUrl?: string; // Image / screenshot of deposit slip or bank advice
+  popFileName?: string;
+  verifiedBy: string; // Finance / Billing Officer
+  verifiedAt: string;
+  bankAccountUsed?: string;
+  reconciliationNotes?: string;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  tripId: string;
+  companyId: string;
+  clientId: string;
+  issueDate: string;
+  dueDate: string;
+  lineItems: InvoiceLineItem[];
+  subtotalPhp: number;
+  vatPercent: number; // e.g. 12% in PH
+  vatAmountPhp: number;
+  withholdingTaxPercent?: number; // 2% EWT standard in PH freight
+  withholdingTaxAmountPhp?: number;
+  grandTotalPhp: number;
+  status: InvoiceStatus;
+  isLocked?: boolean; // Locked against line-item edits upon transmission/reconciliation
+  activeRetractionRequest?: InvoiceRetractionRequest;
+  retractionAuditHistory?: InvoiceRetractionRequest[];
+  proofOfPayment?: ProofOfPayment;
+  notes?: string;
+  paidAt?: string;
+  paymentMethod?: PaymentMethodType;
+  paymentReference?: string;
+}
+
+export type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense';
+
+export type AccountCategory = 
+  | 'Current Assets' 
+  | 'Non-Current Assets' 
+  | 'Current Liabilities' 
+  | 'Equity & Capital'
+  | 'Operating Revenue' 
+  | 'Direct Operating Expenses' 
+  | 'Administrative Expenses'
+  | 'Administrative & Operating Overhead';
+
+export interface ChartOfAccount {
+  code: string; // e.g. "1010", "1120", "1130", "2010", "2030", "4010", "4020", "5010", "5020", "5030"
+  name: string;
+  type: AccountType;
+  category: AccountCategory;
+  normalBalance: 'Debit' | 'Credit';
+  description: string;
+}
+
+export interface JournalEntryLine {
+  id: string;
+  accountCode: string;
+  accountName: string;
+  debitPhp: number;
+  creditPhp: number;
+  memo?: string;
+  truckPlate?: string;
+  clientName?: string;
+}
+
+export type JournalReferenceType = 
+  | 'Invoice_Issued' 
+  | 'Payment_Received' 
+  | 'Fuel_Disbursement' 
+  | 'Toll_RFID' 
+  | 'Driver_Payout' 
+  | 'Invoice_Retracted' 
+  | 'Manual_Adjustment';
+
+export interface JournalEntry {
+  id: string;
+  entryNumber: string; // e.g. "JV-2026-0081"
+  date: string;
+  referenceType: JournalReferenceType;
+  referenceId?: string; // invoiceId, tripId, fuelLogId
+  referenceNumber: string; // INV-2026-0418, BDO-FT-894102, FL-1029, etc.
+  entityName?: string; // Client Name, Driver Name, Gas Station
+  lines: JournalEntryLine[];
+  totalDebitPhp: number;
+  totalCreditPhp: number;
+  postedBy: string;
+  isLocked: boolean; // Immutable once posted
+  notes?: string;
+}
+
+// ==============================================================================
+// SAAS SUBSCRIPTION & PAYMONGO BILLING TYPES
+// ==============================================================================
+
+export interface Plan {
+  id: string; // 'plan_free' | 'plan_founding'
+  name: string;
+  description: string;
+  price_php: number;
+  interval: 'month' | 'year';
+  max_bookings_per_month: number | null; // null = unlimited
+  max_storage_mb: number | null; // null = unlimited
+  is_active: boolean;
+  features: string[];
+  paymongo_plan_id?: string;
+  badge?: string;
+  isRecommended?: boolean;
+}
+
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing' | 'incomplete';
+
+export type PayMongoPaymentMethod = 'gcash' | 'paymaya' | 'card' | 'qrph' | 'dob' | 'billease';
+
+export interface Subscription {
+  id: string;
+  user_id: string;
+  company_id: string;
+  plan_id: string; // FK to Plan.id
+  status: SubscriptionStatus;
+  current_period_start: string;
+  current_period_end: string;
+  cancel_at_period_end: boolean;
+  canceled_at?: string;
+  payment_provider: 'paymongo';
+  payment_provider_customer_id?: string;
+  payment_provider_subscription_id?: string;
+  payment_provider_checkout_id?: string;
+  last_payment_method?: PayMongoPaymentMethod;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BillingHistoryItem {
+  id: string;
+  subscription_id: string;
+  user_id: string;
+  paymongo_payment_id: string;
+  amount_php: number;
+  currency: string;
+  status: 'paid' | 'failed' | 'refunded';
+  payment_method: PayMongoPaymentMethod;
+  receipt_number: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  invoice_pdf_url?: string;
+  created_at: string;
+}
+
+export interface SubscriptionUsageStats {
+  bookingsThisMonth: number;
+  maxBookingsPerMonth: number | null;
+  bookingCapPercentage: number;
+  hasReachedBookingCap: boolean;
+  isNearingBookingCap: boolean; // >= 80% of limit
+  
+  storageUsedMb: number;
+  maxStorageMb: number | null;
+  storageCapPercentage: number;
+  hasReachedStorageCap: boolean;
+  
+  isFounding: boolean;
+  isFreePlan: boolean;
+  isSubscriptionActive: boolean;
+  daysRemainingInPeriod: number;
+}
+
+
