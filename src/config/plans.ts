@@ -1,4 +1,4 @@
-import { Plan } from '../types';
+import { Plan, Subscription } from '../types';
 
 export const PLAN_FREE_ID = 'plan_free';
 export const PLAN_FOUNDING_ID = 'plan_founding';
@@ -77,4 +77,23 @@ export function isUnlimited(limit: number | null | undefined): boolean {
 export function hasReachedLimit(used: number, limit: number | null | undefined): boolean {
   if (isUnlimited(limit)) return false;
   return used >= (limit || 0);
+}
+
+export function makeFreeSubscription(userId: string, companyId: string): Subscription {
+  const start = new Date();
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  return {
+    id: `sub-${userId.slice(0, 8) || 'free'}`,
+    user_id: userId,
+    company_id: companyId,
+    plan_id: PLAN_FREE_ID,
+    status: 'active',
+    current_period_start: start.toISOString(),
+    current_period_end: end.toISOString(),
+    cancel_at_period_end: false,
+    payment_provider: 'paymongo',
+    created_at: start.toISOString(),
+    updated_at: start.toISOString(),
+  };
 }

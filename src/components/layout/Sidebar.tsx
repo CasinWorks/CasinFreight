@@ -15,7 +15,8 @@ import {
   ChevronRight,
   X,
   BookOpen,
-  ShieldCheck
+  ShieldCheck,
+  Shield
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 
@@ -29,7 +30,8 @@ export type NavTab =
   | 'ratecards' 
   | 'dashboard' 
   | 'rbac'
-  | 'orgsetup';
+  | 'orgsetup'
+  | 'admin';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -44,7 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileMenuOpen = false,
   onCloseMobileMenu
 }) => {
-  const { trips, invoices, trucks, roles, canAccess, currentUser } = useFreight();
+  const { trips, invoices, trucks, roles, canAccess, currentUser, canManageBilling } = useFreight();
 
   // Active counts for badges
   const activeTripsCount = trips.filter(t => t.status === 'In Transit' || t.status === 'Loaded').length;
@@ -191,6 +193,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           );
         })}
+
+        {canManageBilling && (
+          <>
+            <div className="px-3 pt-4 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Platform
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('admin');
+                if (onCloseMobileMenu) onCloseMobileMenu();
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
+                activeTab === 'admin'
+                  ? 'bg-blue-50 text-blue-700 font-semibold'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Shield className={`w-4 h-4 shrink-0 ${activeTab === 'admin' ? 'text-blue-600' : 'text-slate-400'}`} />
+                <span className="truncate">Subscriptions</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded font-mono font-medium bg-slate-900 text-white">
+                Admin
+              </span>
+            </button>
+          </>
+        )}
       </nav>
 
       {/* Operational Quick Alert Footer */}

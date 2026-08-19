@@ -239,3 +239,22 @@ export function createAuditLog(companyId: string, entry: RbacAuditEntry): Promis
     stripUndefined(entry as unknown as Record<string, unknown>)
   );
 }
+
+export async function listCompanyDocuments(): Promise<CompanyDocument[]> {
+  const snap = await getDocs(collection(getFirebaseDb(), 'companies'));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as CompanyDocument) }));
+}
+
+export async function saveCompanySubscription(
+  companyId: string,
+  subscription: Subscription,
+  subscriptionTier: Company['subscriptionTier']
+): Promise<void> {
+  const existing = await getCompanyDocument(companyId);
+  if (!existing) throw new Error('Company workspace was not found.');
+  await saveCompanyDocument({
+    ...existing,
+    subscription,
+    subscriptionTier,
+  });
+}

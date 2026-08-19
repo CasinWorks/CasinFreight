@@ -41,6 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     activePlan,
     setIsUpgradeModalOpen,
     subscriptionUsage,
+    resetCurrentPlanToFree,
   } = useFreight();
   const { startTutorial } = useTutorial();
 
@@ -211,6 +212,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     {activePlan.id === 'plan_free' ? 'Upgrade to Founding' : 'Manage subscription'}
                   </button>
+                  {activePlan.id !== 'plan_free' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!window.confirm('Reset this workspace to the Free plan?')) return;
+                        setIsUserMenuOpen(false);
+                        void resetCurrentPlanToFree().catch((err) => {
+                          window.alert(err instanceof Error ? err.message : 'Could not reset to Free.');
+                        });
+                      }}
+                      className="w-full p-2 rounded-lg hover:bg-slate-50 text-left text-xs font-semibold text-slate-700"
+                    >
+                      Reset to Free plan
+                    </button>
+                  )}
                 </div>
 
                 {/* Logout Button */}

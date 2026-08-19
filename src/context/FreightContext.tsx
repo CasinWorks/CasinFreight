@@ -50,14 +50,18 @@ import {
   getInviteByEmail,
   getUserProfile,
   joinCompanyFromInvite,
+  listCompanyDocuments,
   loadCollection,
   replaceCollection,
   saveCompanyDocument,
+  saveCompanySubscription,
   saveInvite,
   saveUserProfile,
   seedCompanyWorkspace,
 } from '../services/firestoreCompany';
-import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, getPlanLimits, hasReachedLimit } from '../config/plans';
+import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, getPlanLimits, hasReachedLimit, makeFreeSubscription } from '../config/plans';
+import { isPlatformAdminEmail } from '../config/platformAdmin';
+import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
   switch (type) {
@@ -273,6 +277,11 @@ interface FreightContextType {
   canAddRole: boolean;
   canAddTransaction: boolean;
   markTutorialSeen: () => void;
+  isPlatformAdmin: boolean;
+  canManageBilling: boolean;
+  listPlatformSubscriptions: () => Promise<CompanyDocument[]>;
+  setCompanyPlanByAdmin: (companyId: string, planId: string) => Promise<void>;
+  resetCurrentPlanToFree: () => Promise<void>;
 }
 
 const FreightContext = createContext<FreightContextType | undefined>(undefined);
@@ -288,25 +297,6 @@ const BLANK_COMPANY: Company = {
   currency: 'PHP',
   registeredDate: new Date().toISOString().slice(0, 10),
 };
-
-function makeFreeSubscription(userId: string, companyId: string): Subscription {
-  const start = new Date();
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
-  return {
-    id: `sub-${userId.slice(0, 8) || 'free'}`,
-    user_id: userId,
-    company_id: companyId,
-    plan_id: PLAN_FREE_ID,
-    status: 'active',
-    current_period_start: start.toISOString(),
-    current_period_end: end.toISOString(),
-    cancel_at_period_end: false,
-    payment_provider: 'paymongo',
-    created_at: start.toISOString(),
-    updated_at: start.toISOString(),
-  };
-}
 
 function isPayMongoWired(): boolean {
   return Boolean(
@@ -384,7 +374,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsOnboardingOpen(false);
   };
 
-  const hydrateCompany = async (companyId: string, uid: string) => {
+  const hydrateCompany = async (companyId: string, uid: string, profile?: UserProfile | null) => {
     const companyDoc = await getCompanyDocument(companyId);
     if (!companyDoc) {
       throw new Error('Company workspace was not found for this account.');
@@ -422,6 +412,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCompany(companyFields);
     setSubscription(savedSub || makeFreeSubscription(uid, companyId));
     setRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
+    const seenTutorial = Boolean(profile?.has_seen_tutorial) || hasSeenTutorialLocally(uid);
     const uniqueMembers = Object.values(
       loadedMembers.reduce<Record<string, User>>((acc, member) => {
         const key = (member.email || member.id).toLowerCase();
@@ -430,7 +421,12 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
         return acc;
       }, {})
-    );
+    ).map((member) => (
+      member.id === uid ? { ...member, has_seen_tutorial: Boolean(member.has_seen_tutorial) || seenTutorial } : member
+    ));
+    if (seenTutorial) {
+      markTutorialSeenLocally(uid);
+    }
     setUsers(uniqueMembers);
     setTrucks(loadedTrucks);
     setDrivers(loadedDrivers);
@@ -481,7 +477,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setIsAuthLoading(false);
           return;
         }
-        await hydrateCompany(profile.companyId, fbUser.uid);
+        await hydrateCompany(profile.companyId, fbUser.uid, profile);
       } catch (error) {
         console.error('Failed to hydrate Firebase workspace', error);
         resetWorkspace();
@@ -669,19 +665,32 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
-  const currentUser = users.find(u => u.id === currentUserId) || {
-    id: currentUserId || '',
-    name: '',
-    email: '',
-    role: currentRole,
-    companyId: company.id,
+  const authEmail = isFirebaseConfigured() ? (getFirebaseAuth().currentUser?.email || '') : '';
+  const foundUser = users.find(u => u.id === currentUserId);
+  const currentUser = {
+    ...(foundUser || {
+      id: currentUserId || '',
+      name: '',
+      email: authEmail,
+      role: currentRole,
+      companyId: company.id,
+    }),
+    email: foundUser?.email || authEmail || '',
+    has_seen_tutorial: Boolean(foundUser?.has_seen_tutorial) || hasSeenTutorialLocally(currentUserId),
   };
 
   const markTutorialSeen = () => {
     if (!currentUserId) return;
-    setUsers((prev) => prev.map((user) => (
-      user.id === currentUserId ? { ...user, has_seen_tutorial: true } : user
-    )));
+    markTutorialSeenLocally(currentUserId);
+    setUsers((prev) => {
+      const exists = prev.some((user) => user.id === currentUserId);
+      if (!exists) {
+        return [...prev, { ...currentUser, id: currentUserId, has_seen_tutorial: true }];
+      }
+      return prev.map((user) => (
+        user.id === currentUserId ? { ...user, has_seen_tutorial: true } : user
+      ));
+    });
     const member = users.find((user) => user.id === currentUserId) || currentUser;
     saveUserProfile({
       ...(member as UserProfile),
@@ -691,6 +700,58 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       status: member.status || 'active',
       has_seen_tutorial: true,
     }).catch(console.error);
+  };
+
+  const isPlatformAdmin = isPlatformAdminEmail(currentUser.email) || isPlatformAdminEmail(authEmail);
+  const canManageBilling = isPlatformAdmin
+    || currentUser.role === 'Owner'
+    || currentUser.role.toLowerCase().includes('owner');
+
+  const listPlatformSubscriptions = async () => {
+    return listCompanyDocuments();
+  };
+
+  const setCompanyPlanByAdmin = async (companyId: string, planId: string) => {
+    if (!canManageBilling) {
+      throw new Error('Only the company owner can change the plan.');
+    }
+    const existing = await getCompanyDocument(companyId);
+    if (!existing) {
+      throw new Error('Company workspace was not found.');
+    }
+    const now = new Date();
+    const end = new Date(now);
+    end.setMonth(end.getMonth() + 1);
+    const nextSub: Subscription = planId === PLAN_FOUNDING_ID
+      ? {
+          id: existing.subscription?.id || `sub-${companyId.slice(0, 8)}`,
+          user_id: existing.createdBy || existing.subscription?.user_id || '',
+          company_id: companyId,
+          plan_id: PLAN_FOUNDING_ID,
+          status: 'active',
+          current_period_start: now.toISOString(),
+          current_period_end: end.toISOString(),
+          cancel_at_period_end: false,
+          payment_provider: 'paymongo',
+          payment_provider_checkout_id: existing.subscription?.payment_provider_checkout_id,
+          last_payment_method: existing.subscription?.last_payment_method,
+          created_at: existing.subscription?.created_at || now.toISOString(),
+          updated_at: now.toISOString(),
+        }
+      : makeFreeSubscription(existing.createdBy || existing.subscription?.user_id || '', companyId);
+    const tier = planId === PLAN_FOUNDING_ID ? 'Growth' : 'Free';
+    await saveCompanySubscription(companyId, nextSub, tier);
+    if (companyId === company.id) {
+      setSubscription(nextSub);
+      setCompany((prev) => ({ ...prev, subscriptionTier: tier }));
+    }
+  };
+
+  const resetCurrentPlanToFree = async () => {
+    if (!company.id) {
+      throw new Error('No company workspace is loaded.');
+    }
+    await setCompanyPlanByAdmin(company.id, PLAN_FREE_ID);
   };
 
   const activePlan = plans.find((p) => p.id === subscription.plan_id) || SAAS_PLANS[0];
@@ -2608,6 +2669,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       canAddRole,
       canAddTransaction,
       markTutorialSeen,
+      isPlatformAdmin,
+      canManageBilling,
+      listPlatformSubscriptions,
+      setCompanyPlanByAdmin,
+      resetCurrentPlanToFree,
     }}>
       {children}
     </FreightContext.Provider>

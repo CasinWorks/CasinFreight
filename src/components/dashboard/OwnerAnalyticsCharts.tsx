@@ -101,7 +101,8 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
   trucks,
   invoices
 }) => {
-  const [activeTab, setActiveTab] = useState<ChartTab>('ALL');
+  const hasLiveData = trips.length > 0 || invoices.length > 0;
+  const [activeTab, setActiveTab] = useState<ChartTab>(hasLiveData ? 'ALL' : 'REVENUE');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('6M');
 
   // 1. Calculate Monthly Revenue Data (Historical 2026 data + live invoices/trips)
@@ -433,8 +434,12 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-slate-900">Executive Operational & Profitability Analytics</h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Recharts Live
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${
+                  hasLiveData
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
+                  <Sparkles className="w-3 h-3" /> {hasLiveData ? 'Recharts Live' : 'Executive sample'}
                 </span>
               </div>
               <p className="text-xs text-slate-500">

@@ -23,11 +23,11 @@ import { NotificationDrawer } from './components/notifications/NotificationDrawe
 import { LoginPage } from './components/auth/LoginPage';
 import { Trip } from './types';
 import { KanbanSquare, PlusCircle, Receipt, Truck, LayoutDashboard, Menu } from 'lucide-react';
-import { UpgradeModal } from './components/billing/UpgradeModal';
+import { AdminSubscriptionsView } from './components/admin/AdminSubscriptionsView';
 import { TutorialProvider, useTutorial } from './components/tutorial';
 
 function MainLayout() {
-  const { canAccess, isOnboardingOpen, setIsOnboardingOpen, canCreateBooking, setIsUpgradeModalOpen } = useFreight();
+  const { canAccess, isOnboardingOpen, setIsOnboardingOpen, canCreateBooking, setIsUpgradeModalOpen, canManageBilling } = useFreight();
 
   const [activeTab, setActiveTab] = useState<NavTab>('board');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -150,6 +150,10 @@ function MainLayout() {
 
           {activeTab === 'rbac' && (
             <RbacManagementView />
+          )}
+
+          {activeTab === 'admin' && canManageBilling && (
+            <AdminSubscriptionsView />
           )}
         </main>
       </div>

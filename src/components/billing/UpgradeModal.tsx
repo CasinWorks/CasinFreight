@@ -12,6 +12,7 @@ export const UpgradeModal: React.FC = () => {
     isPayMongoTestMode,
     subscriptionUsage,
     activePlan,
+    resetCurrentPlanToFree,
   } = useFreight();
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -124,6 +125,31 @@ export const UpgradeModal: React.FC = () => {
             );
           })}
         </div>
+
+        {activePlan.price_php > 0 && (
+          <div className="px-6 pb-4">
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={async () => {
+                if (!window.confirm('Reset this workspace to the Free plan? Caps will apply again: 1 truck, 1 account, 10 trips.')) return;
+                setIsSubmitting(true);
+                setError(null);
+                try {
+                  await resetCurrentPlanToFree();
+                  setIsUpgradeModalOpen(false);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Could not reset to Free.');
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+              className="w-full py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 disabled:opacity-60"
+            >
+              Reset this account to Free
+            </button>
+          </div>
+        )}
 
         <div className="px-6 pb-5 grid grid-cols-3 gap-3 text-[11px] text-slate-500">
           <div className="flex items-center gap-1.5">

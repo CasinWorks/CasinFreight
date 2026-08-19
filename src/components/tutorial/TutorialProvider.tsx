@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { useFreight } from '../../context/FreightContext';
 import { TutorialOverlay } from './TutorialOverlay';
 import { tutorialSteps, type TutorialStep } from './tutorialSteps';
+import { hasSeenTutorialLocally } from './tutorialSeen';
 import type { NavTab } from '../layout/Sidebar';
 
 interface TutorialContextValue {
@@ -68,8 +69,13 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({
   }, [finish]);
 
   useEffect(() => {
-    if (!isAuthenticated || !currentUser.id || hasAutoStarted || isBlocked || isActive) return;
-    if (currentUser.has_seen_tutorial) return;
+    if (!isAuthenticated || !currentUser.id || isBlocked || isActive) return;
+    const alreadySeen = Boolean(currentUser.has_seen_tutorial) || hasSeenTutorialLocally(currentUser.id);
+    if (alreadySeen) {
+      if (!hasAutoStarted) setHasAutoStarted(true);
+      return;
+    }
+    if (hasAutoStarted) return;
     const timer = window.setTimeout(() => {
       setHasAutoStarted(true);
       startTutorial();

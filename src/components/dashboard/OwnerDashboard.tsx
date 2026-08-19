@@ -27,6 +27,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
   onSelectInvoice
 }) => {
   const { trips, trucks, invoices, clients, drivers } = useFreight();
+  const hasLiveData = trips.length > 0 || invoices.length > 0;
 
   const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year'>('month');
 
@@ -87,7 +88,9 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Financial health, truck unit economics, fleet utilization and freight margin breakdown.
+              {hasLiveData
+                ? 'Financial health, truck unit economics, fleet utilization and freight margin breakdown.'
+                : 'No bookings yet — showing the executive analytics baseline. Figures update when trips and invoices are recorded.'}
             </p>
           </div>
 
@@ -116,7 +119,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
 
       <div className="p-4 md:p-6 space-y-6">
         
-        {/* Metric Cards Row */}
+        {hasLiveData && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Active Shipments */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4.5 space-y-2 relative overflow-hidden shadow-2xs">
@@ -194,6 +197,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
             </div>
           </div>
         </div>
+        )}
 
         {/* Executive Recharts Section: Monthly Revenue, Avg Load per Trip & Fleet Utilization Rates */}
         <OwnerAnalyticsCharts trips={trips} trucks={trucks} invoices={invoices} />

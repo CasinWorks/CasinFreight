@@ -29,6 +29,12 @@ service cloud.firestore {
       return inCompany(companyId) || createdCompany(companyId);
     }
 
+    function isPlatformAdmin() {
+      return signedIn()
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() in ['christianjoshuacasin@gmail.com'];
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
@@ -55,7 +61,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.id == companyId;
-      allow read, update: if canAccessCompany(companyId);
+      allow read, update: if canAccessCompany(companyId) || isPlatformAdmin();
       allow delete: if inCompany(companyId);
 
       match /{document=**} {

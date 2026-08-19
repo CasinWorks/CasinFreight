@@ -55,21 +55,17 @@ Create a company from the login screen. Invited teammates sign up with the same 
 
 Founding (₱499/mo) stays locked until PayMongo confirms payment.
 
-Use **test/live API keys**. Payment Links in the PayMongo dashboard have no success redirect, so they cannot send the customer back into CasinFreight.
+Use **API keys** on Vercel. Payment Links have no success redirect, so they cannot send the customer back into CasinFreight. You do not set a success URL in the PayMongo dashboard — the production checkout API sends it.
 
-1. Copy **Secret Key** from PayMongo → Developers → API Keys (`sk_test_...` first).
-2. Put it in `.env` as `PAYMONGO_SECRET_KEY` — **not** a `VITE_` variable.
-3. Set `VITE_PAYMONGO_USE_API=true`.
-4. Restart `npm run dev`. Subscribe creates a hosted checkout session. The app already sends:
+In Vercel → Project → Settings → Environment Variables (Production):
 
 ```
-success_url = https://your-app/?billing=success
-cancel_url  = https://your-app/?billing=cancel
+VITE_PAYMONGO_USE_API=true
+VITE_PAYMONGO_TEST_MODE=true
+PAYMONGO_SECRET_KEY=sk_test_...
 ```
 
-You do not set those URLs in the PayMongo dashboard.
-
-On Vercel, add `PAYMONGO_SECRET_KEY` and `VITE_PAYMONGO_USE_API=true`, then redeploy.
+Leave `VITE_PAYMONGO_PAYMENT_LINK` empty. Redeploy after saving `VITE_*` values (they are baked in at build time). Subscribe on https://casin-freight.vercel.app then opens PayMongo hosted checkout and returns to `/?billing=success`.
 
 ## Run locally
 

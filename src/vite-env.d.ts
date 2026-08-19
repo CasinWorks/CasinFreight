@@ -11,6 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_PAYMONGO_PAYMENT_LINK?: string;
   readonly VITE_PAYMONGO_USE_API?: string;
   readonly VITE_PAYMONGO_TEST_MODE?: string;
+  readonly VITE_PLATFORM_ADMIN_EMAILS?: string;
 }
 
 interface ImportMeta {
