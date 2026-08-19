@@ -745,9 +745,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           current_period_end: end.toISOString(),
           cancel_at_period_end: false,
           payment_provider: 'paymongo',
-          payment_provider_checkout_id: existing.subscription?.payment_provider_checkout_id,
-          last_payment_method: existing.subscription?.last_payment_method,
-          consumed_payment_ids: existing.subscription?.consumed_payment_ids,
+          ...(existing.subscription?.payment_provider_checkout_id
+            ? { payment_provider_checkout_id: existing.subscription.payment_provider_checkout_id }
+            : {}),
+          ...(existing.subscription?.last_payment_method
+            ? { last_payment_method: existing.subscription.last_payment_method }
+            : {}),
+          ...(existing.subscription?.consumed_payment_ids?.length
+            ? { consumed_payment_ids: existing.subscription.consumed_payment_ids }
+            : {}),
           created_at: existing.subscription?.created_at || now.toISOString(),
           updated_at: now.toISOString(),
         }

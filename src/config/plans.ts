@@ -101,7 +101,7 @@ export function makeFreeSubscription(
     current_period_end: end.toISOString(),
     cancel_at_period_end: false,
     payment_provider: 'paymongo',
-    consumed_payment_ids: consumed.length ? consumed : undefined,
+    ...(consumed.length ? { consumed_payment_ids: consumed } : {}),
     created_at: start.toISOString(),
     updated_at: start.toISOString(),
   };

@@ -26,12 +26,19 @@ export type WorkspaceCollection =
   | 'notifications'
   | 'auditLogs';
 
-function stripUndefined<T extends Record<string, unknown>>(value: T): T {
-  const next: Record<string, unknown> = {};
-  Object.entries(value).forEach(([key, val]) => {
-    if (val !== undefined) next[key] = val;
-  });
-  return next as T;
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as T;
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    const next: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, val]) => {
+      if (val === undefined) return;
+      next[key] = stripUndefined(val);
+    });
+    return next as T;
+  }
+  return value;
 }
 
 function emailKey(email: string): string {
