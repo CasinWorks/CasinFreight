@@ -75,7 +75,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
   }).sort((a, b) => b.totalSpent - a.totalSpent);
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
+    <div data-tutorial="dashboard-page" className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
       {/* Header */}
       <div className="p-4 md:px-6 md:pt-6 md:pb-4 border-b border-slate-200 bg-white">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

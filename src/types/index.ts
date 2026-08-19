@@ -19,6 +19,8 @@ export interface User {
   phone?: string;
   password?: string;
   department?: string;
+  status?: 'active' | 'invited';
+  has_seen_tutorial?: boolean;
 }
 
 export type SubscriptionTier = 'Free' | 'Starter' | 'Growth' | 'Fleet';
@@ -524,6 +526,19 @@ export interface SubscriptionUsageStats {
   isFreePlan: boolean;
   isSubscriptionActive: boolean;
   daysRemainingInPeriod: number;
+
+  trucksUsed: number;
+  maxTrucks: number | null;
+  accountsUsed: number;
+  maxAccounts: number | null;
+  rolesUsed: number;
+  maxRoles: number | null;
+  transactionsUsed: number;
+  maxTransactions: number | null;
+  hasReachedTruckCap: boolean;
+  hasReachedAccountCap: boolean;
+  hasReachedRoleCap: boolean;
+  hasReachedTransactionCap: boolean;
 }
 
 

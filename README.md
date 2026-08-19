@@ -19,15 +19,35 @@ CasinFreight is a React + Vite operations console built for PH freight companies
 | RBAC | Custom roles and permission matrix |
 | Billing (backend) | Supabase schema + PayMongo checkout / webhook / cancel functions |
 
-The UI currently runs on in-memory mock data (`src/data/mockData.ts` + `src/context/FreightContext.tsx`). Supabase/PayMongo files under `supabase/` are the start of a real billing backend, not yet wired into the React app.
+The UI uses Firebase Auth and Firestore for companies, RBAC, trucks, and trips. Free plan includes every module with 1 truck, 1 account, and 10 transactions. Founding (₱499/mo) removes those caps.
 
 ## Stack
 
 - React 19 + TypeScript + Vite 6
+- Firebase Auth + Cloud Firestore
 - Tailwind CSS 4
 - Recharts, Lucide, Motion
-- Supabase Edge Functions (PayMongo)
-- Gemini API hook (via `GEMINI_API_KEY`)
+
+## Firebase setup
+
+1. Create a Firebase project.
+2. Enable **Authentication → Email/Password**.
+3. Create a **Cloud Firestore** database.
+4. Register a Web app and copy the config into `.env`:
+
+```
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+```
+
+5. In Firestore → Rules, paste `firestore.rules` from this repo and publish.
+6. Restart `npm run dev`.
+
+Create a company from the login screen. Invited teammates sign up with the same email to join.
 
 ## Run locally
 
@@ -42,9 +62,7 @@ npm run dev
 
 App: [http://localhost:3000](http://localhost:3000)
 
-Demo login (Owner): `tj.casin@casinfreight.ph` / `password123`
-
-Other seeded roles: Dispatcher, Loading Staff, Billing, Fleet Manager.
+Sign up with your company name to start on the Free plan.
 
 ```bash
 npm run build    # production build
@@ -58,8 +76,10 @@ src/
   components/   dashboard, fleet, invoices, ledger, trips, rbac, auth
   context/      FreightContext — app state, permissions, CRUD
   data/         mock company, trips, invoices, fuel, chart of accounts
-  services/     local RBAC store
+  services/     Firebase company store + RBAC helpers
+  lib/          Firebase app init
   types/        domain models
+firestore.rules Firestore security rules
 supabase/
   functions/    create-paymongo-checkout, paymongo-webhook, cancel-paymongo-subscription
   migrations/   plans, subscriptions, billing_history + RLS
@@ -67,6 +87,6 @@ supabase/
 
 ## Notes
 
-- `.env` is gitignored. Copy `.env.example`.
-- `node_modules/` and `dist/` are not committed.
-- Subscription tiers in mock data: Free, Starter, Growth, Fleet. Founding plan seed in SQL is ₱499/mo.
+- `.env` is gitignored. Copy `.env.example` and add Firebase keys.
+- Free: 1 truck, 1 account/role, 10 trip transactions, full module access.
+- Founding: ₱499/mo, unlimited trucks, seats, roles, and transactions.

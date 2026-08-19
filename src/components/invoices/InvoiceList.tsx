@@ -108,7 +108,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
+    <div data-tutorial="invoices-page" className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
       {/* Top Header */}
       <div className="p-4 md:px-6 md:pt-6 md:pb-4 border-b border-slate-200 bg-white">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">

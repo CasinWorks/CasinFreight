@@ -76,7 +76,7 @@ export const FreightLedgerView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
+    <div data-tutorial="ledger-page" className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
       
       {/* Top Header Bar */}
       <div className="p-4 md:px-6 md:pt-6 md:pb-4 border-b border-slate-200 bg-white print:border-none print:p-0">

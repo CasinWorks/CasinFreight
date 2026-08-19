@@ -66,7 +66,6 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     canManageFinancials,
     canReassignFleet,
     canDeleteTrip,
-    switchUserRole,
     canAccess,
     currentUser 
   } = useFreight();

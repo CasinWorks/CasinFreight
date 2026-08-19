@@ -28,12 +28,15 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
     company, 
     updateCompany, 
     users, 
-    addUser, 
+    addUser,
     addTruck, 
     addRateCard,
     trucks,
     rateCards,
-    roles
+    roles,
+    canAddAccount,
+    canAddTruck,
+    setIsUpgradeModalOpen,
   } = useFreight();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -78,6 +81,10 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
   const handleInviteUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteName.trim() || !inviteEmail.trim()) return;
+    if (!canAddAccount) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
 
     addUser({
       name: inviteName,
@@ -91,6 +98,10 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
   };
 
   const handleAddFirstTruck = () => {
+    if (!canAddTruck) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
     addTruck({
       plateNumber: firstPlate,
       type: firstTruckType,

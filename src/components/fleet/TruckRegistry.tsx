@@ -33,7 +33,9 @@ export const TruckRegistry: React.FC = () => {
     deleteTruck, 
     canAccess, 
     canLogFuel,
-    getTruckFuelSummary 
+    getTruckFuelSummary,
+    canAddTruck,
+    setIsUpgradeModalOpen,
   } = useFreight();
 
   // Tab View Switch: Fleet Overview vs Fuel Analytics
@@ -124,6 +126,10 @@ export const TruckRegistry: React.FC = () => {
   };
 
   const handleOpenAdd = () => {
+    if (!canAddTruck) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
     setEditingTruckId(null);
     setPlateNumber('');
     handleTypeChange('10-Wheeler Wingvan');
@@ -224,7 +230,7 @@ export const TruckRegistry: React.FC = () => {
   const canLog = canLogFuel().allowed;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
+    <div data-tutorial="trucks-page" className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
       
       {/* Header */}
       <div className="p-4 md:px-6 md:pt-6 md:pb-4 border-b border-slate-200 bg-white">
@@ -256,6 +262,7 @@ export const TruckRegistry: React.FC = () => {
 
             {canAccess('truck_crud') && (
               <button
+                data-tutorial="add-truck-btn"
                 onClick={handleOpenAdd}
                 className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95"
               >

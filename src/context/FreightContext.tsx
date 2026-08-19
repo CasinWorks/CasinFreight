@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
 import { 
   Company, 
   User, 
@@ -33,27 +39,25 @@ import {
   RbacRole,
   RbacAuditEntry
 } from '../types';
-import { 
-  RbacLocalDatabase, 
-  DEFAULT_RBAC_ROLES 
-} from '../services/rbacLocalDb';
-import { 
-  initialCompany, 
-  initialUsers, 
-  initialTrucks, 
-  initialDrivers, 
-  initialClients, 
-  initialRateCards, 
-  initialTrips, 
-  initialInvoices,
-  initialNotifications,
-  initialFuelLogs,
-  initialChartOfAccounts,
-  initialJournalEntries,
-  initialPlans,
-  initialSubscription,
-  initialBillingHistory
-} from '../data/mockData';
+import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, getAllowedRolesForPermission } from '../services/rbac';
+import { initialChartOfAccounts } from '../data/mockData';
+import { getFirebaseAuth, isFirebaseConfigured } from '../lib/firebase';
+import {
+  CompanyDocument,
+  UserProfile,
+  createAuditLog,
+  getCompanyDocument,
+  getInviteByEmail,
+  getUserProfile,
+  joinCompanyFromInvite,
+  loadCollection,
+  replaceCollection,
+  saveCompanyDocument,
+  saveInvite,
+  saveUserProfile,
+  seedCompanyWorkspace,
+} from '../services/firestoreCompany';
+import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, getPlanLimits, hasReachedLimit } from '../config/plans';
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
   switch (type) {
@@ -88,14 +92,17 @@ interface FreightContextType {
   users: User[];
   currentUser: User;
   isAuthenticated: boolean;
-  login: (email: string, password?: string) => { success: boolean; error?: string };
-  logout: () => void;
+  isAuthLoading: boolean;
+  isFirebaseReady: boolean;
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (payload: { name: string; email: string; password: string; companyName: string }) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   switchUserAccount: (userId: string) => void;
   switchUserRole: (role: UserRole) => void;
-  addUser: (user: Omit<User, 'id' | 'companyId'>) => void;
+  addUser: (user: Omit<User, 'id' | 'companyId'>) => { success: boolean; error?: string };
   
   trucks: Truck[];
-  addTruck: (truck: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>) => Truck;
+  addTruck: (truck: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>) => Truck | null;
   updateTruck: (id: string, updates: Partial<Truck>) => void;
   deleteTruck: (id: string) => void;
   
@@ -116,7 +123,7 @@ interface FreightContextType {
   suggestRateCard: (originZone: string, destinationZone: string, truckType: TruckType) => RateCard | undefined;
   
   trips: Trip[];
-  addTrip: (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>) => Trip;
+  addTrip: (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>) => Trip | null;
   updateTrip: (id: string, updates: Partial<Trip>) => void;
   updateTripStatus: (id: string, newStatus: TripStatus, note?: string, location?: string) => void;
   addAccessorialToTrip: (tripId: string, accessorial: Omit<TripAccessorial, 'id' | 'tripId'>) => void;
@@ -226,9 +233,9 @@ interface FreightContextType {
   getClientById: (id: string) => Client | undefined;
   getTripById: (id: string) => Trip | undefined;
 
-  // Dynamic RBAC & Role Management (Offline-First Local Database)
+  // Dynamic RBAC & Role Management (Firebase)
   roles: RbacRole[];
-  createRole: (roleData: Omit<RbacRole, 'id' | 'createdAt' | 'updatedAt'>) => RbacRole;
+  createRole: (roleData: Omit<RbacRole, 'id' | 'createdAt' | 'updatedAt'>) => RbacRole | null;
   updateRole: (id: string, updates: Partial<RbacRole>) => void;
   deleteRole: (id: string) => boolean;
   resetRolesToDefault: () => void;
@@ -237,6 +244,7 @@ interface FreightContextType {
   rbacAuditLogs: RbacAuditEntry[];
   exportRbacDb: () => string;
   importRbacDb: (jsonString: string) => { success: boolean; message: string };
+  firebaseProjectId: string;
   
   // Onboarding
   isOnboardingOpen: boolean;
@@ -254,190 +262,329 @@ interface FreightContextType {
   setIsUpgradeModalOpen: (open: boolean) => void;
   createPayMongoCheckout: (planId: string, paymentMethod?: PayMongoPaymentMethod) => Promise<{ checkoutUrl: string; checkoutSessionId: string }>;
   activateFoundingPlan: (paymentMethod: PayMongoPaymentMethod, refNumber?: string) => void;
+  subscribeToFoundingPlan: () => Promise<void>;
   cancelSubscriptionAtPeriodEnd: () => Promise<void>;
   resumeSubscription: () => void;
   updatePlanDetails: (planId: string, updates: Partial<Plan>) => void;
+  canAddTruck: boolean;
+  canAddAccount: boolean;
+  canAddRole: boolean;
+  canAddTransaction: boolean;
+  markTutorialSeen: () => void;
 }
 
 const FreightContext = createContext<FreightContextType | undefined>(undefined);
 
+const BLANK_COMPANY: Company = {
+  id: '',
+  name: '',
+  tin: '',
+  address: '',
+  contactNumber: '',
+  email: '',
+  subscriptionTier: 'Free',
+  currency: 'PHP',
+  registeredDate: new Date().toISOString().slice(0, 10),
+};
+
+function makeFreeSubscription(userId: string, companyId: string): Subscription {
+  const start = new Date();
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  return {
+    id: `sub-${userId.slice(0, 8) || 'free'}`,
+    user_id: userId,
+    company_id: companyId,
+    plan_id: PLAN_FREE_ID,
+    status: 'active',
+    current_period_start: start.toISOString(),
+    current_period_end: end.toISOString(),
+    cancel_at_period_end: false,
+    payment_provider: 'paymongo',
+    created_at: start.toISOString(),
+    updated_at: start.toISOString(),
+  };
+}
+
+function mapAuthError(error: unknown): string {
+  const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+  if (code.includes('email-already-in-use')) return 'That email already has a CasinFreight account. Sign in instead.';
+  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
+    return 'Invalid email or password.';
+  }
+  if (code.includes('weak-password')) return 'Password must be at least 6 characters.';
+  if (code.includes('invalid-email')) return 'Enter a valid work email.';
+  if (error instanceof Error) return error.message;
+  return 'Authentication failed.';
+}
+
 export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // LocalStorage initialization
-  const [company, setCompany] = useState<Company>(() => {
-    const saved = localStorage.getItem('cf_company');
-    return saved ? JSON.parse(saved) : initialCompany;
-  });
-
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('cf_users');
-    return saved ? JSON.parse(saved) : initialUsers;
-  });
-
-  const [roles, setRoles] = useState<RbacRole[]>(() => {
-    return RbacLocalDatabase.getRoles();
-  });
-
-  const [rbacAuditLogs, setRbacAuditLogs] = useState<RbacAuditEntry[]>(() => {
-    return RbacLocalDatabase.getAuditLogs();
-  });
-
+  const persistReadyRef = useRef(false);
+  const [company, setCompany] = useState<Company>(BLANK_COMPANY);
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<RbacRole[]>([]);
+  const [rbacAuditLogs, setRbacAuditLogs] = useState<RbacAuditEntry[]>([]);
   const [currentRole, setCurrentRole] = useState<UserRole>('Owner');
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [rateCards, setRateCards] = useState<RateCard[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
+  const [chartOfAccounts, setChartOfAccounts] = useState<ChartOfAccount[]>(initialChartOfAccounts);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [plans, setPlans] = useState<Plan[]>(SAAS_PLANS);
+  const [subscription, setSubscription] = useState<Subscription>(() => makeFreeSubscription('', ''));
+  const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    const saved = localStorage.getItem('cf_auth_user_id');
-    return saved || 'user-01';
-  });
+  const resetWorkspace = () => {
+    persistReadyRef.current = false;
+    setCompany(BLANK_COMPANY);
+    setUsers([]);
+    setRoles([]);
+    setRbacAuditLogs([]);
+    setCurrentRole('Owner');
+    setCurrentUserId('');
+    setTrucks([]);
+    setDrivers([]);
+    setClients([]);
+    setRateCards([]);
+    setTrips([]);
+    setInvoices([]);
+    setNotifications([]);
+    setFuelLogs([]);
+    setChartOfAccounts(initialChartOfAccounts);
+    setJournalEntries([]);
+    setPlans(SAAS_PLANS);
+    setSubscription(makeFreeSubscription('', ''));
+    setBillingHistory([]);
+    setIsOnboardingOpen(false);
+  };
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    const saved = localStorage.getItem('cf_auth_session');
-    return saved !== 'false';
-  });
+  const hydrateCompany = async (companyId: string, uid: string) => {
+    const companyDoc = await getCompanyDocument(companyId);
+    if (!companyDoc) {
+      throw new Error('Company workspace was not found for this account.');
+    }
 
-  useEffect(() => {
-    localStorage.setItem('cf_auth_session', isAuthenticated ? 'true' : 'false');
-  }, [isAuthenticated]);
+    const [
+      loadedRoles,
+      loadedMembers,
+      loadedTrucks,
+      loadedDrivers,
+      loadedClients,
+      loadedRateCards,
+      loadedTrips,
+      loadedInvoices,
+      loadedFuelLogs,
+      loadedJournal,
+      loadedNotifications,
+      loadedAudit,
+    ] = await Promise.all([
+      loadCollection<RbacRole>(companyId, 'roles'),
+      loadCollection<User>(companyId, 'members'),
+      loadCollection<Truck>(companyId, 'trucks'),
+      loadCollection<Driver>(companyId, 'drivers'),
+      loadCollection<Client>(companyId, 'clients'),
+      loadCollection<RateCard>(companyId, 'rateCards'),
+      loadCollection<Trip>(companyId, 'trips'),
+      loadCollection<Invoice>(companyId, 'invoices'),
+      loadCollection<FuelLog>(companyId, 'fuelLogs'),
+      loadCollection<JournalEntry>(companyId, 'journalEntries'),
+      loadCollection<AppNotification>(companyId, 'notifications'),
+      loadCollection<RbacAuditEntry>(companyId, 'auditLogs'),
+    ]);
 
-  useEffect(() => {
-    localStorage.setItem('cf_auth_user_id', currentUserId);
-  }, [currentUserId]);
-
-  const [trucks, setTrucks] = useState<Truck[]>(() => {
-    const saved = localStorage.getItem('cf_trucks');
-    return saved ? JSON.parse(saved) : initialTrucks;
-  });
-
-  const [drivers, setDrivers] = useState<Driver[]>(() => {
-    const saved = localStorage.getItem('cf_drivers');
-    return saved ? JSON.parse(saved) : initialDrivers;
-  });
-
-  const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem('cf_clients');
-    return saved ? JSON.parse(saved) : initialClients;
-  });
-
-  const [rateCards, setRateCards] = useState<RateCard[]>(() => {
-    const saved = localStorage.getItem('cf_rateCards');
-    return saved ? JSON.parse(saved) : initialRateCards;
-  });
-
-  const [trips, setTrips] = useState<Trip[]>(() => {
-    const saved = localStorage.getItem('cf_trips');
-    return saved ? JSON.parse(saved) : initialTrips;
-  });
-
-  const [invoices, setInvoices] = useState<Invoice[]>(() => {
-    const saved = localStorage.getItem('cf_invoices');
-    return saved ? JSON.parse(saved) : initialInvoices;
-  });
-
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    const saved = localStorage.getItem('cf_notifications');
-    return saved ? JSON.parse(saved) : initialNotifications;
-  });
-
-  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>(() => {
-    const saved = localStorage.getItem('cf_fuelLogs');
-    return saved ? JSON.parse(saved) : initialFuelLogs;
-  });
-
-  const [chartOfAccounts, setChartOfAccounts] = useState<ChartOfAccount[]>(() => {
-    const saved = localStorage.getItem('cf_chartOfAccounts');
-    return saved ? JSON.parse(saved) : initialChartOfAccounts;
-  });
-
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
-    const saved = localStorage.getItem('cf_journalEntries');
-    return saved ? JSON.parse(saved) : initialJournalEntries;
-  });
-
-  const [plans, setPlans] = useState<Plan[]>(() => {
-    const saved = localStorage.getItem('cf_plans');
-    return saved ? JSON.parse(saved) : initialPlans;
-  });
-
-  const [subscription, setSubscription] = useState<Subscription>(() => {
-    const saved = localStorage.getItem('cf_subscription');
-    return saved ? JSON.parse(saved) : initialSubscription;
-  });
-
-  const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>(() => {
-    const saved = localStorage.getItem('cf_billingHistory');
-    return saved ? JSON.parse(saved) : initialBillingHistory;
-  });
-
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
-  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState<boolean>(false);
-
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem('cf_plans', JSON.stringify(plans));
-  }, [plans]);
-
-  useEffect(() => {
-    localStorage.setItem('cf_subscription', JSON.stringify(subscription));
-  }, [subscription]);
-
-  useEffect(() => {
-    localStorage.setItem('cf_billingHistory', JSON.stringify(billingHistory));
-  }, [billingHistory]);
-
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem('cf_company', JSON.stringify(company));
-  }, [company]);
-
-  useEffect(() => {
-    localStorage.setItem('cf_users', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    RbacLocalDatabase.saveRoles(roles);
-  }, [roles]);
+    const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, ...companyFields } = companyDoc;
+    setCompany(companyFields);
+    setSubscription(savedSub || makeFreeSubscription(uid, companyId));
+    setRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
+    const uniqueMembers = Object.values(
+      loadedMembers.reduce<Record<string, User>>((acc, member) => {
+        const key = (member.email || member.id).toLowerCase();
+        if (!acc[key] || member.status === 'active' || member.id === uid) {
+          acc[key] = member;
+        }
+        return acc;
+      }, {})
+    );
+    setUsers(uniqueMembers);
+    setTrucks(loadedTrucks);
+    setDrivers(loadedDrivers);
+    setClients(loadedClients);
+    setRateCards(loadedRateCards);
+    setTrips(loadedTrips);
+    setInvoices(loadedInvoices);
+    setFuelLogs(loadedFuelLogs);
+    setJournalEntries(loadedJournal);
+    setNotifications(loadedNotifications);
+    setRbacAuditLogs(loadedAudit);
+    if (Array.isArray(savedAccounts) && savedAccounts.length) {
+      setChartOfAccounts(savedAccounts as ChartOfAccount[]);
+    }
+    setCurrentUserId(uid);
+    setCurrentRole((loadedMembers.find((m) => m.id === uid)?.role as UserRole) || 'Owner');
+    setIsAuthenticated(true);
+    setIsOnboardingOpen(!onboardingComplete);
+    persistReadyRef.current = true;
+  };
 
   useEffect(() => {
-    RbacLocalDatabase.saveAuditLogs(rbacAuditLogs);
-  }, [rbacAuditLogs]);
+    if (!isFirebaseConfigured()) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    const unsub = onAuthStateChanged(getFirebaseAuth(), async (fbUser) => {
+      if (!fbUser) {
+        resetWorkspace();
+        setIsAuthenticated(false);
+        setIsAuthLoading(false);
+        return;
+      }
+
+      try {
+        let profile = await getUserProfile(fbUser.uid);
+        for (let attempt = 0; attempt < 12 && !profile?.companyId; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          profile = await getUserProfile(fbUser.uid);
+        }
+        if (!profile?.companyId) {
+          resetWorkspace();
+          setIsAuthenticated(false);
+          setIsAuthLoading(false);
+          return;
+        }
+        await hydrateCompany(profile.companyId, fbUser.uid);
+      } catch (error) {
+        console.error('Failed to hydrate Firebase workspace', error);
+        resetWorkspace();
+        setIsAuthenticated(false);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    });
+
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('cf_trucks', JSON.stringify(trucks));
-  }, [trucks]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      const companyDoc: CompanyDocument = {
+        ...company,
+        createdBy: currentUserId,
+        onboardingComplete: !isOnboardingOpen,
+        subscription,
+        chartOfAccounts,
+      };
+      saveCompanyDocument(companyDoc).catch((err) => console.error('Failed to save company', err));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [company, subscription, chartOfAccounts, isOnboardingOpen, currentUserId]);
 
   useEffect(() => {
-    localStorage.setItem('cf_drivers', JSON.stringify(drivers));
-  }, [drivers]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'roles', roles).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [roles, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_clients', JSON.stringify(clients));
-  }, [clients]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'members', users).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [users, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_rateCards', JSON.stringify(rateCards));
-  }, [rateCards]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'trucks', trucks).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [trucks, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_trips', JSON.stringify(trips));
-  }, [trips]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'drivers', drivers).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [drivers, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_invoices', JSON.stringify(invoices));
-  }, [invoices]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'clients', clients).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [clients, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_notifications', JSON.stringify(notifications));
-  }, [notifications]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'rateCards', rateCards).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [rateCards, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_fuelLogs', JSON.stringify(fuelLogs));
-  }, [fuelLogs]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'trips', trips).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [trips, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_chartOfAccounts', JSON.stringify(chartOfAccounts));
-  }, [chartOfAccounts]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'invoices', invoices).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [invoices, company.id]);
 
   useEffect(() => {
-    localStorage.setItem('cf_journalEntries', JSON.stringify(journalEntries));
-  }, [journalEntries]);
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'fuelLogs', fuelLogs).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [fuelLogs, company.id]);
+
+  useEffect(() => {
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'journalEntries', journalEntries).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [journalEntries, company.id]);
+
+  useEffect(() => {
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'notifications', notifications).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [notifications, company.id]);
+
+  useEffect(() => {
+    if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'auditLogs', rbacAuditLogs).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [rbacAuditLogs, company.id]);
 
   const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
 
@@ -503,79 +650,194 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
-  const currentUser = users.find(u => u.id === currentUserId) || users.find(u => u.role === currentRole) || users[0] || {
-    id: 'default-user',
-    name: 'Admin User',
-    email: 'admin@casinfreight.ph',
+  const currentUser = users.find(u => u.id === currentUserId) || {
+    id: currentUserId || '',
+    name: '',
+    email: '',
     role: currentRole,
     companyId: company.id,
   };
 
-  const switchUserRole = (role: UserRole) => {
-    setCurrentRole(role);
-    const matchedUser = users.find(u => u.role.toLowerCase() === role.toLowerCase());
-    if (matchedUser) {
-      setCurrentUserId(matchedUser.id);
+  const markTutorialSeen = () => {
+    if (!currentUserId) return;
+    setUsers((prev) => prev.map((user) => (
+      user.id === currentUserId ? { ...user, has_seen_tutorial: true } : user
+    )));
+    const member = users.find((user) => user.id === currentUserId) || currentUser;
+    saveUserProfile({
+      ...(member as UserProfile),
+      id: currentUserId,
+      uid: currentUserId,
+      companyId: company.id,
+      status: member.status || 'active',
+      has_seen_tutorial: true,
+    }).catch(console.error);
+  };
+
+  const activePlan = plans.find((p) => p.id === subscription.plan_id) || SAAS_PLANS[0];
+  const planLimits = getPlanLimits(subscription.plan_id);
+  const canAddTruck = !hasReachedLimit(trucks.length, planLimits.maxTrucks);
+  const canAddAccount = !hasReachedLimit(users.length, planLimits.maxAccounts);
+  const canAddRole = !hasReachedLimit(roles.length, planLimits.maxRoles);
+  const canAddTransaction = !hasReachedLimit(trips.length, planLimits.maxTransactions);
+  const canCreateBooking = canAddTransaction;
+
+  const periodEnd = new Date(subscription.current_period_end || Date.now());
+  const daysRemainingInPeriod = Math.max(0, Math.ceil((periodEnd.getTime() - Date.now()) / 86400000));
+  const bookingCapPercentage = planLimits.maxTransactions ? Math.min(100, Math.round((trips.length / planLimits.maxTransactions) * 100)) : 0;
+
+  const subscriptionUsage: SubscriptionUsageStats = {
+    bookingsThisMonth: trips.length,
+    maxBookingsPerMonth: planLimits.maxTransactions,
+    bookingCapPercentage,
+    hasReachedBookingCap: !canAddTransaction,
+    isNearingBookingCap: Boolean(planLimits.maxTransactions) && bookingCapPercentage >= 80,
+    storageUsedMb: 0,
+    maxStorageMb: activePlan.max_storage_mb,
+    storageCapPercentage: 0,
+    hasReachedStorageCap: false,
+    isFounding: subscription.plan_id === PLAN_FOUNDING_ID,
+    isFreePlan: subscription.plan_id === PLAN_FREE_ID,
+    isSubscriptionActive: subscription.status === 'active' || subscription.status === 'trialing',
+    daysRemainingInPeriod,
+    trucksUsed: trucks.length,
+    maxTrucks: planLimits.maxTrucks,
+    accountsUsed: users.length,
+    maxAccounts: planLimits.maxAccounts,
+    rolesUsed: roles.length,
+    maxRoles: planLimits.maxRoles,
+    transactionsUsed: trips.length,
+    maxTransactions: planLimits.maxTransactions,
+    hasReachedTruckCap: !canAddTruck,
+    hasReachedAccountCap: !canAddAccount,
+    hasReachedRoleCap: !canAddRole,
+    hasReachedTransactionCap: !canAddTransaction,
+  };
+
+  const requireUpgrade = (blocked: boolean) => {
+    if (blocked) {
+      setIsUpgradeModalOpen(true);
+      return true;
+    }
+    return false;
+  };
+
+  const pushAudit = (
+    action: RbacAuditEntry['action'],
+    details: string,
+    targetRole?: string,
+    targetUser?: string
+  ) => {
+    const entry = buildAuditEntry(currentUser.name || 'Owner', currentUser.role, action, details, targetRole, targetUser);
+    setRbacAuditLogs((prev) => [entry, ...prev]);
+    if (company.id) {
+      createAuditLog(company.id, entry).catch(console.error);
+    }
+    return entry;
+  };
+
+  const switchUserRole = (_role: UserRole) => {
+    // Role impersonation was a demo control. Live sessions use the signed-in Firebase user.
+  };
+
+  const switchUserAccount = (_userId: string) => {
+    // Account switching was a demo control. Live sessions use Firebase Auth.
+  };
+
+  const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isFirebaseConfigured()) {
+      return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
+    }
+    try {
+      await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error) };
     }
   };
 
-  const switchUserAccount = (userId: string) => {
-    const user = users.find(u => u.id === userId);
-    if (user) {
-      setCurrentUserId(user.id);
-      setCurrentRole(user.role);
-      setIsAuthenticated(true);
+  const signup = async (payload: {
+    name: string;
+    email: string;
+    password: string;
+    companyName: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    if (!isFirebaseConfigured()) {
+      return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
+    }
+
+    try {
+      const cred = await createUserWithEmailAndPassword(
+        getFirebaseAuth(),
+        payload.email.trim(),
+        payload.password
+      );
+      const invite = await getInviteByEmail(payload.email);
+      if (invite) {
+        await joinCompanyFromInvite({
+          uid: cred.user.uid,
+          email: payload.email.trim(),
+          name: payload.name.trim(),
+          invite,
+        });
+        return { success: true };
+      }
+
+      const { company: createdCompany, profile } = await seedCompanyWorkspace({
+        uid: cred.user.uid,
+        email: payload.email.trim(),
+        name: payload.name.trim(),
+        companyName: payload.companyName.trim() || `${payload.name.trim()}'s Fleet`,
+        role: { ...OWNER_RBAC_ROLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        subscription: makeFreeSubscription(cred.user.uid, ''),
+      });
+      await saveCompanyDocument({
+        ...createdCompany,
+        chartOfAccounts: initialChartOfAccounts,
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error) };
     }
   };
 
-  const login = (email: string, password?: string): { success: boolean; error?: string } => {
-    const cleanEmail = email.trim().toLowerCase();
-    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
-    if (!user) {
-      return { success: false, error: 'Operator account not found in local workstation database.' };
+  const logout = async () => {
+    if (isFirebaseConfigured()) {
+      await signOut(getFirebaseAuth());
     }
-
-    if (user.password && password && password.trim() && user.password !== password) {
-      return { success: false, error: 'Invalid password. (Default demo password: password123)' };
-    }
-
-    setCurrentUserId(user.id);
-    setCurrentRole(user.role);
-    setIsAuthenticated(true);
-
-    RbacLocalDatabase.logAction(
-      user.name,
-      user.role,
-      'USER_ROLE_ASSIGNED',
-      `Operator logged into local workstation session.`
-    );
-
-    return { success: true };
-  };
-
-  const logout = () => {
+    resetWorkspace();
     setIsAuthenticated(false);
   };
 
   const hasPermission = (permissionId: string): boolean => {
-    return RbacLocalDatabase.checkPermission(currentUser.role, permissionId, roles);
+    return checkPermission(currentUser.role, permissionId, roles);
   };
 
   const updateUserRole = (userId: string, newRole: string) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
     const targetUser = users.find(u => u.id === userId);
-    const entry = RbacLocalDatabase.logAction(
-      currentUser.name,
-      currentUser.role,
+    if (userId === currentUserId) {
+      setCurrentRole(newRole);
+    }
+    pushAudit(
       'USER_ROLE_ASSIGNED',
       `Assigned user "${targetUser?.name || userId}" to role "${newRole}".`,
       newRole,
       targetUser?.name
     );
-    setRbacAuditLogs(prev => [entry, ...prev]);
+    const member = users.find((u) => u.id === userId);
+    if (member) {
+      saveUserProfile({
+        ...(member as UserProfile),
+        uid: userId,
+        role: newRole,
+        status: member.status || 'active',
+      }).catch(console.error);
+    }
   };
 
-  const createRole = (roleData: Omit<RbacRole, 'id' | 'createdAt' | 'updatedAt'>): RbacRole => {
+  const createRole = (roleData: Omit<RbacRole, 'id' | 'createdAt' | 'updatedAt'>): RbacRole | null => {
+    if (requireUpgrade(!canAddRole)) return null;
     const slugId = roleData.name.trim().replace(/[^a-zA-Z0-9]/g, '_');
     const newRole: RbacRole = {
       ...roleData,
@@ -584,14 +846,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updatedAt: new Date().toISOString(),
     };
     setRoles(prev => [...prev, newRole]);
-    const entry = RbacLocalDatabase.logAction(
-      currentUser.name,
-      currentUser.role,
+    pushAudit(
       'ROLE_CREATED',
       `Created custom role "${newRole.name}" with ${newRole.permissions.length} permissions.`,
       newRole.id
     );
-    setRbacAuditLogs(prev => [entry, ...prev]);
     return newRole;
   };
 
@@ -603,78 +862,100 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return r;
     }));
     const targetRole = roles.find(r => r.id === id);
-    const entry = RbacLocalDatabase.logAction(
-      currentUser.name,
-      currentUser.role,
+    pushAudit(
       'ROLE_UPDATED',
       `Updated permissions and configuration for role "${targetRole?.name || id}".`,
       id
     );
-    setRbacAuditLogs(prev => [entry, ...prev]);
   };
 
   const deleteRole = (id: string): boolean => {
     const target = roles.find(r => r.id === id);
     if (!target || target.isSystem) return false;
 
-    // Reassign any users on this deleted role to 'Dispatcher'
-    setUsers(prev => prev.map(u => u.role === id ? { ...u, role: 'Dispatcher' } : u));
+    setUsers(prev => prev.map(u => u.role === id ? { ...u, role: 'Owner' } : u));
     setRoles(prev => prev.filter(r => r.id !== id));
 
     if (currentRole === id) {
       setCurrentRole('Owner');
     }
 
-    const entry = RbacLocalDatabase.logAction(
-      currentUser.name,
-      currentUser.role,
+    pushAudit(
       'ROLE_DELETED',
-      `Deleted custom role "${target.name}". Any assigned team members were reassigned to Dispatcher.`,
+      `Deleted custom role "${target.name}". Assigned team members were reassigned to Owner.`,
       id
     );
-    setRbacAuditLogs(prev => [entry, ...prev]);
     return true;
   };
 
   const resetRolesToDefault = () => {
-    setRoles(DEFAULT_RBAC_ROLES);
-    RbacLocalDatabase.saveRoles(DEFAULT_RBAC_ROLES);
-    const entry = RbacLocalDatabase.logAction(
-      currentUser.name,
-      currentUser.role,
+    if (subscription.plan_id === PLAN_FREE_ID) {
+      setRoles([OWNER_RBAC_ROLE]);
+    } else {
+      setRoles(DEFAULT_RBAC_ROLES);
+    }
+    pushAudit(
       'PERMISSIONS_RESET',
-      'Reset all RBAC roles and permissions to standard Philippine logistics system defaults.'
+      'Reset RBAC roles to the plan default.'
     );
-    setRbacAuditLogs(prev => [entry, ...prev]);
   };
 
   const exportRbacDb = (): string => {
-    return RbacLocalDatabase.exportDatabaseJson();
+    return JSON.stringify({ version: '3.0.0', exportedAt: new Date().toISOString(), roles, auditLogs: rbacAuditLogs }, null, 2);
   };
 
   const importRbacDb = (jsonString: string) => {
-    const res = RbacLocalDatabase.importDatabaseJson(jsonString);
-    if (res.success) {
-      setRoles(RbacLocalDatabase.getRoles());
-      setRbacAuditLogs(RbacLocalDatabase.getAuditLogs());
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (!parsed.roles || !Array.isArray(parsed.roles)) {
+        return { success: false, message: 'Invalid format: missing roles array.' };
+      }
+      if (requireUpgrade(hasReachedLimit(parsed.roles.length, planLimits.maxRoles))) {
+        return { success: false, message: 'Imported role count exceeds your plan. Subscribe to import a full RBAC matrix.' };
+      }
+      setRoles(parsed.roles);
+      if (Array.isArray(parsed.auditLogs)) {
+        setRbacAuditLogs(parsed.auditLogs);
+      }
+      return { success: true, message: `Imported ${parsed.roles.length} roles into Firebase.` };
+    } catch (e: any) {
+      return { success: false, message: `Import error: ${e.message}` };
     }
-    return res;
   };
 
   const updateCompany = (updates: Partial<Company>) => {
     setCompany(prev => ({ ...prev, ...updates }));
   };
 
-  const addUser = (userData: Omit<User, 'id' | 'companyId'>) => {
+  const addUser = (userData: Omit<User, 'id' | 'companyId'>): { success: boolean; error?: string } => {
+    if (requireUpgrade(!canAddAccount)) {
+      return { success: false, error: 'Free plan includes 1 company account. Subscribe to add team members.' };
+    }
+
+    const inviteId = `invite-${Date.now()}`;
     const newUser: User = {
       ...userData,
-      id: `user-${Date.now()}`,
+      id: inviteId,
       companyId: company.id,
+      status: 'invited',
     };
-    setUsers(prev => [...prev, newUser]);
+    setUsers((prev) => [...prev, newUser]);
+    if (company.id) {
+      saveInvite({
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+        companyId: company.id,
+        invitedBy: currentUserId,
+        createdAt: new Date().toISOString(),
+      }).catch(console.error);
+    }
+    pushAudit('USER_ROLE_ASSIGNED', `Invited ${userData.name} (${userData.email}) as ${userData.role}.`, userData.role, userData.name);
+    return { success: true };
   };
 
-  const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck => {
+  const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck | null => {
+    if (requireUpgrade(!canAddTruck)) return null;
     const netPayloadKg = Math.max(0, truckData.gvwrKg - truckData.tareWeightKg);
     const newTruck: Truck = {
       ...truckData,
@@ -763,7 +1044,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
-  const addTrip = (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>): Trip => {
+  const addTrip = (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>): Trip | null => {
+    if (requireUpgrade(!canAddTransaction)) return null;
     const trk = trucks.find(t => t.id === tripData.truckId);
     const netCap = trk ? trk.netPayloadKg : 10000;
     const isOverweight = tripData.cargoWeightKg > netCap;
@@ -1679,7 +1961,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const canLogFuel = (): RolePermissionCheck => {
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission('fuel.log', roles);
+    const allowedRoles = getAllowedRolesForPermission('fuel.log', roles);
     const allowed = currentUser.role === 'Owner' || hasPermission('fuel.log');
     if (allowed) {
       return { allowed: true, allowedRoles };
@@ -1692,7 +1974,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const canDeleteFuelLog = (): RolePermissionCheck => {
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission('fuel.delete', roles);
+    const allowedRoles = getAllowedRolesForPermission('fuel.delete', roles);
     const allowed = currentUser.role === 'Owner' || hasPermission('fuel.delete');
     if (allowed) {
       return { allowed: true, allowedRoles };
@@ -1940,7 +2222,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         label = 'manipulate shipment status';
     }
 
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission(requiredPerm, roles);
+    const allowedRoles = getAllowedRolesForPermission(requiredPerm, roles);
     const allowed = role === 'Owner' || hasPermission(requiredPerm);
 
     if (allowed) {
@@ -1955,8 +2237,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const canCreateTrip = (): RolePermissionCheck => {
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission('trips.create', roles);
+    const allowedRoles = getAllowedRolesForPermission('trips.create', roles);
     const allowed = currentUser.role === 'Owner' || hasPermission('trips.create');
+    if (!canAddTransaction) {
+      return {
+        allowed: false,
+        reason: 'Free plan includes 10 transactions. Subscribe to book additional trips.',
+        allowedRoles,
+      };
+    }
     if (allowed) {
       return { allowed: true, allowedRoles };
     }
@@ -1968,7 +2257,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const canEditTrip = (): RolePermissionCheck => {
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission('trips.edit', roles);
+    const allowedRoles = getAllowedRolesForPermission('trips.edit', roles);
     const allowed = currentUser.role === 'Owner' || hasPermission('trips.edit');
     if (allowed) {
       return { allowed: true, allowedRoles };
@@ -1981,7 +2270,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const canDeleteTrip = (): RolePermissionCheck => {
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission('trips.delete', roles);
+    const allowedRoles = getAllowedRolesForPermission('trips.delete', roles);
     const allowed = currentUser.role === 'Owner' || hasPermission('trips.delete');
     if (allowed) {
       return { allowed: true, allowedRoles };
@@ -1994,7 +2283,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const canReassignFleet = (): RolePermissionCheck => {
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission('trips.reassign_fleet', roles);
+    const allowedRoles = getAllowedRolesForPermission('trips.reassign_fleet', roles);
     const allowed = currentUser.role === 'Owner' || hasPermission('trips.reassign_fleet');
     if (allowed) {
       return { allowed: true, allowedRoles };
@@ -2007,7 +2296,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const canManageFinancials = (): RolePermissionCheck => {
-    const allowedRoles = RbacLocalDatabase.getAllowedRolesForPermission('invoices.create', roles);
+    const allowedRoles = getAllowedRolesForPermission('invoices.create', roles);
     const allowed = currentUser.role === 'Owner' || hasPermission('invoices.create') || hasPermission('ratecards.manage');
     if (allowed) {
       return { allowed: true, allowedRoles };
@@ -2053,19 +2342,53 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const resetToSampleData = () => {
-    setCompany(initialCompany);
-    setUsers(initialUsers);
-    setTrucks(initialTrucks);
-    setDrivers(initialDrivers);
-    setClients(initialClients);
-    setRateCards(initialRateCards);
-    setTrips(initialTrips);
-    setInvoices(initialInvoices);
-    setNotifications(initialNotifications);
-    setFuelLogs(initialFuelLogs);
-    setChartOfAccounts(initialChartOfAccounts);
-    setJournalEntries(initialJournalEntries);
-    localStorage.clear();
+    setIsUpgradeModalOpen(true);
+  };
+
+  const subscribeToFoundingPlan = async () => {
+    const now = new Date();
+    const end = new Date(now);
+    end.setMonth(end.getMonth() + 1);
+    const nextSub: Subscription = {
+      ...subscription,
+      plan_id: PLAN_FOUNDING_ID,
+      status: 'active',
+      current_period_start: now.toISOString(),
+      current_period_end: end.toISOString(),
+      cancel_at_period_end: false,
+      updated_at: now.toISOString(),
+    };
+    setSubscription(nextSub);
+    setCompany((prev) => ({ ...prev, subscriptionTier: 'Growth' }));
+    setRoles((prev) => {
+      const existingIds = new Set(prev.map((r) => r.id.toLowerCase()));
+      const missing = DEFAULT_RBAC_ROLES.filter((r) => !existingIds.has(r.id.toLowerCase()));
+      return [...prev, ...missing];
+    });
+    pushAudit('PERMISSIONS_RESET', 'Activated Founding plan. Full team roles unlocked.');
+  };
+
+  const activateFoundingPlan = (_paymentMethod: PayMongoPaymentMethod, _refNumber?: string) => {
+    void subscribeToFoundingPlan();
+  };
+
+  const createPayMongoCheckout = async (planId: string, _paymentMethod?: PayMongoPaymentMethod) => {
+    if (planId === PLAN_FOUNDING_ID) {
+      await subscribeToFoundingPlan();
+    }
+    return { checkoutUrl: '', checkoutSessionId: `local-${Date.now()}` };
+  };
+
+  const cancelSubscriptionAtPeriodEnd = async () => {
+    setSubscription((prev) => ({ ...prev, cancel_at_period_end: true, updated_at: new Date().toISOString() }));
+  };
+
+  const resumeSubscription = () => {
+    setSubscription((prev) => ({ ...prev, cancel_at_period_end: false, updated_at: new Date().toISOString() }));
+  };
+
+  const updatePlanDetails = (planId: string, updates: Partial<Plan>) => {
+    setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, ...updates } : p)));
   };
 
   return (
@@ -2075,7 +2398,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       users,
       currentUser,
       isAuthenticated,
+      isAuthLoading,
+      isFirebaseReady: isFirebaseConfigured(),
       login,
+      signup,
       logout,
       switchUserAccount,
       switchUserRole,
@@ -2149,8 +2475,6 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isOnboardingOpen,
       setIsOnboardingOpen,
       resetToSampleData,
-
-      // Dynamic RBAC local database
       roles,
       createRole,
       updateRole,
@@ -2161,6 +2485,26 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       rbacAuditLogs,
       exportRbacDb,
       importRbacDb,
+      firebaseProjectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+      plans,
+      subscription,
+      billingHistory,
+      activePlan,
+      subscriptionUsage,
+      canCreateBooking,
+      isUpgradeModalOpen,
+      setIsUpgradeModalOpen,
+      createPayMongoCheckout,
+      activateFoundingPlan,
+      subscribeToFoundingPlan,
+      cancelSubscriptionAtPeriodEnd,
+      resumeSubscription,
+      updatePlanDetails,
+      canAddTruck,
+      canAddAccount,
+      canAddRole,
+      canAddTransaction,
+      markTutorialSeen,
     }}>
       {children}
     </FreightContext.Provider>

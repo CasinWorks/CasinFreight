@@ -401,7 +401,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
   const totalDemurrageCount = trips.filter(t => t.demurrageHours > 0).length;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC] text-slate-900 overflow-hidden">
+    <div data-tutorial="trip-board" className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC] text-slate-900 overflow-hidden">
       {/* Top Banner & Action Bar */}
       <div className="p-4 md:px-6 md:pt-5 md:pb-4 border-b border-slate-200 bg-white shadow-2xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -519,6 +519,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
 
             {canAccess('new_trip') && (
               <button
+                data-tutorial="new-load-btn"
                 onClick={onOpenNewTrip}
                 className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95"
               >
@@ -1124,9 +1125,9 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {filteredTrips.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">
+                      <td colSpan={8} data-tutorial="trip-board-empty" className="py-12 text-center text-slate-400 text-xs">
                         <div className="max-w-xs mx-auto space-y-2">
-                          <p>No shipments match the selected filters.</p>
+                          <p>{trips.length === 0 ? 'No trips yet. Tap New Load when you are ready to book one.' : 'No shipments match the selected filters.'}</p>
                           {hasActiveFilters && (
                             <button
                               onClick={resetFilters}

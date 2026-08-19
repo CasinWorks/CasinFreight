@@ -34,7 +34,9 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     clients, 
     rateCards, 
     suggestRateCard, 
-    addTrip 
+    addTrip, 
+    canCreateBooking,
+    setIsUpgradeModalOpen,
   } = useFreight();
 
   // Form State
@@ -151,6 +153,11 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
       return;
     }
 
+    if (!canCreateBooking) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+
     const createdTrip = addTrip({
       truckId: selectedTruckId,
       driverId: selectedDriverId,
@@ -175,6 +182,10 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
       overweightSurchargePerKg: Number(overweightSurchargePerKg),
       notes,
     });
+
+    if (!createdTrip) {
+      return;
+    }
 
     if (onTripCreated) {
       onTripCreated(createdTrip.id);

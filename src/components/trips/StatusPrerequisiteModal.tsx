@@ -47,7 +47,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   onConfirmAdvance,
   onOpenDeliveryNote
 }) => {
-  const { currentUser, canManipulateTripStatus, switchUserRole } = useFreight();
+  const { currentUser, canManipulateTripStatus } = useFreight();
   const roleCheck = canManipulateTripStatus(targetStatus, trip.status);
 
   // Prerequisite form states
@@ -253,14 +253,12 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                   <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Authorized Roles:</span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {roleCheck.allowedRoles.map(r => (
-                      <button
+                      <span
                         key={r}
-                        type="button"
-                        onClick={() => switchUserRole(r)}
-                        className="px-2 py-0.5 rounded bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 font-semibold text-[10px] transition-colors shadow-2xs"
+                        className="px-2 py-0.5 rounded bg-white text-rose-800 border border-rose-300 font-semibold text-[10px]"
                       >
-                        Switch to {r}
-                      </button>
+                        {r}
+                      </span>
                     ))}
                   </div>
                 </div>

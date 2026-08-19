@@ -156,6 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
+              data-tutorial={`nav-${item.id}`}
               onClick={() => {
                 if (hasAccess) {
                   setActiveTab(item.id);
