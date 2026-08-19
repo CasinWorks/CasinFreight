@@ -8,7 +8,6 @@ export const UpgradeModal: React.FC = () => {
     isUpgradeModalOpen,
     setIsUpgradeModalOpen,
     subscribeToFoundingPlan,
-    isBillingProviderReady,
     isPayMongoTestMode,
     isWaitingForPayMongo,
     subscriptionUsage,
@@ -22,10 +21,6 @@ export const UpgradeModal: React.FC = () => {
   if (!isUpgradeModalOpen) return null;
 
   const handleSubscribe = async () => {
-    if (!isBillingProviderReady) {
-      setError('Founding stays locked until PayMongo checkout is wired. Free caps remain in effect.');
-      return;
-    }
     setIsSubmitting(true);
     setError(null);
     try {
@@ -111,20 +106,18 @@ export const UpgradeModal: React.FC = () => {
                 {isPaid ? (
                   <button
                     type="button"
-                    disabled={waiting || isCurrent || !isBillingProviderReady}
+                    disabled={waiting || isCurrent}
                     onClick={handleSubscribe}
                     className="mt-5 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
                   >
                     {isCurrent
                       ? 'Already subscribed'
-                      : !isBillingProviderReady
-                        ? 'Available after PayMongo is wired'
-                        : isWaitingForPayMongo
-                          ? 'Waiting for PayMongo…'
-                          : isSubmitting
-                            ? 'Opening checkout…'
-                            : 'Pay ₱499/mo with PayMongo'}
-                    {isBillingProviderReady && !isCurrent && !waiting && <Zap className="w-3.5 h-3.5" />}
+                      : isWaitingForPayMongo
+                        ? 'Waiting for PayMongo…'
+                        : isSubmitting
+                          ? 'Opening checkout…'
+                          : 'Pay ₱499/mo with PayMongo'}
+                    {!isCurrent && !waiting && <Zap className="w-3.5 h-3.5" />}
                   </button>
                 ) : (
                   <div className="mt-5 w-full py-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-bold text-center">

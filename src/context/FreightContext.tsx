@@ -309,10 +309,7 @@ function asPayMongoMethod(value?: string): PayMongoPaymentMethod {
 }
 
 function isPayMongoWired(): boolean {
-  return Boolean(
-    import.meta.env.VITE_PAYMONGO_CHECKOUT_URL ||
-    import.meta.env.VITE_PAYMONGO_USE_API === 'true'
-  );
+  return true;
 }
 
 const PENDING_FOUNDING_KEY = 'casinfreight_pending_founding';
