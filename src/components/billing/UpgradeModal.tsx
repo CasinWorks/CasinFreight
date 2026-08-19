@@ -8,6 +8,7 @@ export const UpgradeModal: React.FC = () => {
     isUpgradeModalOpen,
     setIsUpgradeModalOpen,
     subscribeToFoundingPlan,
+    confirmFoundingPayment,
     isBillingProviderReady,
     isPayMongoTestMode,
     subscriptionUsage,
@@ -17,6 +18,7 @@ export const UpgradeModal: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [paymentRef, setPaymentRef] = React.useState('');
 
   if (!isUpgradeModalOpen) return null;
 
@@ -36,6 +38,19 @@ export const UpgradeModal: React.FC = () => {
     }
   };
 
+  const handleConfirmPaid = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await confirmFoundingPayment(paymentRef.trim() || undefined);
+      setIsUpgradeModalOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not confirm PayMongo payment.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
@@ -50,7 +65,7 @@ export const UpgradeModal: React.FC = () => {
             </p>
             {isPayMongoTestMode && (
               <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
-                PayMongo test mode — no real charges. Use a test card or Authorize on the e-wallet test page.
+                PayMongo test mode — no real charges. QRPh stays on PayMongo’s “Payment Received” page; return here and confirm to unlock Founding.
               </p>
             )}
           </div>
@@ -101,21 +116,42 @@ export const UpgradeModal: React.FC = () => {
                   ))}
                 </ul>
                 {isPaid ? (
-                  <button
-                    type="button"
-                    disabled={isSubmitting || isCurrent || !isBillingProviderReady}
-                    onClick={handleSubscribe}
-                    className="mt-5 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
-                    {isCurrent
-                      ? 'Already subscribed'
-                      : !isBillingProviderReady
-                        ? 'Available after PayMongo is wired'
-                        : isSubmitting
-                          ? 'Opening checkout…'
-                          : 'Pay ₱499/mo with PayMongo'}
-                    {isBillingProviderReady && !isCurrent && <Zap className="w-3.5 h-3.5" />}
-                  </button>
+                  <div className="mt-5 space-y-2">
+                    <button
+                      type="button"
+                      disabled={isSubmitting || isCurrent || !isBillingProviderReady}
+                      onClick={handleSubscribe}
+                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {isCurrent
+                        ? 'Already subscribed'
+                        : !isBillingProviderReady
+                          ? 'Available after PayMongo is wired'
+                          : isSubmitting
+                            ? 'Opening checkout…'
+                            : 'Pay ₱499/mo with PayMongo'}
+                      {isBillingProviderReady && !isCurrent && <Zap className="w-3.5 h-3.5" />}
+                    </button>
+                    {!isCurrent && (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={paymentRef}
+                          onChange={(event) => setPaymentRef(event.target.value)}
+                          placeholder="Optional: pay_… or link ref M8sj3U4"
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400"
+                        />
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={handleConfirmPaid}
+                          className="w-full py-2.5 rounded-xl border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-50 disabled:opacity-60"
+                        >
+                          {isSubmitting ? 'Confirming PayMongo payment…' : 'I already paid — unlock Founding'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="mt-5 w-full py-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-bold text-center">
                     Included at signup

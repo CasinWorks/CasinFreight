@@ -14,6 +14,17 @@ export interface CreateCheckoutResult {
   checkoutSessionId: string;
 }
 
+export interface PaidFoundingPayment {
+  paymentId: string;
+  method: string;
+  amount: number;
+  description: string;
+}
+
+function paymongoAuthHeader(secretKey: string): string {
+  return `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
+}
+
 export async function createPayMongoCheckoutSession(
   input: CreateCheckoutInput
 ): Promise<CreateCheckoutResult> {
@@ -70,4 +81,188 @@ export async function createPayMongoCheckoutSession(
   }
 
   return { checkoutUrl, checkoutSessionId };
+}
+
+const FOUNDING_AMOUNT_CENTAVOS = 49900;
+const RECENT_PAYMENT_WINDOW_SECONDS = 60 * 60 * 48;
+
+export interface FindPaidFoundingLookup {
+  paymentId?: string;
+  referenceNumber?: string;
+  checkoutSessionId?: string;
+}
+
+type PaymongoResource = {
+  id?: string;
+  attributes?: Record<string, unknown>;
+};
+
+type PaymongoPayload = {
+  data?: PaymongoResource | PaymongoResource[];
+  errors?: Array<{ detail?: string }>;
+};
+
+function amountIsFounding(amount: number): boolean {
+  return amount === FOUNDING_AMOUNT_CENTAVOS || amount === 499;
+}
+
+function descriptionLooksFounding(description?: string): boolean {
+  const value = (description || '').toLowerCase();
+  if (!value) return true;
+  return value.includes('founding') || value.includes('casinfreight') || value.includes('subscription');
+}
+
+function paymentMethodFrom(attributes: Record<string, unknown>): string {
+  const source = attributes.source;
+  if (source && typeof source === 'object' && 'type' in source) {
+    return String((source as { type?: string }).type || 'qrph');
+  }
+  return String(attributes.payment_method_used || attributes.source_type || 'qrph');
+}
+
+function asResourceList(data?: PaymongoResource | PaymongoResource[]): PaymongoResource[] {
+  if (!data) return [];
+  return Array.isArray(data) ? data : [data];
+}
+
+function paymentsFromAttributes(attributes: Record<string, unknown>): PaymongoResource[] {
+  const payments = attributes.payments;
+  if (!Array.isArray(payments)) return [];
+  return payments.filter((item): item is PaymongoResource => Boolean(item && typeof item === 'object'));
+}
+
+function toPaidFounding(id: string, attributes: Record<string, unknown>): PaidFoundingPayment {
+  return {
+    paymentId: id,
+    method: paymentMethodFrom(attributes),
+    amount: Number(attributes.amount || 0) || FOUNDING_AMOUNT_CENTAVOS,
+    description: String(attributes.description || attributes.statement_descriptor || ''),
+  };
+}
+
+function paidFoundingFromResource(
+  item: PaymongoResource | undefined,
+  requireDescription: boolean
+): PaidFoundingPayment | null {
+  if (!item?.id) return null;
+  const attributes = item.attributes || {};
+  if (String(attributes.status || '').toLowerCase() !== 'paid') return null;
+  if (!amountIsFounding(Number(attributes.amount || 0))) return null;
+  const description = String(attributes.description || attributes.statement_descriptor || '');
+  if (requireDescription && !descriptionLooksFounding(description)) return null;
+  return toPaidFounding(item.id, attributes);
+}
+
+function firstRecentPaid(
+  items: PaymongoResource[],
+  requireDescription: boolean,
+  recentOnly: boolean
+): PaidFoundingPayment | null {
+  for (const item of items) {
+    const createdAt = Number(item.attributes?.created_at || item.attributes?.updated_at || 0);
+    if (recentOnly && createdAt && Date.now() / 1000 - createdAt > RECENT_PAYMENT_WINDOW_SECONDS) {
+      continue;
+    }
+    const found = paidFoundingFromResource(item, requireDescription);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function paymongoGet(path: string, headers: Record<string, string>): Promise<{ ok: boolean; payload: PaymongoPayload }> {
+  const response = await fetch(`https://api.paymongo.com${path}`, { headers });
+  const payload = await response.json() as PaymongoPayload;
+  return { ok: response.ok, payload };
+}
+
+function paidFromLink(link: PaymongoResource): PaidFoundingPayment | null {
+  const attributes = link.attributes || {};
+  const nested = firstRecentPaid(paymentsFromAttributes(attributes), false, false);
+  if (nested) return nested;
+  if (String(attributes.status || '').toLowerCase() !== 'paid') return null;
+  if (!amountIsFounding(Number(attributes.amount || 0))) return null;
+  if (!descriptionLooksFounding(String(attributes.description || ''))) return null;
+  return {
+    paymentId: paymentsFromAttributes(attributes)[0]?.id || link.id || '',
+    method: 'qrph',
+    amount: Number(attributes.amount || 0),
+    description: String(attributes.description || ''),
+  };
+}
+
+async function findByReference(
+  headers: Record<string, string>,
+  referenceNumber: string
+): Promise<PaidFoundingPayment | null> {
+  const paymentLinks = await paymongoGet(
+    `/v1/payment_links?reference_number=${encodeURIComponent(referenceNumber)}`,
+    headers
+  );
+  for (const link of asResourceList(paymentLinks.payload.data)) {
+    if (link.id) {
+      const payments = await paymongoGet(`/v1/payment_links/${encodeURIComponent(link.id)}/payments`, headers);
+      const found = firstRecentPaid(asResourceList(payments.payload.data), false, false);
+      if (found) return found;
+    }
+    const fromLink = paidFromLink(link);
+    if (fromLink) return fromLink;
+  }
+
+  const legacy = await paymongoGet('/v1/links?limit=25', headers);
+  for (const link of asResourceList(legacy.payload.data)) {
+    if (String(link.attributes?.reference_number || '') !== referenceNumber) continue;
+    const fromLink = paidFromLink(link);
+    if (fromLink) return fromLink;
+  }
+  return null;
+}
+
+export async function findPaidFoundingPayment(
+  secretKey: string,
+  lookup?: string | FindPaidFoundingLookup
+): Promise<PaidFoundingPayment | null> {
+  const input: FindPaidFoundingLookup = typeof lookup === 'string' ? { paymentId: lookup } : (lookup || {});
+  const paymentId = (input.paymentId || '').trim();
+  const referenceNumber = (input.referenceNumber || '').trim();
+  const checkoutSessionId = (input.checkoutSessionId || '').trim();
+  const headers = {
+    Authorization: paymongoAuthHeader(secretKey),
+    'Content-Type': 'application/json',
+  };
+
+  if (paymentId.startsWith('pay_')) {
+    const retrieved = await paymongoGet(`/v1/payments/${encodeURIComponent(paymentId)}`, headers);
+    const found = paidFoundingFromResource(asResourceList(retrieved.payload.data)[0], false);
+    if (found) return found;
+  }
+
+  if (checkoutSessionId) {
+    const session = await paymongoGet(`/v1/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`, headers);
+    const attributes = asResourceList(session.payload.data)[0]?.attributes || {};
+    const found = firstRecentPaid(paymentsFromAttributes(attributes), false, false);
+    if (found) return found;
+  }
+
+  const possibleReference = referenceNumber || (!paymentId.startsWith('pay_') && !paymentId.startsWith('cs_') ? paymentId : '');
+  if (possibleReference) {
+    const found = await findByReference(headers, possibleReference);
+    if (found) return found;
+  }
+
+  const listRes = await paymongoGet('/v1/payments?limit=25', headers);
+  if (!listRes.ok) {
+    throw new Error(listRes.payload.errors?.[0]?.detail || 'Could not list PayMongo payments.');
+  }
+  const fromPayments = firstRecentPaid(asResourceList(listRes.payload.data), true, true);
+  if (fromPayments) return fromPayments;
+
+  const legacy = await paymongoGet('/v1/links?limit=25', headers);
+  for (const link of asResourceList(legacy.payload.data)) {
+    const updatedAt = Number(link.attributes?.updated_at || link.attributes?.created_at || 0);
+    if (updatedAt && Date.now() / 1000 - updatedAt > RECENT_PAYMENT_WINDOW_SECONDS) continue;
+    const fromLink = paidFromLink(link);
+    if (fromLink) return fromLink;
+  }
+
+  return null;
 }

@@ -269,6 +269,7 @@ interface FreightContextType {
   createPayMongoCheckout: (planId: string, paymentMethod?: PayMongoPaymentMethod) => Promise<{ checkoutUrl: string; checkoutSessionId: string }>;
   activateFoundingPlan: (paymentMethod: PayMongoPaymentMethod, paymentId: string) => void;
   subscribeToFoundingPlan: () => Promise<void>;
+  confirmFoundingPayment: (paymentId?: string) => Promise<void>;
   cancelSubscriptionAtPeriodEnd: () => Promise<void>;
   resumeSubscription: () => void;
   updatePlanDetails: (planId: string, updates: Partial<Plan>) => void;
@@ -297,6 +298,14 @@ const BLANK_COMPANY: Company = {
   currency: 'PHP',
   registeredDate: new Date().toISOString().slice(0, 10),
 };
+
+function asPayMongoMethod(value?: string): PayMongoPaymentMethod {
+  const method = (value || '').toLowerCase();
+  if (method.includes('gcash')) return 'gcash';
+  if (method.includes('maya') || method.includes('paymaya')) return 'paymaya';
+  if (method.includes('card')) return 'card';
+  return 'qrph';
+}
 
 function isPayMongoWired(): boolean {
   return Boolean(
@@ -2474,27 +2483,18 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const missing = DEFAULT_RBAC_ROLES.filter((r) => !existingIds.has(r.id.toLowerCase()));
       return [...prev, ...missing];
     });
+    if (company.id) {
+      void saveCompanySubscription(company.id, nextSub, 'Growth').catch((error) => {
+        console.error('Failed to persist Founding plan', error);
+      });
+    }
     pushAudit('PERMISSIONS_RESET', `Activated Founding plan after PayMongo payment ${paymentId}.`);
   };
 
   const createPayMongoCheckout = async (planId: string, _paymentMethod?: PayMongoPaymentMethod) => {
-    const useApiCheckout = import.meta.env.VITE_PAYMONGO_USE_API === 'true';
-    const paymentLink = import.meta.env.VITE_PAYMONGO_PAYMENT_LINK;
     const successUrl = `${window.location.origin}/?billing=success`;
     const cancelUrl = `${window.location.origin}/?billing=cancel`;
     sessionStorage.setItem(PENDING_FOUNDING_KEY, planId);
-
-    // Payment Links have no success redirect. Prefer API checkout so PayMongo
-    // sends the customer back to /?billing=success after they pay.
-    if (!useApiCheckout && paymentLink) {
-      try {
-        window.location.assign(new URL(paymentLink).toString());
-      } catch {
-        sessionStorage.removeItem(PENDING_FOUNDING_KEY);
-        throw new Error('VITE_PAYMONGO_PAYMENT_LINK is not a valid URL.');
-      }
-      return { checkoutUrl: paymentLink, checkoutSessionId: 'payment-link' };
-    }
 
     const endpoint = import.meta.env.VITE_PAYMONGO_CHECKOUT_URL || '/api/paymongo/checkout';
     const response = await fetch(endpoint, {
@@ -2513,14 +2513,35 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const data = await response.json() as { checkoutUrl?: string; checkoutSessionId?: string; error?: string };
     if (!response.ok || !data.checkoutUrl || !data.checkoutSessionId) {
       sessionStorage.removeItem(PENDING_FOUNDING_KEY);
-      throw new Error(data.error || 'PayMongo is not wired yet. Add VITE_PAYMONGO_PAYMENT_LINK or PAYMONGO_SECRET_KEY.');
+      throw new Error(data.error || 'PayMongo checkout is not available. Set PAYMONGO_SECRET_KEY and VITE_PAYMONGO_USE_API=true on Vercel.');
     }
+    sessionStorage.setItem(`${PENDING_FOUNDING_KEY}_session`, data.checkoutSessionId);
     window.location.assign(data.checkoutUrl);
     return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
   };
 
   const subscribeToFoundingPlan = async () => {
     await createPayMongoCheckout(PLAN_FOUNDING_ID);
+  };
+
+  const confirmFoundingPayment = async (paymentId?: string) => {
+    const lookup = (paymentId || '').trim();
+    const response = await fetch('/api/paymongo/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paymentId: lookup,
+        referenceNumber: lookup && !lookup.startsWith('pay_') && !lookup.startsWith('cs_') ? lookup : '',
+        checkoutSessionId: sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '',
+      }),
+    });
+    const data = await response.json() as { paid?: boolean; paymentId?: string; method?: string; error?: string };
+    if (!response.ok || !data.paid || !data.paymentId) {
+      throw new Error(data.error || 'PayMongo has not confirmed a ₱499 Founding payment yet.');
+    }
+    activateFoundingPlan(asPayMongoMethod(data.method), data.paymentId);
+    sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+    sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
   };
 
   useEffect(() => {
@@ -2532,13 +2553,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       window.history.replaceState({}, '', window.location.pathname);
       return;
     }
-    if (billing !== 'success') return;
     const pending = sessionStorage.getItem(PENDING_FOUNDING_KEY);
-    if (!pending) return;
-    sessionStorage.removeItem(PENDING_FOUNDING_KEY);
-    const paymentId = params.get('session_id') || params.get('id') || `paymongo_${Date.now()}`;
-    activateFoundingPlan('gcash', paymentId);
-    window.history.replaceState({}, '', window.location.pathname);
+    if (billing === 'success' || pending) {
+      void confirmFoundingPayment().then(() => {
+        window.history.replaceState({}, '', window.location.pathname);
+      }).catch((error) => {
+        if (billing === 'success') {
+          console.error('PayMongo success return did not verify yet', error);
+        }
+      });
+    }
   }, [isAuthenticated, company.id, subscription.plan_id]);
 
   const cancelSubscriptionAtPeriodEnd = async () => {
@@ -2661,6 +2685,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createPayMongoCheckout,
       activateFoundingPlan,
       subscribeToFoundingPlan,
+      confirmFoundingPayment,
       cancelSubscriptionAtPeriodEnd,
       resumeSubscription,
       updatePlanDetails,
