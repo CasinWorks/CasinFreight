@@ -94,11 +94,11 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
     if (!result.success) return;
 
     if (result.emailed) {
-      window.alert(`Invite emailed to ${inviteEmail}.`);
+      window.alert(`Firebase emailed a password setup link to ${inviteEmail}.`);
     } else if (result.inviteUrl) {
       try {
         await navigator.clipboard.writeText(result.inviteUrl);
-        window.alert('Invite saved and join link copied. Add RESEND_API_KEY on Vercel to send the email automatically.');
+        window.alert(`Invite saved. Firebase did not send the email${result.error ? `: ${result.error}` : ''}. Join link copied.`);
       } catch {
         window.alert(`Invite saved. Send this join link:\n${result.inviteUrl}`);
       }

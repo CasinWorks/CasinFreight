@@ -212,7 +212,7 @@ export const RbacManagementView: React.FC = () => {
     setNewUserPhone('');
     setIsAddUserOpen(false);
     if (result.emailed) {
-      showToast(`Invite emailed to ${invitedEmail}. They join with that same address.`);
+      showToast(`Firebase emailed a password setup link to ${invitedEmail}. They set a password, then sign in with that same address.`);
     } else {
       try {
         if (result.inviteUrl) await navigator.clipboard.writeText(result.inviteUrl);
@@ -220,7 +220,7 @@ export const RbacManagementView: React.FC = () => {
         /* clipboard may be blocked */
       }
       showToast(
-        `Invite saved, but no email was sent. ${result.error || 'Add RESEND_API_KEY on Vercel to email invites.'} Join link copied — send it to ${invitedEmail}.`
+        `Invite saved, but Firebase did not email it. ${result.error || 'They can use Forgot password on the login page.'} Join link copied for ${invitedEmail}.`
       );
     }
   };
@@ -753,7 +753,7 @@ export const RbacManagementView: React.FC = () => {
                                   const link = `${window.location.origin}/?join=1&email=${encodeURIComponent(u.email)}`;
                                   try {
                                     await navigator.clipboard.writeText(link);
-                                    showToast(`Join link copied for ${u.email}. Send it — invite email is not connected yet.`);
+                                    showToast(`Join link copied for ${u.email}. They can also use Forgot password on the login page.`);
                                   } catch {
                                     showToast(link);
                                   }

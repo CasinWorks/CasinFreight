@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, type Plugin} from 'vite';
 import {runPayMongoAction} from './api/paymongo';
-import {runMailAction} from './api/mail';
 
 function jsonDevApi(
   name: string,
@@ -57,7 +56,6 @@ export default defineConfig(() => {
         const action = body.action || 'checkout';
         return runPayMongoAction(action, body, origin, authHeader);
       }),
-      jsonDevApi('mail-dev-api', '/api/mail', (body, _origin, authHeader) => runMailAction(body, authHeader)),
     ],
     resolve: {
       alias: {

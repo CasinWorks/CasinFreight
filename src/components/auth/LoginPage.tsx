@@ -26,7 +26,7 @@ export const LoginPage: React.FC = () => {
   const invitedEmail = (params.get('email') || '').trim();
   const isJoin = params.get('join') === '1';
 
-  const [mode, setMode] = useState<'login' | 'signup'>(isJoin ? 'signup' : 'login');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState(invitedEmail);
@@ -34,7 +34,9 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(
-    isJoin && invitedEmail ? `You were invited. Create a password with ${invitedEmail} to join that company.` : null
+    isJoin && invitedEmail
+      ? `You were invited. Open the Firebase email, set your password, then sign in here with ${invitedEmail}.`
+      : null
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -217,6 +219,7 @@ export const LoginPage: React.FC = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                      readOnly={isJoin && Boolean(invitedEmail)}
                       placeholder="owner@yourfleet.ph"
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
                     />

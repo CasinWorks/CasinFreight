@@ -43,6 +43,7 @@ import {
 import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, getAllowedRolesForPermission } from '../services/rbac';
 import { initialChartOfAccounts } from '../data/mockData';
 import { getFirebaseAuth, isFirebaseConfigured } from '../lib/firebase';
+import { sendFirebaseInviteEmail } from '../lib/inviteAuth';
 import {
   CompanyDocument,
   UserProfile,
@@ -344,6 +345,9 @@ function mapAuthError(error: unknown): string {
   if (code.includes('user-not-found')) return 'No CasinFreight account uses that email.';
   if (code.includes('weak-password')) return 'Password must be at least 6 characters.';
   if (code.includes('invalid-email')) return 'Enter a valid work email.';
+  if (code.includes('unauthorized-continue-uri') || code.includes('invalid-continue-uri')) {
+    return 'Add casin-freight.vercel.app to Firebase Authentication → Settings → Authorized domains.';
+  }
   if (code.includes('permission-denied')) {
     return 'Firestore blocked this request. Open Firebase Console → Firestore → Rules, paste firestore.rules from this project, then Publish.';
   }
@@ -897,11 +901,26 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
       const profile = await getUserProfile(cred.user.uid);
-      if (!profile?.companyId) {
+      if (profile?.companyId) return { success: true };
+
+      const invite = await getInviteByEmail(email.trim());
+      if (!invite) {
         return {
           success: false,
           error: 'This login exists, but the company workspace was never created. Open Create company and submit again with the same details.',
         };
+      }
+
+      seedingRef.current = true;
+      try {
+        await joinCompanyFromInvite({
+          uid: cred.user.uid,
+          email: email.trim(),
+          name: invite.name,
+          invite,
+        });
+      } finally {
+        seedingRef.current = false;
       }
       return { success: true };
     } catch (error) {
@@ -1140,31 +1159,12 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     pushAudit('USER_ROLE_ASSIGNED', `Invited ${userData.name} (${userData.email}) as ${userData.role}.`, userData.role, userData.name);
 
-    let emailed = false;
     try {
-      const response = await fetch('/api/mail', {
-        method: 'POST',
-        headers: await paymongoRequestHeaders(),
-        body: JSON.stringify({
-          kind: 'invite',
-          to: userData.email.trim(),
-          inviteName: userData.name,
-          role: userData.role,
-          companyName: company.name,
-          invitedBy: currentUser.name || currentUser.email,
-          inviteUrl,
-        }),
-      });
-      const payload = await response.json().catch(() => ({})) as { sent?: boolean; error?: string };
-      emailed = Boolean(payload.sent);
-      if (!emailed) {
-        return { success: true, emailed: false, inviteUrl, error: payload.error };
-      }
-    } catch {
-      emailed = false;
+      await sendFirebaseInviteEmail(userData.email.trim(), inviteUrl);
+      return { success: true, emailed: true, inviteUrl };
+    } catch (error) {
+      return { success: true, emailed: false, inviteUrl, error: mapAuthError(error) };
     }
-
-    return { success: true, emailed, inviteUrl };
   };
 
   const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck | null => {
