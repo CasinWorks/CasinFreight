@@ -991,9 +991,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
     try {
-      await sendPasswordResetEmail(getFirebaseAuth(), email.trim(), {
-        url: window.location.origin,
-      });
+      // Use Firebase's hosted reset page. A custom continue URL fails when the
+      // current origin is not on Authorized domains (preview deploys).
+      await sendPasswordResetEmail(getFirebaseAuth(), email.trim());
       return { success: true };
     } catch (error) {
       return { success: false, error: mapAuthError(error) };

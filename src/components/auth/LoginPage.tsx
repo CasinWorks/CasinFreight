@@ -55,7 +55,9 @@ export const LoginPage: React.FC = () => {
       setErrorMessage(res.error || 'Could not send the reset email.');
       return;
     }
-    setInfoMessage(`Check ${email.trim()} for a Firebase password reset link. It may take a minute.`);
+    setInfoMessage(
+      `If ${email.trim()} already has a CasinFreight login, Firebase emailed a reset link from noreply@casinfreight.firebaseapp.com — check Inbox, Spam, and Promotions. First time here? Use Create company and type your password on this page. There is no setup email for a new company.`
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -138,14 +140,24 @@ export const LoginPage: React.FC = () => {
               <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setMode('login')}
+                  onClick={() => {
+                    setMode('login');
+                    setErrorMessage(null);
+                    setInfoMessage(null);
+                  }}
                   className={`flex-1 py-2 text-xs font-bold rounded-lg ${mode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
                 >
                   Sign in
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMode('signup')}
+                  onClick={() => {
+                    setMode('signup');
+                    setErrorMessage(null);
+                    setInfoMessage(isJoin && invitedEmail
+                      ? `You were invited. Open the Firebase email, set your password, then sign in here with ${invitedEmail}.`
+                      : 'Choose a password below. This creates your login — we do not email a setup link for new companies.');
+                  }}
                   className={`flex-1 py-2 text-xs font-bold rounded-lg ${mode === 'signup' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
                 >
                   Create company
@@ -245,8 +257,19 @@ export const LoginPage: React.FC = () => {
                   </div>
                 </label>
 
-                {mode === 'login' && (
-                  <div className="flex justify-end -mt-2">
+                {mode === 'login' ? (
+                  <div className="flex items-center justify-between -mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('signup');
+                        setErrorMessage(null);
+                        setInfoMessage('First time: Create company, type a password here, then tap Start free.');
+                      }}
+                      className="text-[11px] font-bold text-slate-400 hover:text-slate-200"
+                    >
+                      First time? Create company
+                    </button>
                     <button
                       type="button"
                       onClick={() => void handleForgotPassword()}
@@ -256,6 +279,10 @@ export const LoginPage: React.FC = () => {
                       {isResetting ? 'Sending reset link…' : 'Forgot password?'}
                     </button>
                   </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 -mt-2">
+                    Your password is the one you type here. Forgot password is only for people who already signed up.
+                  </p>
                 )}
 
                 <button
