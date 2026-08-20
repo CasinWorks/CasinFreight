@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { bansInEffectNow } from '../../lib/truckBans';
+import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
 export type NavTab = 
   | 'board' 
@@ -318,9 +319,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="relative w-4/5 max-w-xs bg-white shadow-2xl flex flex-col h-full z-10 animate-in slide-in-from-left duration-200">
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">
-                  <Truck className="w-3.5 h-3.5" />
-                </div>
+                <CasinFreightLogo className="h-7 w-7 rounded-lg" />
                 <div>
                   <div className="font-bold text-slate-900 text-sm">CasinFreight Ops</div>
                   <div className="text-[10px] text-slate-500">Navigation Menu</div>

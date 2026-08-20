@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Truck as TruckIcon,
   ShieldCheck,
   Lock,
   Mail,
@@ -17,16 +16,17 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { isFirebaseConfigured } from '../../lib/firebase';
+import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
 export const LoginPage: React.FC = () => {
-  const { login, signup, requestPasswordReset } = useFreight();
+  const { login, signup, joinTeam, requestPasswordReset } = useFreight();
   const configured = isFirebaseConfigured();
 
   const params = new URLSearchParams(window.location.search);
   const invitedEmail = (params.get('email') || '').trim();
   const isJoin = params.get('join') === '1';
 
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'join'>(isJoin ? 'join' : 'login');
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState(invitedEmail);
@@ -35,7 +35,7 @@ export const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(
     isJoin && invitedEmail
-      ? `You were invited. Open the Firebase email, set your password, then sign in here with ${invitedEmail}.`
+      ? `You were invited to an existing company. Enter your name, choose a password, and join. This does not create a new company.`
       : null
   );
   const [isLoading, setIsLoading] = useState(false);
@@ -56,7 +56,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
     setInfoMessage(
-      `If ${email.trim()} already has a CasinFreight login, Firebase emailed a reset link from noreply@casinfreight.firebaseapp.com — check Inbox, Spam, and Promotions. First time here? Use Create company and type your password on this page. There is no setup email for a new company.`
+      `If ${email.trim()} already has a CasinFreight login, Firebase emailed a reset link from noreply@casinfreight.firebaseapp.com — check Inbox, Spam, and Promotions. New hires should use the join link from the owner, not Forgot password.`
     );
   };
 
@@ -70,6 +70,8 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
     const res = mode === 'login'
       ? await login(email, password)
+      : mode === 'join'
+      ? await joinTeam({ name, email, password })
       : await signup({ name, email, password, companyName });
     setIsLoading(false);
     if (!res.success) {
@@ -77,15 +79,15 @@ export const LoginPage: React.FC = () => {
     }
   };
 
+  const submitLabel = mode === 'login' ? 'Sign in' : mode === 'join' ? 'Join company' : 'Start free';
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(37,99,235,0.15),transparent_40%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.12),transparent_45%)] pointer-events-none" />
 
       <header className="relative z-10 px-6 py-4 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-lg shadow-blue-500/20">
-            <TruckIcon className="w-5 h-5" />
-          </div>
+          <CasinFreightLogo className="h-10 w-10 rounded-xl shadow-lg shadow-blue-500/20" />
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-base tracking-tight text-white">CasinFreight</span>
@@ -107,15 +109,24 @@ export const LoginPage: React.FC = () => {
       <main className="relative z-10 flex-1 flex items-center justify-center p-4 md:p-8">
         <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-6 space-y-6 hidden lg:block pr-4">
+            <CasinFreightLogo className="h-20 w-20 rounded-2xl shadow-2xl shadow-blue-900/40" />
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-950/80 border border-blue-800/60 text-blue-400 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Start free — 1 truck, 1 account, 10 transactions</span>
+              <span>
+                {mode === 'join'
+                  ? 'Invited teammate — join the owner’s company'
+                  : 'Start free — 1 truck, 1 account, 10 transactions'}
+              </span>
             </div>
             <h2 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Full fleet ops. Subscribe when you outgrow one truck.
+              {mode === 'join'
+                ? 'Set your password and join the fleet.'
+                : 'Full fleet ops. Subscribe when you outgrow one truck.'}
             </h2>
             <p className="text-sm text-slate-400 leading-relaxed">
-              Dispatch, BIR invoicing, ledger, fuel, and Firebase RBAC are included on Free. Add trucks, team seats, and extra trips on Founding at ₱899/mo.
+              {mode === 'join'
+                ? 'This link is for a new hire. Choose a password here. You are joining the company that invited you — you are not opening a new CasinFreight workspace.'
+                : 'Dispatch, BIR invoicing, ledger, fuel, and Firebase RBAC are included on Free. Add trucks, team seats, and extra trips on Founding at ₱899/mo.'}
             </p>
             <div className="grid grid-cols-2 gap-3 pt-2">
               {[
@@ -137,32 +148,39 @@ export const LoginPage: React.FC = () => {
 
           <div className="lg:col-span-6 w-full">
             <div className="bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl p-6 sm:p-8 backdrop-blur-md space-y-6">
-              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('login');
-                    setErrorMessage(null);
-                    setInfoMessage(null);
-                  }}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg ${mode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('signup');
-                    setErrorMessage(null);
-                    setInfoMessage(isJoin && invitedEmail
-                      ? `You were invited. Open the Firebase email, set your password, then sign in here with ${invitedEmail}.`
-                      : 'Choose a password below. This creates your login — we do not email a setup link for new companies.');
-                  }}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg ${mode === 'signup' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
-                >
-                  Create company
-                </button>
-              </div>
+              {mode === 'join' ? (
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">Join your company</h3>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    New hire setup. Choose a password, then tap Join company.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('login');
+                      setErrorMessage(null);
+                      setInfoMessage(null);
+                    }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg ${mode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signup');
+                      setErrorMessage(null);
+                      setInfoMessage('Owners only: this creates a new CasinFreight company. Invited staff should use the join link instead.');
+                    }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg ${mode === 'signup' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
+                  >
+                    Create company
+                  </button>
+                </div>
+              )}
 
               {!configured && (
                 <div className="bg-amber-950/60 border border-amber-800 text-amber-200 p-3 rounded-xl text-xs space-y-2">
@@ -190,36 +208,36 @@ export const LoginPage: React.FC = () => {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                {(mode === 'signup' || mode === 'join') && (
+                  <label className="block text-xs font-bold text-slate-300">
+                    Your name
+                    <div className="relative mt-1.5">
+                      <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                        placeholder="TJ Casin"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </label>
+                )}
+
                 {mode === 'signup' && (
-                  <>
-                    <label className="block text-xs font-bold text-slate-300">
-                      Your name
-                      <div className="relative mt-1.5">
-                        <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          required
-                          placeholder="TJ Casin"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    </label>
-                    <label className="block text-xs font-bold text-slate-300">
-                      Company name
-                      <div className="relative mt-1.5">
-                        <Building2 className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          value={companyName}
-                          onChange={(e) => setCompanyName(e.target.value)}
-                          required={!isJoin}
-                          placeholder={isJoin ? 'Not needed — you are joining an existing company' : 'Casin Freight & Logistics Corp.'}
-                          disabled={isJoin}
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-60"
-                        />
-                      </div>
-                    </label>
-                  </>
+                  <label className="block text-xs font-bold text-slate-300">
+                    Company name
+                    <div className="relative mt-1.5">
+                      <Building2 className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        required
+                        placeholder="Casin Freight & Logistics Corp."
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </label>
                 )}
 
                 <label className="block text-xs font-bold text-slate-300">
@@ -231,7 +249,7 @@ export const LoginPage: React.FC = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      readOnly={isJoin && Boolean(invitedEmail)}
+                      readOnly={mode === 'join' && Boolean(invitedEmail)}
                       placeholder="owner@yourfleet.ph"
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
                     />
@@ -239,7 +257,7 @@ export const LoginPage: React.FC = () => {
                 </label>
 
                 <label className="block text-xs font-bold text-slate-300">
-                  Password
+                  {mode === 'join' ? 'Choose a password' : 'Password'}
                   <div className="relative mt-1.5">
                     <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -257,18 +275,18 @@ export const LoginPage: React.FC = () => {
                   </div>
                 </label>
 
-                {mode === 'login' ? (
+                {mode === 'login' && (
                   <div className="flex items-center justify-between -mt-2">
                     <button
                       type="button"
                       onClick={() => {
                         setMode('signup');
                         setErrorMessage(null);
-                        setInfoMessage('First time: Create company, type a password here, then tap Start free.');
+                        setInfoMessage('Owners only. Invited staff should use the join link from the owner.');
                       }}
                       className="text-[11px] font-bold text-slate-400 hover:text-slate-200"
                     >
-                      First time? Create company
+                      Owner? Create company
                     </button>
                     <button
                       type="button"
@@ -279,9 +297,17 @@ export const LoginPage: React.FC = () => {
                       {isResetting ? 'Sending reset link…' : 'Forgot password?'}
                     </button>
                   </div>
-                ) : (
+                )}
+
+                {mode === 'join' && (
                   <p className="text-[11px] text-slate-500 -mt-2">
-                    Your password is the one you type here. Forgot password is only for people who already signed up.
+                    After you join, sign in with this email and password next time. You will not become a new company owner.
+                  </p>
+                )}
+
+                {mode === 'signup' && (
+                  <p className="text-[11px] text-slate-500 -mt-2">
+                    This opens a new workspace. If your boss invited you, go back and use the join link instead.
                   </p>
                 )}
 
@@ -294,11 +320,25 @@ export const LoginPage: React.FC = () => {
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
-                      <span>{mode === 'login' ? 'Sign in' : 'Start free'}</span>
+                      <span>{submitLabel}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
+
+                {mode === 'join' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('login');
+                      setErrorMessage(null);
+                      setInfoMessage('Use the password you already set. If join failed, ask the owner to delete this email in Firebase Authentication and send the join link again.');
+                    }}
+                    className="w-full text-[11px] font-bold text-slate-400 hover:text-slate-200"
+                  >
+                    Already set a password? Sign in
+                  </button>
+                )}
               </form>
             </div>
           </div>

@@ -93,12 +93,10 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
     });
     if (!result.success) return;
 
-    if (result.emailed) {
-      window.alert(`Firebase emailed a password setup link to ${inviteEmail}.`);
-    } else if (result.inviteUrl) {
+    if (result.inviteUrl) {
       try {
         await navigator.clipboard.writeText(result.inviteUrl);
-        window.alert(`Invite saved. Firebase did not send the email${result.error ? `: ${result.error}` : ''}. Join link copied.`);
+        window.alert(`Invite saved. Join link copied. Send it to ${inviteEmail} — they choose a password on that page and join this company.`);
       } catch {
         window.alert(`Invite saved. Send this join link:\n${result.inviteUrl}`);
       }

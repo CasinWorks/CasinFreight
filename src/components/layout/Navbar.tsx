@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Truck as TruckIcon, 
   Search, 
   Plus, 
   Bell, 
@@ -13,6 +12,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { formatPhDate } from '../../config/plans';
 import { useTutorial } from '../tutorial';
+import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
 interface NavbarProps {
   onOpenNewTrip: () => void;
@@ -65,9 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
-        <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold tracking-wider shadow-sm shrink-0">
-          <TruckIcon className="w-4 h-4" />
-        </div>
+        <CasinFreightLogo className="h-8 w-8 rounded-lg shadow-sm" />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="font-bold tracking-tight text-slate-900 text-sm md:text-base truncate">CasinFreight</span>

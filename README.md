@@ -32,7 +32,7 @@ The UI uses Firebase Auth and Firestore for companies, RBAC, trucks, and trips. 
 ## Firebase setup
 
 1. Create a Firebase project.
-2. Enable **Authentication → Email/Password**. Team invites use Firebase’s password-setup email (same as Forgot password). Add `casin-freight.vercel.app` under Authentication → Settings → Authorized domains.
+2. Enable **Authentication → Email/Password**. Add `casin-freight.vercel.app` under Authentication → Settings → Authorized domains. Team invites use a join link (`/?join=1&email=...`); the hire sets a password on that page.
 3. Create a **Cloud Firestore** database.
 4. Register a Web app and copy the config into `.env`:
 
@@ -50,7 +50,7 @@ VITE_FIREBASE_APP_ID=
    - Or CLI: `npx -p firebase-tools firebase deploy --only firestore:rules --project casinfreight`
 6. Restart `npm run dev`.
 
-Create a company from the login screen. Invited teammates get a Firebase email, set a password, then sign in with that same address to join.
+Create a company from the login screen. Invite teammates from Company & Team, copy the join link, and send it to them. They choose a password on that page and join your company — they must not tap Create company.
 
 ## PayMongo billing
 

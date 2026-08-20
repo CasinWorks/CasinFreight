@@ -46,7 +46,6 @@ import {
 import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, getAllowedRolesForPermission } from '../services/rbac';
 import { initialChartOfAccounts } from '../data/mockData';
 import { getFirebaseAuth, isFirebaseConfigured } from '../lib/firebase';
-import { sendFirebaseInviteEmail } from '../lib/inviteAuth';
 import { METRO_MANILA_TRUCK_BAN_PRESETS } from '../lib/truckBans';
 import {
   CompanyDocument,
@@ -108,6 +107,7 @@ interface FreightContextType {
   isFirebaseReady: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   signup: (payload: { name: string; email: string; password: string; companyName: string }) => Promise<{ success: boolean; error?: string }>;
+  joinTeam: (payload: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   switchUserAccount: (userId: string) => void;
@@ -356,7 +356,9 @@ function mapAuthError(error: unknown): string {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
   if (code.includes('email-already-in-use')) return 'That email already has a CasinFreight account. Sign in instead.';
   if (code.includes('too-many-requests')) return 'Too many attempts. Wait a minute and try again.';
-  if (code.includes('user-not-found')) return 'No CasinFreight account uses that email.';
+  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('invalid-login')) {
+    return 'Wrong email or password. If you were invited as a new hire, open the join link from your owner and choose a password there. Do not create a new company.';
+  }
   if (code.includes('weak-password')) return 'Password must be at least 6 characters.';
   if (code.includes('invalid-email')) return 'Enter a valid work email.';
   if (code.includes('unauthorized-continue-uri') || code.includes('invalid-continue-uri')) {
@@ -1061,6 +1063,58 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const joinTeam = async (payload: {
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    if (!isFirebaseConfigured()) {
+      return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
+    }
+
+    seedingRef.current = true;
+    try {
+      const email = payload.email.trim();
+      const name = payload.name.trim() || email.split('@')[0];
+      let uid = '';
+      try {
+        const cred = await createUserWithEmailAndPassword(getFirebaseAuth(), email, payload.password);
+        uid = cred.user.uid;
+      } catch (error) {
+        const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+        if (!code.includes('email-already-in-use')) throw error;
+        try {
+          const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email, payload.password);
+          uid = cred.user.uid;
+        } catch {
+          return {
+            success: false,
+            error: 'This email already has a leftover login from an older invite. Ask the owner to delete it in Firebase Console → Authentication → Users, then open this same join link again. Do not use Create company.',
+          };
+        }
+      }
+
+      const existing = await getUserProfile(uid);
+      if (existing?.companyId) return { success: true };
+
+      const invite = await getInviteByEmail(email);
+      if (!invite) {
+        await signOut(getFirebaseAuth());
+        return {
+          success: false,
+          error: 'No company invite was found for this email. Ask the owner to invite you again and send the new join link.',
+        };
+      }
+
+      await joinCompanyFromInvite({ uid, email, name, invite });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error) };
+    } finally {
+      seedingRef.current = false;
+    }
+  };
+
   const logout = async () => {
     if (isFirebaseConfigured()) {
       await signOut(getFirebaseAuth());
@@ -1216,13 +1270,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
     pushAudit('USER_ROLE_ASSIGNED', `Invited ${userData.name} (${userData.email}) as ${userData.role}.`, userData.role, userData.name);
-
-    try {
-      await sendFirebaseInviteEmail(userData.email.trim(), inviteUrl);
-      return { success: true, emailed: true, inviteUrl };
-    } catch (error) {
-      return { success: true, emailed: false, inviteUrl, error: mapAuthError(error) };
-    }
+    return { success: true, emailed: false, inviteUrl };
   };
 
   const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck | null => {
@@ -2931,6 +2979,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isFirebaseReady: isFirebaseConfigured(),
       login,
       signup,
+      joinTeam,
       requestPasswordReset,
       logout,
       switchUserAccount,

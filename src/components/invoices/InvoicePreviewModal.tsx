@@ -30,6 +30,7 @@ import { useFreight } from '../../context/FreightContext';
 import { Invoice, InvoiceStatus, InvoiceLineItem } from '../../types';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
+import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
 interface InvoicePreviewModalProps {
   invoiceId: string | null;
@@ -409,9 +410,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b-2 border-neutral-900 pb-6 gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-neutral-950 text-amber-400 flex items-center justify-center font-black text-base">
-                    CF
-                  </div>
+                  <CasinFreightLogo className="h-8 w-8 rounded" />
                   <h1 className="text-xl font-black tracking-tight text-neutral-950 uppercase">
                     {company.name}
                   </h1>

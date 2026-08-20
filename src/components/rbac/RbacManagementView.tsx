@@ -211,18 +211,12 @@ export const RbacManagementView: React.FC = () => {
     setNewUserEmail('');
     setNewUserPhone('');
     setIsAddUserOpen(false);
-    if (result.emailed) {
-      showToast(`Firebase emailed a password setup link to ${invitedEmail}. They set a password, then sign in with that same address.`);
-    } else {
-      try {
-        if (result.inviteUrl) await navigator.clipboard.writeText(result.inviteUrl);
-      } catch {
-        /* clipboard may be blocked */
-      }
-      showToast(
-        `Invite saved, but Firebase did not email it. ${result.error || 'They can use Forgot password on the login page.'} Join link copied for ${invitedEmail}.`
-      );
+    try {
+      if (result.inviteUrl) await navigator.clipboard.writeText(result.inviteUrl);
+    } catch {
+      /* clipboard may be blocked */
     }
+    showToast(`Invite saved for ${invitedName}. Send them this join link (copied): they choose a password and join your company — they must not Create company.`);
   };
 
   const customRolesCount = roles.filter(r => !r.isSystem).length;
@@ -753,7 +747,7 @@ export const RbacManagementView: React.FC = () => {
                                   const link = `${window.location.origin}/?join=1&email=${encodeURIComponent(u.email)}`;
                                   try {
                                     await navigator.clipboard.writeText(link);
-                                    showToast(`Join link copied for ${u.email}. They can also use Forgot password on the login page.`);
+                                    showToast(`Join link copied for ${u.email}. They open it, choose a password, and join this company.`);
                                   } catch {
                                     showToast(link);
                                   }
