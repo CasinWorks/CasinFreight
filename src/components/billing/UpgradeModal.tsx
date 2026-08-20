@@ -8,7 +8,6 @@ export const UpgradeModal: React.FC = () => {
     isUpgradeModalOpen,
     setIsUpgradeModalOpen,
     subscribeToFoundingPlan,
-    isPayMongoTestMode,
     isWaitingForPayMongo,
     subscriptionUsage,
     subscription,
@@ -49,15 +48,6 @@ export const UpgradeModal: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">
               Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is ₱499 per month. PayMongo charges each checkout; CasinFreight then keeps Founding until the renewal date.
             </p>
-            {isPayMongoTestMode ? (
-              <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
-                PayMongo test mode — no real charges. Keep this tab open. QRPh stays on PayMongo; this tab upgrades when the new checkout is paid.
-              </p>
-            ) : (
-              <p className="text-[11px] font-semibold text-amber-800 mt-1.5">
-                Live PayMongo — ₱499 will be charged. Keep this tab open until Founding unlocks.
-              </p>
-            )}
             {isWaitingForPayMongo && (
               <p className="text-[11px] font-semibold text-blue-700 mt-1.5">
                 Waiting for PayMongo to confirm payment. This workspace will switch to Founding on its own.
