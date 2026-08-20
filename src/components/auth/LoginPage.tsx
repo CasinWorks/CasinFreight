@@ -86,7 +86,7 @@ export const LoginPage: React.FC = () => {
               Full fleet ops. Subscribe when you outgrow one truck.
             </h2>
             <p className="text-sm text-slate-400 leading-relaxed">
-              Dispatch, BIR invoicing, ledger, fuel, and Firebase RBAC are included on Free. Add trucks, team seats, and extra trips on Founding at ₱499/mo.
+              Dispatch, BIR invoicing, ledger, fuel, and Firebase RBAC are included on Free. Add trucks, team seats, and extra trips on Founding at ₱899/mo.
             </p>
             <div className="grid grid-cols-2 gap-3 pt-2">
               {[

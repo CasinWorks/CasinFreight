@@ -2638,7 +2638,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const confirmFoundingPayment = async (paymentId?: string) => {
     const unlocked = await tryUnlockFounding(paymentId);
     if (!unlocked) {
-      throw new Error('PayMongo has not confirmed a ₱499 Founding payment yet.');
+      throw new Error('PayMongo has not confirmed a ₱899 Founding payment yet.');
     }
   };
 

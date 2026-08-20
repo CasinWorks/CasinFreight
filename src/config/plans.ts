@@ -2,7 +2,7 @@ import { Plan, Subscription } from '../types';
 
 export const PLAN_FREE_ID = 'plan_free';
 export const PLAN_FOUNDING_ID = 'plan_founding';
-export const FOUNDING_PRICE_PHP = 499;
+export const FOUNDING_PRICE_PHP = 899;
 
 export function addBillingMonths(from: Date, months = 1): Date {
   const next = new Date(from);
@@ -79,7 +79,7 @@ export const SAAS_PLANS: Plan[] = [
       'Unlimited team accounts and custom roles',
       'Full RBAC, BIR ledger, and dual-control billing',
       'Unlocks after a confirmed PayMongo payment',
-      '₱499 billed every month — access lasts until the renewal date',
+      '₱899 billed every month — access lasts until the renewal date',
     ],
     badge: 'FOUNDING',
     isRecommended: true,

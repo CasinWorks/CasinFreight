@@ -46,7 +46,7 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is ₱499 per month. PayMongo charges each checkout; CasinFreight then keeps Founding until the renewal date.
+              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is ₱899 per month. PayMongo charges each checkout; CasinFreight then keeps Founding until the renewal date.
             </p>
             {isWaitingForPayMongo && (
               <p className="text-[11px] font-semibold text-blue-700 mt-1.5">

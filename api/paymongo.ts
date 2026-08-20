@@ -54,7 +54,7 @@ export async function createPayMongoCheckoutSession(
           line_items: [
             {
               currency: 'PHP',
-              amount: 49900,
+              amount: 89900,
               name: 'CasinFreight Founding (Monthly)',
               quantity: 1,
               description: 'Unlimited trucks, team seats, roles, and trip transactions.',
@@ -93,8 +93,8 @@ export async function createPayMongoCheckoutSession(
   return { checkoutUrl, checkoutSessionId };
 }
 
-const FOUNDING_AMOUNT_CENTAVOS = 49900;
-const FOUNDING_PRICE_PHP = 499;
+const FOUNDING_AMOUNT_CENTAVOS = 89900;
+const FOUNDING_PRICE_PHP = 899;
 const RECENT_PAYMENT_WINDOW_SECONDS = 60 * 60 * 48;
 
 export interface FindPaidFoundingLookup {
@@ -388,7 +388,7 @@ export async function runPayMongoAction(
       status: 200,
       data: paid
         ? { paid: true, ...paid }
-        : { paid: false, error: 'No paid ₱499 Founding payment was found on this PayMongo account.' },
+        : { paid: false, error: 'No paid ₱899 Founding payment was found on this PayMongo account.' },
     };
   }
 
