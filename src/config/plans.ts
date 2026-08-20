@@ -2,8 +2,7 @@ import { Plan, Subscription } from '../types';
 
 export const PLAN_FREE_ID = 'plan_free';
 export const PLAN_FOUNDING_ID = 'plan_founding';
-/** Temporary live test price. Restore to 499 before public launch. */
-export const FOUNDING_PRICE_PHP = 10;
+export const FOUNDING_PRICE_PHP = 499;
 
 export interface PlanLimits {
   maxTrucks: number | null;
@@ -50,7 +49,7 @@ export const SAAS_PLANS: Plan[] = [
   {
     id: PLAN_FOUNDING_ID,
     name: 'Founding',
-    description: 'Unlimited trucks, team seats, roles, and transactions. Live test price is ₱10 until we switch back to the founding rate.',
+    description: 'Unlimited trucks, team seats, roles, and transactions at a locked founding rate.',
     price_php: FOUNDING_PRICE_PHP,
     interval: 'month',
     max_bookings_per_month: null,
@@ -61,7 +60,7 @@ export const SAAS_PLANS: Plan[] = [
       'Unlimited team accounts and custom roles',
       'Full RBAC, BIR ledger, and dual-control billing',
       'Unlocks after a confirmed PayMongo payment',
-      'Live test price: ₱10 (founding rate returns to ₱499/month later)',
+      'Locked founding rate: ₱499/month',
     ],
     badge: 'FOUNDING',
     isRecommended: true,

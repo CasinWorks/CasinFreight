@@ -52,7 +52,7 @@ export const UpgradeModal: React.FC = () => {
               </p>
             ) : (
               <p className="text-[11px] font-semibold text-amber-800 mt-1.5">
-                Live PayMongo — this is a real ₱10 test charge. Keep this tab open until Founding unlocks.
+                Live PayMongo — ₱499 will be charged. Keep this tab open until Founding unlocks.
               </p>
             )}
             {isWaitingForPayMongo && (
