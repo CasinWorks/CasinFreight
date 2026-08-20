@@ -48,8 +48,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { startTutorial } = useTutorial();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
+  const showRenewalNudge = activePlan.id !== 'plan_free' && subscriptionUsage.daysRemainingInPeriod <= 7;
 
   return (
+    <>
     <header className="h-16 bg-white border-b border-slate-200 text-slate-800 px-3 md:px-6 flex items-center justify-between sticky top-0 z-30 select-none shadow-xs">
       {/* Brand & Mobile Hamburger Toggle */}
       <div className="flex items-center gap-2 md:gap-3">
@@ -255,5 +257,22 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
     </header>
+    {showRenewalNudge && (
+      <div className="bg-amber-50 border-b border-amber-200 px-3 md:px-6 py-2 text-[11px] text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <span>
+          {subscription.cancel_at_period_end
+            ? `Founding ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ₱899 again.`
+            : `Founding renews ${formatPhDate(subscription.current_period_end)}. Pay ₱899 this month to keep unlimited trucks and trips.`}
+        </span>
+        <button
+          type="button"
+          onClick={() => setIsUpgradeModalOpen(true)}
+          className="self-start sm:self-auto font-bold text-amber-900 underline underline-offset-2"
+        >
+          Pay now
+        </button>
+      </div>
+    )}
+    </>
   );
 };

@@ -7,7 +7,8 @@ import {
   Truck, 
   Users, 
   Tag, 
-  Building2, 
+  Building2,
+  Briefcase,
   Clock, 
   AlertTriangle, 
   FileCheck2,
@@ -27,6 +28,7 @@ export type NavTab =
   | 'ledger'
   | 'trucks' 
   | 'drivers' 
+  | 'clients'
   | 'ratecards' 
   | 'dashboard' 
   | 'rbac'
@@ -107,6 +109,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Users,
       permission: 'driver_crud' as const,
       description: 'LTO licenses & restrictions',
+    },
+    {
+      id: 'clients' as NavTab,
+      label: 'Shippers & Clients',
+      icon: Briefcase,
+      permission: 'new_trip' as const,
+      description: 'TIN, terms & billing contacts',
     },
     {
       id: 'ratecards' as NavTab,

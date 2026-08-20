@@ -78,7 +78,7 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
     setStep(2);
   };
 
-  const handleInviteUser = (e: React.FormEvent) => {
+  const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteName.trim() || !inviteEmail.trim()) return;
     if (!canAddAccount) {
@@ -86,12 +86,23 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
       return;
     }
 
-    addUser({
+    const result = await addUser({
       name: inviteName,
       email: inviteEmail,
       role: inviteRole,
-      avatarUrl: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 100000)}?w=150&auto=format&fit=crop&q=80`,
     });
+    if (!result.success) return;
+
+    if (result.emailed) {
+      window.alert(`Invite emailed to ${inviteEmail}.`);
+    } else if (result.inviteUrl) {
+      try {
+        await navigator.clipboard.writeText(result.inviteUrl);
+        window.alert('Invite saved and join link copied. Add RESEND_API_KEY on Vercel to send the email automatically.');
+      } catch {
+        window.alert(`Invite saved. Send this join link:\n${result.inviteUrl}`);
+      }
+    }
 
     setInviteName('');
     setInviteEmail('');

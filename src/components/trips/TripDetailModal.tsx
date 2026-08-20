@@ -30,6 +30,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
+import { uploadCompanyFile } from '../../lib/uploads';
 import { Trip, TripStatus, AccessorialType, POD } from '../../types';
 import { DeliveryNoteModal } from './DeliveryNoteModal';
 import { StatusPrerequisiteModal } from './StatusPrerequisiteModal';
@@ -89,9 +90,9 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   const [receiverIdNumber, setReceiverIdNumber] = useState('');
   const [podNotes, setPodNotes] = useState('Received all items in clean, undamaged condition. Seals intact.');
   const [conditionStatus, setConditionStatus] = useState<'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy'>('Good Condition');
-  const [podPhotos, setPodPhotos] = useState<string[]>([
-    'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80'
-  ]);
+  const [podPhotos, setPodPhotos] = useState<string[]>([]);
+  const [isUploadingPodPhoto, setIsUploadingPodPhoto] = useState(false);
+  const podFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Accessorial quick-add modal state
   const [showAddAccModal, setShowAddAccModal] = useState(false);
@@ -1212,25 +1213,49 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Attach Inspection Photos Simulator */}
+                  {/* Attach Inspection Photos */}
                   <div>
                     <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase mb-1">
                       <span>Inspection Photos (Container/Seal)</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setPodPhotos(prev => [
-                            ...prev, 
-                            'https://images.unsplash.com/photo-1553413077-190dd305871c?w=600&auto=format&fit=crop&q=80'
-                          ]);
-                        }}
-                        className="text-blue-600 hover:underline flex items-center gap-1 text-[10px] font-medium"
+                        disabled={isUploadingPodPhoto}
+                        onClick={() => podFileInputRef.current?.click()}
+                        className="text-blue-600 hover:underline flex items-center gap-1 text-[10px] font-medium disabled:opacity-50"
                       >
                         <Camera className="w-3 h-3" />
-                        <span>+ Add Photo</span>
+                        <span>{isUploadingPodPhoto ? 'Uploading…' : '+ Add Photo'}</span>
                       </button>
+                      <input
+                        ref={podFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={async (event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = '';
+                          if (!file) return;
+                          setIsUploadingPodPhoto(true);
+                          try {
+                            const uploaded = await uploadCompanyFile({
+                              companyId: company.id,
+                              folder: `pods/${trip.id}`,
+                              file,
+                            });
+                            setPodPhotos((prev) => [...prev, uploaded.url]);
+                          } catch (error) {
+                            window.alert(error instanceof Error ? error.message : 'Could not upload the photo.');
+                          } finally {
+                            setIsUploadingPodPhoto(false);
+                          }
+                        }}
+                      />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {podPhotos.length === 0 && (
+                        <p className="text-[10px] text-slate-400">No photos yet. Use the camera or choose a file.</p>
+                      )}
                       {podPhotos.map((p, idx) => (
                         <div key={idx} className="relative group">
                           <img src={p} alt="Inspection" className="w-20 h-14 object-cover rounded border border-slate-200 shadow-2xs" />

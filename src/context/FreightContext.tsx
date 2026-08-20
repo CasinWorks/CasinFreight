@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
@@ -100,10 +101,11 @@ interface FreightContextType {
   isFirebaseReady: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   signup: (payload: { name: string; email: string; password: string; companyName: string }) => Promise<{ success: boolean; error?: string }>;
+  requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   switchUserAccount: (userId: string) => void;
   switchUserRole: (role: UserRole) => void;
-  addUser: (user: Omit<User, 'id' | 'companyId'>) => { success: boolean; error?: string };
+  addUser: (user: Omit<User, 'id' | 'companyId'>) => Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }>;
   
   trucks: Truck[];
   addTruck: (truck: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>) => Truck | null;
@@ -119,6 +121,7 @@ interface FreightContextType {
   clients: Client[];
   addClient: (client: Omit<Client, 'id' | 'companyId' | 'activeContractsCount'>) => Client;
   updateClient: (id: string, updates: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
   
   rateCards: RateCard[];
   addRateCard: (card: Omit<RateCard, 'id' | 'companyId'>) => RateCard;
@@ -272,7 +275,7 @@ interface FreightContextType {
   confirmFoundingPayment: (paymentId?: string) => Promise<void>;
   isWaitingForPayMongo: boolean;
   cancelSubscriptionAtPeriodEnd: () => Promise<void>;
-  resumeSubscription: () => void;
+  resumeSubscription: () => Promise<void>;
   updatePlanDetails: (planId: string, updates: Partial<Plan>) => void;
   canAddTruck: boolean;
   canAddAccount: boolean;
@@ -337,9 +340,8 @@ const PENDING_FOUNDING_KEY = 'casinfreight_pending_founding';
 function mapAuthError(error: unknown): string {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
   if (code.includes('email-already-in-use')) return 'That email already has a CasinFreight account. Sign in instead.';
-  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
-    return 'Invalid email or password.';
-  }
+  if (code.includes('too-many-requests')) return 'Too many attempts. Wait a minute and try again.';
+  if (code.includes('user-not-found')) return 'No CasinFreight account uses that email.';
   if (code.includes('weak-password')) return 'Password must be at least 6 characters.';
   if (code.includes('invalid-email')) return 'Enter a valid work email.';
   if (code.includes('permission-denied')) {
@@ -907,6 +909,20 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const requestPasswordReset = async (email: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isFirebaseConfigured()) {
+      return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
+    }
+    try {
+      await sendPasswordResetEmail(getFirebaseAuth(), email.trim(), {
+        url: window.location.origin,
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error) };
+    }
+  };
+
   const signup = async (payload: {
     name: string;
     email: string;
@@ -1094,7 +1110,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCompany(prev => ({ ...prev, ...updates }));
   };
 
-  const addUser = (userData: Omit<User, 'id' | 'companyId'>): { success: boolean; error?: string } => {
+  const addUser = async (userData: Omit<User, 'id' | 'companyId'>): Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }> => {
     if (requireUpgrade(!canAddAccount)) {
       return { success: false, error: 'Free plan includes 1 company account. Subscribe to add team members.' };
     }
@@ -1107,18 +1123,45 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       status: 'invited',
     };
     setUsers((prev) => [...prev, newUser]);
+    const inviteUrl = `${window.location.origin}/?join=1&email=${encodeURIComponent(userData.email.trim())}`;
     if (company.id) {
-      saveInvite({
-        email: userData.email,
-        name: userData.name,
-        role: userData.role,
-        companyId: company.id,
-        invitedBy: currentUserId,
-        createdAt: new Date().toISOString(),
-      }).catch(console.error);
+      try {
+        await saveInvite({
+          email: userData.email,
+          name: userData.name,
+          role: userData.role,
+          companyId: company.id,
+          invitedBy: currentUserId,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        return { success: false, error: mapAuthError(error) };
+      }
     }
     pushAudit('USER_ROLE_ASSIGNED', `Invited ${userData.name} (${userData.email}) as ${userData.role}.`, userData.role, userData.name);
-    return { success: true };
+
+    let emailed = false;
+    try {
+      const response = await fetch('/api/mail', {
+        method: 'POST',
+        headers: await paymongoRequestHeaders(),
+        body: JSON.stringify({
+          kind: 'invite',
+          to: userData.email.trim(),
+          inviteName: userData.name,
+          role: userData.role,
+          companyName: company.name,
+          invitedBy: currentUser.name || currentUser.email,
+          inviteUrl,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { sent?: boolean };
+      emailed = Boolean(payload.sent);
+    } catch {
+      emailed = false;
+    }
+
+    return { success: true, emailed, inviteUrl };
   };
 
   const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck | null => {
@@ -1173,7 +1216,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addClient = (clientData: Omit<Client, 'id' | 'companyId' | 'activeContractsCount'>): Client => {
     const newClient: Client = {
       ...clientData,
-      id: `clt-${Date.now().toString().slice(-4)}`,
+      id: `clt-${Date.now().toString(36)}`,
       companyId: company.id,
       activeContractsCount: 1,
     };
@@ -1183,6 +1226,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateClient = (id: string, updates: Partial<Client>) => {
     setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  const deleteClient = (id: string) => {
+    setClients(prev => prev.filter(c => c.id !== id));
   };
 
   const addRateCard = (cardData: Omit<RateCard, 'id' | 'companyId'>): RateCard => {
@@ -2719,22 +2766,35 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [isAuthenticated, company.id, subscription.plan_id, isWaitingForPayMongo]);
 
+  const persistSubscriptionFlags = async (next: Subscription) => {
+    setSubscription(next);
+    if (!company.id) return;
+    const tier = next.plan_id === PLAN_FOUNDING_ID ? 'Growth' : 'Free';
+    try {
+      await saveCompanySubscription(company.id, next, tier);
+    } catch (error) {
+      console.error('Could not save subscription settings', error);
+    }
+  };
+
   const cancelSubscriptionAtPeriodEnd = async () => {
-    setSubscription((prev) => ({
-      ...prev,
+    const next: Subscription = {
+      ...subscription,
       auto_renew: false,
       cancel_at_period_end: true,
       updated_at: new Date().toISOString(),
-    }));
+    };
+    await persistSubscriptionFlags(next);
   };
 
-  const resumeSubscription = () => {
-    setSubscription((prev) => ({
-      ...prev,
+  const resumeSubscription = async () => {
+    const next: Subscription = {
+      ...subscription,
       auto_renew: true,
       cancel_at_period_end: false,
       updated_at: new Date().toISOString(),
-    }));
+    };
+    await persistSubscriptionFlags(next);
   };
 
   const updatePlanDetails = (planId: string, updates: Partial<Plan>) => {
@@ -2752,6 +2812,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isFirebaseReady: isFirebaseConfigured(),
       login,
       signup,
+      requestPasswordReset,
       logout,
       switchUserAccount,
       switchUserRole,
@@ -2768,6 +2829,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       clients,
       addClient,
       updateClient,
+      deleteClient,
       rateCards,
       addRateCard,
       updateRateCard,

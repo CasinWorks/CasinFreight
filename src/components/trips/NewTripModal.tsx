@@ -32,6 +32,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     trucks, 
     drivers, 
     clients, 
+    addClient,
     rateCards, 
     suggestRateCard, 
     addTrip, 
@@ -76,6 +77,12 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     return now.toISOString().slice(0, 16);
   });
   const [notes, setNotes] = useState<string>('');
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientTin, setNewClientTin] = useState('');
+  const [newClientContact, setNewClientContact] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
+  const [newClientTerms, setNewClientTerms] = useState(30);
 
   // Pre-fill initial defaults when modal opens
   useEffect(() => {
@@ -88,6 +95,10 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
       }
       if (clients.length > 0 && !selectedClientId) {
         setSelectedClientId(clients[0].id);
+        setShowNewClient(false);
+      }
+      if (clients.length === 0) {
+        setShowNewClient(true);
       }
     }
   }, [isOpen, trucks, clients]);
@@ -137,6 +148,29 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
   const multiStopAmount = multiStopCount * 2500;
   const estimatedTotalPhp = baseRatePhp + fuelAmount + tollEstimatePhp + overweightAmount + multiStopAmount;
 
+  const handleSaveNewClient = () => {
+    if (!newClientName.trim()) {
+      alert('Enter the shipper / client company name.');
+      return;
+    }
+    const created = addClient({
+      name: newClientName.trim(),
+      tin: newClientTin.trim(),
+      contactPerson: newClientContact.trim(),
+      phone: newClientPhone.trim(),
+      email: '',
+      billingAddress: '',
+      paymentTermsDays: newClientTerms,
+    });
+    setSelectedClientId(created.id);
+    setShowNewClient(false);
+    setNewClientName('');
+    setNewClientTin('');
+    setNewClientContact('');
+    setNewClientPhone('');
+    setNewClientTerms(30);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -149,7 +183,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
       return;
     }
     if (!selectedClientId) {
-      alert('Please select a client.');
+      alert('Add or choose a shipper / client first. A trip cannot be billed without one.');
       return;
     }
 
@@ -464,22 +498,89 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
 
             {/* Client selector */}
             <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Client / Shipper *
-              </label>
-              <select
-                value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
-                required
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
-              >
-                <option value="">-- Choose Client --</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} (TIN: {c.tin}) — Terms: {c.paymentTermsDays} days
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Client / Shipper *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowNewClient((open) => !open)}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  {showNewClient ? 'Cancel new client' : 'Add new client'}
+                </button>
+              </div>
+              {clients.length === 0 && !showNewClient && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-2">
+                  No shippers on file yet. Add one here so this trip can be billed.
+                </p>
+              )}
+              {clients.length > 0 && (
+                <select
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  required={!showNewClient}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
+                >
+                  <option value="">-- Choose Client --</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.tin ? ` (TIN: ${c.tin})` : ''} — Terms: {c.paymentTermsDays} days
+                    </option>
+                  ))}
+                </select>
+              )}
+              {showNewClient && (
+                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      value={newClientName}
+                      onChange={(e) => setNewClientName(e.target.value)}
+                      placeholder="Company / shipper name *"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <input
+                      value={newClientTin}
+                      onChange={(e) => setNewClientTin(e.target.value)}
+                      placeholder="TIN (optional)"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <input
+                      value={newClientContact}
+                      onChange={(e) => setNewClientContact(e.target.value)}
+                      placeholder="Contact person"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <input
+                      value={newClientPhone}
+                      onChange={(e) => setNewClientPhone(e.target.value)}
+                      placeholder="Phone"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <select
+                      value={newClientTerms}
+                      onChange={(e) => setNewClientTerms(Number(e.target.value))}
+                      className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value={7}>7-day terms</option>
+                      <option value={15}>15-day terms</option>
+                      <option value={30}>30-day terms</option>
+                      <option value={45}>45-day terms</option>
+                      <option value={60}>60-day terms</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleSaveNewClient}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold"
+                    >
+                      Save client to list
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Origin & Destination Zones */}

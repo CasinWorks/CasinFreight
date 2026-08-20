@@ -3,12 +3,17 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, type Plugin} from 'vite';
 import {runPayMongoAction} from './api/paymongo';
+import {runMailAction} from './api/mail';
 
-function paymongoDevApi(): Plugin {
+function jsonDevApi(
+  name: string,
+  route: string,
+  run: (body: Record<string, string>, origin: string, authHeader: string) => Promise<{ status: number; data: unknown }>
+): Plugin {
   return {
-    name: 'paymongo-dev-api',
+    name,
     configureServer(server) {
-      server.middlewares.use('/api/paymongo', async (req, res, next) => {
+      server.middlewares.use(route, async (req, res, next) => {
         if (req.method === 'OPTIONS') {
           res.statusCode = 204;
           res.end();
@@ -28,16 +33,15 @@ function paymongoDevApi(): Plugin {
             ? JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, string>
             : {};
           const origin = (req.headers.origin as string) || 'http://localhost:3000';
-          const action = body.action || ((req.url || '').includes('verify') ? 'verify' : 'checkout');
           const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
-          const result = await runPayMongoAction(action, body, origin, authHeader);
+          const result = await run(body, origin, authHeader);
           res.statusCode = result.status;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(result.data));
         } catch (error) {
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'PayMongo request failed.' }));
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Request failed.' }));
         }
       });
     },
@@ -46,7 +50,15 @@ function paymongoDevApi(): Plugin {
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), paymongoDevApi()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      jsonDevApi('paymongo-dev-api', '/api/paymongo', (body, origin, authHeader) => {
+        const action = body.action || 'checkout';
+        return runPayMongoAction(action, body, origin, authHeader);
+      }),
+      jsonDevApi('mail-dev-api', '/api/mail', (body, _origin, authHeader) => runMailAction(body, authHeader)),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

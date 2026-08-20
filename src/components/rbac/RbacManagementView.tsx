@@ -185,7 +185,7 @@ export const RbacManagementView: React.FC = () => {
     }
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserName.trim() || !newUserEmail.trim()) return;
     if (!canAddAccount) {
@@ -193,7 +193,7 @@ export const RbacManagementView: React.FC = () => {
       return;
     }
 
-    const result = addUser({
+    const result = await addUser({
       name: newUserName.trim(),
       email: newUserEmail.trim(),
       phone: newUserPhone.trim() || '+63 917 000 0000',
@@ -205,11 +205,24 @@ export const RbacManagementView: React.FC = () => {
       return;
     }
 
+    const invitedEmail = newUserEmail.trim();
+    const invitedName = newUserName.trim();
     setNewUserName('');
     setNewUserEmail('');
     setNewUserPhone('');
     setIsAddUserOpen(false);
-    showToast(`Invited "${newUserName}". They can sign up with ${newUserEmail} to join this company.`);
+    if (result.emailed) {
+      showToast(`Invite emailed to ${invitedEmail}. They join with that same address.`);
+    } else if (result.inviteUrl) {
+      try {
+        await navigator.clipboard.writeText(result.inviteUrl);
+        showToast('Invite saved. Join link copied — send it if email is not set up yet.');
+      } catch {
+        showToast(`Invite saved. Send this join link: ${result.inviteUrl}`);
+      }
+    } else {
+      showToast(`Invited "${invitedName}". They can sign up with ${invitedEmail} to join.`);
+    }
   };
 
   const customRolesCount = roles.filter(r => !r.isSystem).length;

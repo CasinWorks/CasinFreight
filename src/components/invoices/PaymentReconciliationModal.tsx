@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
+import { uploadCompanyFile } from '../../lib/uploads';
 import { Invoice, PaymentMethodType, ProofOfPayment } from '../../types';
 
 interface PaymentReconciliationModalProps {
@@ -27,24 +28,6 @@ interface PaymentReconciliationModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-const PRESET_ATTACHMENTS = [
-  {
-    name: 'BDO_Online_Remittance_Advice_2026.pdf',
-    url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
-    ref: 'BDO-FT-2026-89410'
-  },
-  {
-    name: 'BPI_Express_Deposit_Slip_Validated.jpg',
-    url: 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&auto=format&fit=crop&q=80',
-    ref: 'BPI-DEP-94108'
-  },
-  {
-    name: 'BIR_Form_2307_EWT_Certificate_Scanned.pdf',
-    url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
-    ref: 'BIR2307-2026-Q3'
-  }
-];
 
 export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProps> = ({
   invoice,
@@ -74,10 +57,9 @@ export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProp
   const [reconciliationNotes, setReconciliationNotes] = useState<string>(
     'Payment reconciled against bank daily statement. 2% BIR 2307 Creditable Withholding Tax certificate validated.'
   );
-  const [attachedFileUrl, setAttachedFileUrl] = useState<string>(
-    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80'
-  );
-  const [attachedFileName, setAttachedFileName] = useState<string>('BDO_Online_Remittance_Slip.pdf');
+  const [attachedFileUrl, setAttachedFileUrl] = useState('');
+  const [attachedFileName, setAttachedFileName] = useState('');
+  const [isUploadingPop, setIsUploadingPop] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   if (!isOpen) return null;
@@ -92,11 +74,21 @@ export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProp
     setHasEwtDeduction(true);
   };
 
-  const handleSelectPresetFile = (preset: typeof PRESET_ATTACHMENTS[0]) => {
-    setAttachedFileName(preset.name);
-    setAttachedFileUrl(preset.url);
-    if (!paymentReference) {
-      setPaymentReference(preset.ref);
+  const handleUploadPop = async (file: File) => {
+    setErrorMsg('');
+    setIsUploadingPop(true);
+    try {
+      const uploaded = await uploadCompanyFile({
+        companyId: company.id,
+        folder: `payments/${invoice.id}`,
+        file,
+      });
+      setAttachedFileUrl(uploaded.url);
+      setAttachedFileName(uploaded.name);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Could not upload the proof of payment.');
+    } finally {
+      setIsUploadingPop(false);
     }
   };
 
@@ -355,7 +347,11 @@ export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProp
               <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-12 h-12 rounded-lg bg-white border border-emerald-200 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
-                    <img src={attachedFileUrl} alt="POP Preview" className="w-full h-full object-cover" />
+                    {attachedFileUrl.match(/\.pdf($|\?)/i) || attachedFileName.toLowerCase().endsWith('.pdf') ? (
+                      <FileText className="w-5 h-5 text-emerald-700" />
+                    ) : (
+                      <img src={attachedFileUrl} alt="POP Preview" className="w-full h-full object-cover" />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <div className="font-bold text-slate-900 text-xs truncate">{attachedFileName}</div>
@@ -380,25 +376,24 @@ export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProp
                 </div>
               </div>
             ) : (
-              <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center space-y-2 bg-slate-50">
+              <label className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center space-y-2 bg-slate-50 block cursor-pointer hover:border-emerald-400">
                 <UploadCloud className="w-6 h-6 text-slate-400 mx-auto" />
                 <div className="text-xs font-semibold text-slate-700">
-                  Attach Deposit Slip or Remittance Advice
+                  {isUploadingPop ? 'Uploading proof of payment…' : 'Upload deposit slip, remittance advice, or BIR 2307'}
                 </div>
-                <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                  <span className="text-[10px] text-slate-500">Quick Samples:</span>
-                  {PRESET_ATTACHMENTS.map((preset, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => handleSelectPresetFile(preset)}
-                      className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-medium transition-colors shadow-2xs"
-                    >
-                      {preset.name.split('_')[0]} Slip
-                    </button>
-                  ))}
-                </div>
-              </div>
+                <div className="text-[10px] text-slate-500">JPG, PNG, WebP, or PDF up to 8 MB</div>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  disabled={isUploadingPop}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) void handleUploadPop(file);
+                  }}
+                />
+              </label>
             )}
           </div>
 

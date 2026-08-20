@@ -22,6 +22,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
+import { uploadCompanyFile } from '../../lib/uploads';
 import { Trip, TripStatus, Truck as TruckType, Driver, Client, POD } from '../../types';
 
 interface StatusPrerequisiteModalProps {
@@ -47,7 +48,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   onConfirmAdvance,
   onOpenDeliveryNote
 }) => {
-  const { currentUser, canManipulateTripStatus } = useFreight();
+  const { currentUser, canManipulateTripStatus, company } = useFreight();
   const roleCheck = canManipulateTripStatus(targetStatus, trip.status);
 
   // Prerequisite form states
@@ -83,6 +84,9 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(Boolean(trip.pod?.signatureDataUrl));
+  const [podPhotos, setPodPhotos] = useState<string[]>(trip.pod?.photoUrls || []);
+  const [isUploadingPodPhoto, setIsUploadingPodPhoto] = useState(false);
+  const podFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -186,9 +190,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
         conditionStatus,
         signedAt: trip.pod?.signedAt || new Date().toISOString(),
         signatureDataUrl: sigDataUrl || trip.pod?.signatureDataUrl,
-        photoUrls: trip.pod?.photoUrls || [
-          'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80'
-        ]
+        photoUrls: podPhotos,
       };
 
       updates.pod = pod;
@@ -495,9 +497,56 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                   />
                   {!hasSignature && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
-                      ✍️ Sign or draw receiver signature here
+                      Sign or draw receiver signature here
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                    <Camera className="w-3 h-3 text-emerald-600" />
+                    Inspection photos
+                  </label>
+                  <button
+                    type="button"
+                    disabled={isUploadingPodPhoto}
+                    onClick={() => podFileInputRef.current?.click()}
+                    className="text-[10px] font-semibold text-blue-600 disabled:opacity-50"
+                  >
+                    {isUploadingPodPhoto ? 'Uploading…' : '+ Add photo'}
+                  </button>
+                  <input
+                    ref={podFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (!file) return;
+                      setIsUploadingPodPhoto(true);
+                      try {
+                        const uploaded = await uploadCompanyFile({
+                          companyId: company.id,
+                          folder: `pods/${trip.id}`,
+                          file,
+                        });
+                        setPodPhotos((prev) => [...prev, uploaded.url]);
+                      } catch (error) {
+                        window.alert(error instanceof Error ? error.message : 'Could not upload the photo.');
+                      } finally {
+                        setIsUploadingPodPhoto(false);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {podPhotos.map((url) => (
+                    <img key={url} src={url} alt="POD" className="w-16 h-12 object-cover rounded border border-slate-200" />
+                  ))}
                 </div>
               </div>
             </div>

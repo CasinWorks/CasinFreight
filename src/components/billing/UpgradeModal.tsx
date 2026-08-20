@@ -111,7 +111,7 @@ export const UpgradeModal: React.FC = () => {
                           {subscriptionUsage.daysRemainingInPeriod} day{subscriptionUsage.daysRemainingInPeriod === 1 ? '' : 's'} left in this month.
                           {subscription.cancel_at_period_end
                             ? ' Auto-renew is off. You stay Founding until that date, then return to Free.'
-                            : ' Pay again before that date to keep Founding for another month.'}
+                            : ' Pay ₱899 again before that date to keep Founding. Turning auto-renew off stops these reminders; the workspace still returns to Free if unpaid.'}
                         </div>
                       </div>
                     )}
@@ -126,7 +126,7 @@ export const UpgradeModal: React.FC = () => {
                         : isSubmitting
                           ? 'Opening checkout…'
                           : isCurrent
-                            ? `Pay ₱${plan.price_php} to renew`
+                            ? `Pay ₱${plan.price_php} to renew this month`
                             : `Pay ₱${plan.price_php}/mo with PayMongo`}
                       {!waiting && <Zap className="w-3.5 h-3.5" />}
                     </button>

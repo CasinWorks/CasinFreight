@@ -15,6 +15,7 @@ import { InvoiceList } from './components/invoices/InvoiceList';
 import { FreightLedgerView } from './components/ledger/FreightLedgerView';
 import { TruckRegistry } from './components/fleet/TruckRegistry';
 import { DriverRegistry } from './components/fleet/DriverRegistry';
+import { ClientRegistry } from './components/clients/ClientRegistry';
 import { RateCardRegistry } from './components/ratecards/RateCardRegistry';
 import { OwnerDashboard } from './components/dashboard/OwnerDashboard';
 import { RbacManagementView } from './components/rbac/RbacManagementView';
@@ -136,6 +137,10 @@ function MainLayout() {
 
           {activeTab === 'drivers' && (
             <DriverRegistry />
+          )}
+
+          {activeTab === 'clients' && (
+            <ClientRegistry />
           )}
 
           {activeTab === 'ratecards' && (

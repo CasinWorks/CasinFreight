@@ -19,17 +19,42 @@ import { useFreight } from '../../context/FreightContext';
 import { isFirebaseConfigured } from '../../lib/firebase';
 
 export const LoginPage: React.FC = () => {
-  const { login, signup } = useFreight();
+  const { login, signup, requestPasswordReset } = useFreight();
   const configured = isFirebaseConfigured();
 
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const params = new URLSearchParams(window.location.search);
+  const invitedEmail = (params.get('email') || '').trim();
+  const isJoin = params.get('join') === '1';
+
+  const [mode, setMode] = useState<'login' | 'signup'>(isJoin ? 'signup' : 'login');
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(
+    isJoin && invitedEmail ? `You were invited. Create a password with ${invitedEmail} to join that company.` : null
+  );
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setErrorMessage('Enter your work email first, then tap Forgot password.');
+      return;
+    }
+    setErrorMessage(null);
+    setInfoMessage(null);
+    setIsResetting(true);
+    const res = await requestPasswordReset(email);
+    setIsResetting(false);
+    if (!res.success) {
+      setErrorMessage(res.error || 'Could not send the reset email.');
+      return;
+    }
+    setInfoMessage(`Check ${email.trim()} for a Firebase password reset link. It may take a minute.`);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,6 +162,12 @@ export const LoginPage: React.FC = () => {
                 </div>
               )}
 
+              {infoMessage && (
+                <div className="bg-emerald-950/60 border border-emerald-800 text-emerald-200 p-3 rounded-xl text-xs">
+                  {infoMessage}
+                </div>
+              )}
+
               {errorMessage && (
                 <div className="bg-rose-950/60 border border-rose-800 text-rose-300 p-3 rounded-xl text-xs flex items-center gap-2.5">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -167,9 +198,10 @@ export const LoginPage: React.FC = () => {
                         <input
                           value={companyName}
                           onChange={(e) => setCompanyName(e.target.value)}
-                          required
-                          placeholder="Casin Freight & Logistics Corp."
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                          required={!isJoin}
+                          placeholder={isJoin ? 'Not needed — you are joining an existing company' : 'Casin Freight & Logistics Corp.'}
+                          disabled={isJoin}
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-60"
                         />
                       </div>
                     </label>
@@ -209,6 +241,19 @@ export const LoginPage: React.FC = () => {
                     </button>
                   </div>
                 </label>
+
+                {mode === 'login' && (
+                  <div className="flex justify-end -mt-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleForgotPassword()}
+                      disabled={isResetting}
+                      className="text-[11px] font-bold text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                    >
+                      {isResetting ? 'Sending reset link…' : 'Forgot password?'}
+                    </button>
+                  </div>
+                )}
 
                 <button
                   type="submit"
