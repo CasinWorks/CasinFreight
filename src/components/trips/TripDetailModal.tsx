@@ -30,6 +30,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
+import { canvasPointFromEvent, isPlaceholderSignatory, readSignatureDataUrl } from '../../lib/podSignoff';
 import { uploadCompanyFile } from '../../lib/uploads';
 import { Trip, TripStatus, AccessorialType, POD } from '../../types';
 import { DeliveryNoteModal } from './DeliveryNoteModal';
@@ -86,7 +87,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
 
   // POD Form state
   const [receiverName, setReceiverName] = useState('');
-  const [receiverRole, setReceiverRole] = useState('Warehouse Supervisor');
+  const [receiverRole, setReceiverRole] = useState('');
   const [receiverIdNumber, setReceiverIdNumber] = useState('');
   const [podNotes, setPodNotes] = useState('Received all items in clean, undamaged condition. Seals intact.');
   const [conditionStatus, setConditionStatus] = useState<'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy'>('Good Condition');
@@ -115,8 +116,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     if (trip) {
       setTempDemurrageHours(trip.demurrageHours);
       if (trip.pod) {
-        setReceiverName(trip.pod.receiverName);
-        setReceiverRole(trip.pod.receiverRole);
+        setReceiverName(isPlaceholderSignatory(trip.pod.receiverName) ? '' : trip.pod.receiverName);
+        setReceiverRole(isPlaceholderSignatory(trip.pod.receiverRole) ? '' : trip.pod.receiverRole);
         setReceiverIdNumber(trip.pod.receiverIdNumber || '');
         setPodNotes(trip.pod.notes || '');
         setConditionStatus(trip.pod.conditionStatus);
@@ -149,9 +150,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     if (!ctx) return;
 
     setIsDrawing(true);
-    const rect = canvas.getBoundingClientRect();
-    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    const { x, y } = canvasPointFromEvent(canvas, e);
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -167,9 +166,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    const { x, y } = canvasPointFromEvent(canvas, e);
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -190,21 +187,24 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   };
 
   const handleSavePOD = () => {
-    if (!receiverName.trim()) {
-      alert('Please enter the receiver name.');
+    if (isPlaceholderSignatory(receiverName)) {
+      alert('Enter the consignee’s real full name.');
       return;
     }
 
-    const canvas = canvasRef.current;
-    const sigDataUrl = canvas ? canvas.toDataURL('image/png') : undefined;
+    const sigDataUrl = readSignatureDataUrl(canvasRef.current, trip.pod?.signatureDataUrl);
+    if (!sigDataUrl) {
+      alert('The receiving officer must sign the pad.');
+      return;
+    }
 
     submitPOD(trip.id, {
-      receiverName,
-      receiverRole,
+      receiverName: receiverName.trim(),
+      receiverRole: receiverRole.trim() || 'Consignee receiving officer',
       receiverIdNumber,
       notes: podNotes,
       conditionStatus,
-      signatureDataUrl: sigDataUrl || trip.pod?.signatureDataUrl,
+      signatureDataUrl: sigDataUrl,
       photoUrls: podPhotos,
     });
   };

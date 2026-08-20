@@ -22,6 +22,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
+import { canvasPointFromEvent, isPlaceholderSignatory, readSignatureDataUrl } from '../../lib/podSignoff';
 import { uploadCompanyFile } from '../../lib/uploads';
 import { Trip, TripStatus, Truck as TruckType, Driver, Client, POD } from '../../types';
 
@@ -65,13 +66,13 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
 
   // POD details (for Delivered / Invoiced target)
   const [receiverName, setReceiverName] = useState(
-    trip.pod?.receiverName || 'Warehouse Receiving Supervisor'
+    isPlaceholderSignatory(trip.pod?.receiverName) ? '' : (trip.pod?.receiverName || '')
   );
   const [receiverRole, setReceiverRole] = useState(
-    trip.pod?.receiverRole || 'Inbound Logistics Lead'
+    isPlaceholderSignatory(trip.pod?.receiverRole) ? '' : (trip.pod?.receiverRole || '')
   );
   const [receiverIdNumber, setReceiverIdNumber] = useState(
-    trip.pod?.receiverIdNumber || 'ID-REC-2026-904'
+    trip.pod?.receiverIdNumber || ''
   );
   const [conditionStatus, setConditionStatus] = useState<'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy'>(
     trip.pod?.conditionStatus || 'Good Condition'
@@ -112,9 +113,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     if (!ctx) return;
 
     setIsDrawing(true);
-    const rect = canvas.getBoundingClientRect();
-    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    const { x, y } = canvasPointFromEvent(canvas, e);
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -130,9 +129,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    const { x, y } = canvasPointFromEvent(canvas, e);
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -177,19 +174,26 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     } else if (targetStatus === 'In Transit') {
       logNote = `Delivery Note #${deliveryNoteNumber} & Gate Pass #${gatePassNumber} cleared for departure.`;
     } else if (targetStatus === 'Delivered' || targetStatus === 'Invoiced') {
-      const canvas = canvasRef.current;
-      const sigDataUrl = canvas ? canvas.toDataURL('image/png') : trip.pod?.signatureDataUrl;
+      if (isPlaceholderSignatory(receiverName)) {
+        window.alert('Enter the consignee’s real full name. Do not leave the demo placeholder.');
+        return;
+      }
+      const sigDataUrl = readSignatureDataUrl(canvasRef.current, trip.pod?.signatureDataUrl);
+      if (!sigDataUrl) {
+        window.alert('The receiving officer must sign the pad before this trip can be marked delivered.');
+        return;
+      }
 
       const pod: POD = {
         id: trip.pod?.id || `pod-${Date.now()}`,
         tripId: trip.id,
-        receiverName: receiverName.trim() || 'Warehouse Receiving Lead',
-        receiverRole: receiverRole.trim() || 'Logistics Supervisor',
-        receiverIdNumber: receiverIdNumber.trim() || 'PH-RCV-VERIFIED',
+        receiverName: receiverName.trim(),
+        receiverRole: receiverRole.trim() || 'Consignee receiving officer',
+        receiverIdNumber: receiverIdNumber.trim() || undefined,
         notes: podNotes,
         conditionStatus,
         signedAt: trip.pod?.signedAt || new Date().toISOString(),
-        signatureDataUrl: sigDataUrl || trip.pod?.signatureDataUrl,
+        signatureDataUrl: sigDataUrl,
         photoUrls: podPhotos,
       };
 

@@ -16,6 +16,8 @@ import {
   Copy,
   Check
 } from 'lucide-react';
+import { useFreight } from '../../context/FreightContext';
+import { displaySignatory, isPlaceholderSignatory } from '../../lib/podSignoff';
 import { Trip, Truck as TruckType, Driver, Client, Company, TripStatus } from '../../types';
 
 interface DeliveryNoteModalProps {
@@ -31,16 +33,18 @@ interface DeliveryNoteModalProps {
 export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
   isOpen,
   onClose,
-  trip,
+  trip: tripProp,
   truck,
   driver,
   client,
   company
 }) => {
+  const { trips } = useFreight();
   const [copied, setCopied] = React.useState(false);
 
   if (!isOpen) return null;
 
+  const trip = trips.find((item) => item.id === tripProp.id) || tripProp;
   const deliveryNoteNo = trip.deliveryNoteNumber || `DN-2026-${trip.tripNumber.replace(/\D/g, '') || '0811'}`;
   const sealNo = trip.securitySealNumber || 'SEAL-PH-882941';
   const gatePassNo = trip.gatePassNumber || `GP-${trip.originZone.slice(0, 3).toUpperCase()}-9402`;
@@ -51,9 +55,15 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
   });
   const dispatched = actorFromTimeline(trip, ['Loaded', 'In Transit']) || actorFromTimeline(trip, ['Pending']);
   const hauled = actorFromTimeline(trip, ['In Transit', 'Loaded']);
-  const dispatcherName = dispatched?.name || 'Dispatcher on file';
+  const received = actorFromTimeline(trip, ['Delivered', 'Invoiced']);
+  const dispatcherName = dispatched?.name || 'Awaiting dispatcher';
   const dispatchDate = formatPhStamp(dispatched?.at) || issuedDate;
   const driverHandoffDate = formatPhStamp(hauled?.at);
+  const consigneeName =
+    displaySignatory(trip.pod?.receiverName) ||
+    received?.name ||
+    'Awaiting consignee';
+  const consigneeSigned = Boolean(trip.pod?.signatureDataUrl) || Boolean(trip.pod && !isPlaceholderSignatory(trip.pod.receiverName));
 
   const handleCopy = () => {
     navigator.clipboard.writeText(deliveryNoteNo);
@@ -293,22 +303,24 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
             />
             <SignOffBox
               step="2. Received for Hauling by Driver"
-              name={driver?.name || 'Authorized Driver'}
+              name={displaySignatory(driver?.name) || 'Assigned driver'}
               caption={`Lic: ${driver?.licenseNo || 'N02-LTO'}`}
               dateLabel={driverHandoffDate}
             />
             <SignOffBox
               step="3. Received in Good Order"
-              name={trip.pod?.receiverName || 'Consignee receiving officer'}
+              name={consigneeName}
               caption={
-                trip.pod
-                  ? `${trip.pod.receiverRole || 'Receiver'} signed this POD`
-                  : 'Awaiting consignee e-signature on the trip'
+                displaySignatory(trip.pod?.receiverName)
+                  ? `${trip.pod?.receiverRole || 'Consignee'} signed this POD`
+                  : received?.name
+                    ? `Recorded in CasinFreight by ${received.name}`
+                    : 'Awaiting consignee e-signature on the trip'
               }
-              dateLabel={trip.pod ? formatPhStamp(trip.pod.signedAt) : undefined}
+              dateLabel={trip.pod ? formatPhStamp(trip.pod.signedAt) : formatPhStamp(received?.at)}
               signatureUrl={trip.pod?.signatureDataUrl}
               highlight
-              verified={Boolean(trip.pod?.signatureDataUrl)}
+              verified={consigneeSigned}
             />
           </div>
 
@@ -338,7 +350,11 @@ function formatPhStamp(value?: string) {
 }
 
 function actorFromTimeline(trip: Trip, statuses: TripStatus[]) {
-  const match = [...trip.timeline].reverse().find((event) => statuses.includes(event.status) && event.updatedBy);
+  const match = [...trip.timeline].reverse().find((event) => {
+    if (!statuses.includes(event.status) || !event.updatedBy) return false;
+    const name = event.updatedBy.replace(/\s*\([^)]*\)\s*$/, '').trim() || event.updatedBy;
+    return !isPlaceholderSignatory(name);
+  });
   if (!match?.updatedBy) return null;
   return {
     name: match.updatedBy.replace(/\s*\([^)]*\)\s*$/, '').trim() || match.updatedBy,
@@ -378,14 +394,12 @@ function SignOffBox({
           <img
             src={signatureUrl}
             alt={`${name} signature`}
-            className="max-h-16 w-full object-contain object-bottom"
+            className="max-h-14 w-full object-contain object-bottom"
           />
-        ) : (
-          <span className="font-bold text-slate-900 text-xs text-center">{name}</span>
-        )}
+        ) : null}
+        <span className="font-bold text-slate-900 text-xs text-center leading-tight">{name}</span>
       </div>
       <div className="text-[10px] text-slate-500 text-center mt-1.5 leading-snug">
-        {signatureUrl && <div className="font-semibold text-slate-800">{name}</div>}
         <div>{caption}</div>
         {dateLabel && <div>{dateLabel}</div>}
       </div>
