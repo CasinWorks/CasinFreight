@@ -213,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-3 min-w-0">
                 <Shield className={`w-4 h-4 shrink-0 ${activeTab === 'admin' ? 'text-blue-600' : 'text-slate-400'}`} />
-                <span className="truncate">Subscriptions</span>
+                <span className="truncate">Revenue & plans</span>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded font-mono font-medium bg-slate-900 text-white">
                 Admin

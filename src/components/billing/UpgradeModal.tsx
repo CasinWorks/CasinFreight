@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { SAAS_PLANS } from '../../config/plans';
+import { SAAS_PLANS, formatPhDate } from '../../config/plans';
 
 export const UpgradeModal: React.FC = () => {
   const {
@@ -11,8 +11,11 @@ export const UpgradeModal: React.FC = () => {
     isPayMongoTestMode,
     isWaitingForPayMongo,
     subscriptionUsage,
+    subscription,
     activePlan,
     resetCurrentPlanToFree,
+    cancelSubscriptionAtPeriodEnd,
+    resumeSubscription,
   } = useFreight();
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -44,7 +47,7 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Each Subscribe opens a new PayMongo checkout. Founding unlocks automatically after that checkout is paid.
+              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is ₱499 per month. PayMongo charges each checkout; CasinFreight then keeps Founding until the renewal date.
             </p>
             {isPayMongoTestMode ? (
               <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
@@ -108,21 +111,53 @@ export const UpgradeModal: React.FC = () => {
                   ))}
                 </ul>
                 {isPaid ? (
-                  <button
-                    type="button"
-                    disabled={waiting || isCurrent}
-                    onClick={handleSubscribe}
-                    className="mt-5 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
-                    {isCurrent
-                      ? 'Already subscribed'
-                      : isWaitingForPayMongo
+                  <div className="mt-5 space-y-2">
+                    {isCurrent && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900">
+                        <div className="font-bold">
+                          {subscription.cancel_at_period_end ? 'Ends' : 'Renews'} {formatPhDate(subscription.current_period_end)}
+                        </div>
+                        <div className="mt-0.5 text-emerald-800">
+                          {subscriptionUsage.daysRemainingInPeriod} day{subscriptionUsage.daysRemainingInPeriod === 1 ? '' : 's'} left in this month.
+                          {subscription.cancel_at_period_end
+                            ? ' Auto-renew is off. You stay Founding until that date, then return to Free.'
+                            : ' Pay again before that date to keep Founding for another month.'}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      disabled={waiting}
+                      onClick={handleSubscribe}
+                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {isWaitingForPayMongo
                         ? 'Waiting for PayMongo…'
                         : isSubmitting
                           ? 'Opening checkout…'
-                          : `Pay ₱${plan.price_php}/mo with PayMongo`}
-                    {!isCurrent && !waiting && <Zap className="w-3.5 h-3.5" />}
-                  </button>
+                          : isCurrent
+                            ? `Pay ₱${plan.price_php} to renew`
+                            : `Pay ₱${plan.price_php}/mo with PayMongo`}
+                      {!waiting && <Zap className="w-3.5 h-3.5" />}
+                    </button>
+                    {isCurrent && (
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={async () => {
+                          if (subscription.cancel_at_period_end) {
+                            resumeSubscription();
+                            return;
+                          }
+                          if (!window.confirm('Turn off auto-renew? You keep Founding until the current period ends, then this workspace returns to Free.')) return;
+                          await cancelSubscriptionAtPeriodEnd();
+                        }}
+                        className="w-full py-2 rounded-xl border border-slate-200 text-slate-600 text-[11px] font-bold hover:bg-slate-50"
+                      >
+                        {subscription.cancel_at_period_end ? 'Turn auto-renew back on' : 'Turn off auto-renew'}
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div className="mt-5 w-full py-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-bold text-center">
                     Included at signup

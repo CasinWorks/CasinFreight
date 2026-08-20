@@ -4,6 +4,25 @@ export const PLAN_FREE_ID = 'plan_free';
 export const PLAN_FOUNDING_ID = 'plan_founding';
 export const FOUNDING_PRICE_PHP = 499;
 
+export function addBillingMonths(from: Date, months = 1): Date {
+  const next = new Date(from);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+export function formatPhDate(value?: string): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+export function isFoundingPeriodExpired(subscription?: Pick<Subscription, 'plan_id' | 'current_period_end'> | null): boolean {
+  if (!subscription || subscription.plan_id !== PLAN_FOUNDING_ID) return false;
+  const end = Date.parse(subscription.current_period_end || '');
+  return Number.isFinite(end) && end < Date.now();
+}
+
 export interface PlanLimits {
   maxTrucks: number | null;
   maxAccounts: number | null;
@@ -60,7 +79,7 @@ export const SAAS_PLANS: Plan[] = [
       'Unlimited team accounts and custom roles',
       'Full RBAC, BIR ledger, and dual-control billing',
       'Unlocks after a confirmed PayMongo payment',
-      'Locked founding rate: ₱499/month',
+      '₱499 billed every month — access lasts until the renewal date',
     ],
     badge: 'FOUNDING',
     isRecommended: true,

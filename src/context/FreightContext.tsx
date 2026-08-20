@@ -59,7 +59,7 @@ import {
   saveUserProfile,
   seedCompanyWorkspace,
 } from '../services/firestoreCompany';
-import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, getPlanLimits, hasReachedLimit, makeFreeSubscription } from '../config/plans';
+import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, makeFreeSubscription } from '../config/plans';
 import { isPlatformAdminEmail } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 
@@ -429,8 +429,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ]);
 
     const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, ...companyFields } = companyDoc;
-    setCompany(companyFields);
-    setSubscription(savedSub || makeFreeSubscription(uid, companyId));
+    let nextSub = savedSub || makeFreeSubscription(uid, companyId);
+    if (isFoundingPeriodExpired(nextSub)) {
+      nextSub = makeFreeSubscription(uid, companyId, nextSub);
+      await saveCompanySubscription(companyId, nextSub, 'Free');
+    }
+    setCompany({
+      ...companyFields,
+      subscriptionTier: nextSub.plan_id === PLAN_FOUNDING_ID ? 'Growth' : 'Free',
+    });
+    setSubscription(nextSub);
     setRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
     const seenTutorial = Boolean(profile?.has_seen_tutorial) || hasSeenTutorialLocally(uid);
     const uniqueMembers = Object.values(
@@ -752,6 +760,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           current_period_start: now.toISOString(),
           current_period_end: end.toISOString(),
           cancel_at_period_end: false,
+          auto_renew: true,
           payment_provider: 'paymongo',
           ...(existing.subscription?.payment_provider_checkout_id
             ? { payment_provider_checkout_id: existing.subscription.payment_provider_checkout_id }
@@ -2483,8 +2492,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error('Founding plan unlocks only after PayMongo confirms payment.');
     }
     const now = new Date();
-    const end = new Date(now);
-    end.setMonth(end.getMonth() + 1);
+    const existingEnd = new Date(subscription.current_period_end || now);
+    const stillFounding = subscription.plan_id === PLAN_FOUNDING_ID && existingEnd.getTime() > now.getTime();
+    const periodStart = stillFounding ? new Date(subscription.current_period_start || now) : now;
+    const periodEnd = addBillingMonths(stillFounding ? existingEnd : now, 1);
     const consumed = [
       ...(subscription.consumed_payment_ids || []),
       paymentId,
@@ -2493,15 +2504,34 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...subscription,
       plan_id: PLAN_FOUNDING_ID,
       status: 'active',
-      current_period_start: now.toISOString(),
-      current_period_end: end.toISOString(),
+      current_period_start: periodStart.toISOString(),
+      current_period_end: periodEnd.toISOString(),
       cancel_at_period_end: false,
+      auto_renew: true,
       payment_provider: 'paymongo',
       payment_provider_checkout_id: paymentId,
       last_payment_method: paymentMethod,
       consumed_payment_ids: consumed,
       updated_at: now.toISOString(),
     };
+    setSubscription(nextSub);
+    setBillingHistory((prev) => [
+      {
+        id: `bill-${paymentId}`,
+        subscription_id: nextSub.id,
+        user_id: currentUserId,
+        paymongo_payment_id: paymentId,
+        amount_php: FOUNDING_PRICE_PHP,
+        currency: 'PHP',
+        status: 'paid',
+        payment_method: paymentMethod,
+        receipt_number: paymentId,
+        billing_period_start: stillFounding ? existingEnd.toISOString() : now.toISOString(),
+        billing_period_end: periodEnd.toISOString(),
+        created_at: now.toISOString(),
+      },
+      ...prev.filter((item) => item.paymongo_payment_id !== paymentId),
+    ]);
     setSubscription(nextSub);
     setCompany((prev) => ({ ...prev, subscriptionTier: 'Growth' }));
     setRoles((prev) => {
@@ -2664,11 +2694,21 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [isAuthenticated, company.id, subscription.plan_id, isWaitingForPayMongo]);
 
   const cancelSubscriptionAtPeriodEnd = async () => {
-    setSubscription((prev) => ({ ...prev, cancel_at_period_end: true, updated_at: new Date().toISOString() }));
+    setSubscription((prev) => ({
+      ...prev,
+      auto_renew: false,
+      cancel_at_period_end: true,
+      updated_at: new Date().toISOString(),
+    }));
   };
 
   const resumeSubscription = () => {
-    setSubscription((prev) => ({ ...prev, cancel_at_period_end: false, updated_at: new Date().toISOString() }));
+    setSubscription((prev) => ({
+      ...prev,
+      auto_renew: true,
+      cancel_at_period_end: false,
+      updated_at: new Date().toISOString(),
+    }));
   };
 
   const updatePlanDetails = (planId: string, updates: Partial<Plan>) => {

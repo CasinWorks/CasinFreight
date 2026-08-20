@@ -491,6 +491,7 @@ export interface Subscription {
   payment_provider_checkout_id?: string;
   last_payment_method?: PayMongoPaymentMethod;
   consumed_payment_ids?: string[];
+  auto_renew?: boolean;
   created_at: string;
   updated_at: string;
 }

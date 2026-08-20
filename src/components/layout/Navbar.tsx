@@ -11,6 +11,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
+import { formatPhDate } from '../../config/plans';
 import { useTutorial } from '../tutorial';
 
 interface NavbarProps {
@@ -41,6 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     activePlan,
     setIsUpgradeModalOpen,
     subscriptionUsage,
+    subscription,
     resetCurrentPlanToFree,
   } = useFreight();
   const { startTutorial } = useTutorial();
@@ -104,7 +106,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           {activePlan.name}
           <span className="font-mono font-medium text-[10px] opacity-80">
-            {subscriptionUsage.transactionsUsed}/{subscriptionUsage.maxTransactions ?? '∞'} trips
+            {activePlan.id === 'plan_free'
+              ? `${subscriptionUsage.transactionsUsed}/${subscriptionUsage.maxTransactions ?? '∞'} trips`
+              : subscription.cancel_at_period_end
+                ? `ends ${formatPhDate(subscription.current_period_end)}`
+                : `renews ${formatPhDate(subscription.current_period_end)}`}
           </span>
         </button>
 

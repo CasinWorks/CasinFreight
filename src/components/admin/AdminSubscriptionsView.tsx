@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Crown, Loader2, RefreshCw, RotateCcw, Search, Shield } from 'lucide-react';
+import { Banknote, Crown, Loader2, RefreshCw, RotateCcw, Search, Shield, Wallet } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { PLAN_FOUNDING_ID, PLAN_FREE_ID } from '../../config/plans';
+import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, formatPhDate } from '../../config/plans';
 import type { CompanyDocument } from '../../services/firestoreCompany';
 
 function planLabel(planId?: string) {
@@ -9,15 +9,19 @@ function planLabel(planId?: string) {
   return 'Free';
 }
 
-function formatDate(value?: string) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+function pesos(value: number) {
+  return `₱${Math.round(value).toLocaleString('en-PH')}`;
+}
+
+function daysLeft(iso?: string) {
+  if (!iso) return null;
+  const end = Date.parse(iso);
+  if (!Number.isFinite(end)) return null;
+  return Math.ceil((end - Date.now()) / 86400000);
 }
 
 export const AdminSubscriptionsView: React.FC = () => {
-  const { company, listPlatformSubscriptions, setCompanyPlanByAdmin } = useFreight();
+  const { company, invoices, trips, listPlatformSubscriptions, setCompanyPlanByAdmin } = useFreight();
   const [rows, setRows] = useState<CompanyDocument[]>([]);
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +58,21 @@ export const AdminSubscriptionsView: React.FC = () => {
     );
   }, [query, rows]);
 
-  const foundingCount = rows.filter((row) => row.subscription?.plan_id === PLAN_FOUNDING_ID).length;
+  const foundingRows = rows.filter((row) => row.subscription?.plan_id === PLAN_FOUNDING_ID);
+  const foundingCount = foundingRows.length;
+  const mrr = foundingCount * FOUNDING_PRICE_PHP;
+  const expiringSoon = foundingRows.filter((row) => {
+    const left = daysLeft(row.subscription?.current_period_end);
+    return left !== null && left >= 0 && left <= 7;
+  }).length;
+
+  const billed = invoices.reduce((sum, invoice) => sum + (invoice.grandTotalPhp || 0), 0);
+  const collected = invoices.filter((invoice) => invoice.status === 'Paid').reduce((sum, invoice) => sum + (invoice.grandTotalPhp || 0), 0);
+  const receivables = invoices.filter((invoice) => invoice.status !== 'Paid' && invoice.status !== 'Voided').reduce((sum, invoice) => sum + (invoice.grandTotalPhp || 0), 0);
+  const tripPipeline = trips.reduce((sum, trip) => {
+    const accessorials = trip.accessorials?.reduce((acc, item) => acc + (item.amountPhp || 0), 0) || 0;
+    return sum + (trip.baseRatePhp || 0) + accessorials;
+  }, 0);
 
   const changePlan = async (row: CompanyDocument, planId: string) => {
     const nextLabel = planLabel(planId);
@@ -80,9 +98,9 @@ export const AdminSubscriptionsView: React.FC = () => {
               <Shield className="w-4 h-4" />
               <span className="text-[11px] font-bold uppercase tracking-wider">Platform admin</span>
             </div>
-            <h1 className="text-xl font-extrabold text-slate-900 mt-1">Subscriptions</h1>
+            <h1 className="text-xl font-extrabold text-slate-900 mt-1">Revenue & plans</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Monitor every company plan. Use Set to Free to put a test account back on Free caps.
+              Founding is ₱{FOUNDING_PRICE_PHP.toLocaleString('en-PH')}/month. PayMongo charges each checkout; membership lasts until the renewal date, then drops to Free if it is not paid again.
             </p>
           </div>
           <button
@@ -95,18 +113,57 @@ export const AdminSubscriptionsView: React.FC = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Companies</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">{rows.length}</div>
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">CasinFreight SaaS</div>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Companies</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{rows.length}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Founding</div>
+              <div className="text-2xl font-black text-blue-700 mt-1">{foundingCount}</div>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Monthly SaaS revenue</div>
+              <div className="text-2xl font-black text-blue-800 mt-1">{pesos(mrr)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Annual run rate</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{pesos(mrr * 12)}</div>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Renews in 7 days</div>
+              <div className="text-2xl font-black text-amber-800 mt-1">{expiringSoon}</div>
+            </div>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Founding</div>
-            <div className="text-2xl font-black text-blue-700 mt-1">{foundingCount}</div>
+        </div>
+
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            {company.name || 'This workspace'} · freight cash
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Free</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">{Math.max(0, rows.length - foundingCount)}</div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <Banknote className="w-3.5 h-3.5" /> Billed
+              </div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{pesos(billed)}</div>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                <Wallet className="w-3.5 h-3.5" /> Collected
+              </div>
+              <div className="text-2xl font-black text-emerald-800 mt-1">{pesos(collected)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Receivables</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{pesos(receivables)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Trip pipeline</div>
+              <div className="text-2xl font-black text-slate-900 mt-1">{pesos(tripPipeline)}</div>
+            </div>
           </div>
         </div>
 
@@ -131,8 +188,8 @@ export const AdminSubscriptionsView: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 font-bold">Company</th>
                   <th className="px-4 py-3 font-bold">Plan</th>
-                  <th className="px-4 py-3 font-bold">Status</th>
-                  <th className="px-4 py-3 font-bold">Period end</th>
+                  <th className="px-4 py-3 font-bold">Renews / ends</th>
+                  <th className="px-4 py-3 font-bold">Auto-renew</th>
                   <th className="px-4 py-3 font-bold">Payment</th>
                   <th className="px-4 py-3 font-bold text-right">Actions</th>
                 </tr>
@@ -156,6 +213,8 @@ export const AdminSubscriptionsView: React.FC = () => {
                 {!isLoading && filtered.map((row) => {
                   const isFounding = row.subscription?.plan_id === PLAN_FOUNDING_ID;
                   const isCurrent = row.id === company.id;
+                  const left = daysLeft(row.subscription?.current_period_end);
+                  const autoRenew = isFounding && row.subscription?.auto_renew !== false && !row.subscription?.cancel_at_period_end;
                   return (
                     <tr key={row.id} className="border-t border-slate-100">
                       <td className="px-4 py-3 align-top">
@@ -178,14 +237,21 @@ export const AdminSubscriptionsView: React.FC = () => {
                           {planLabel(row.subscription?.plan_id)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 align-top text-xs text-slate-600 capitalize">
-                        {row.subscription?.status || '—'}
+                      <td className="px-4 py-3 align-top text-xs text-slate-600">
+                        {isFounding ? (
+                          <>
+                            <div>{formatPhDate(row.subscription?.current_period_end)}</div>
+                            <div className="text-[10px] text-slate-400">
+                              {left === null ? '' : left < 0 ? 'Expired' : `${left} day${left === 1 ? '' : 's'} left`}
+                            </div>
+                          </>
+                        ) : '—'}
                       </td>
                       <td className="px-4 py-3 align-top text-xs text-slate-600">
-                        {formatDate(row.subscription?.current_period_end)}
+                        {isFounding ? (autoRenew ? 'On' : 'Off') : '—'}
                       </td>
                       <td className="px-4 py-3 align-top text-[11px] font-mono text-slate-500">
-                        {row.subscription?.payment_provider_checkout_id || row.subscription?.last_payment_method || '—'}
+                        {row.subscription?.last_payment_method || row.subscription?.payment_provider_checkout_id || '—'}
                       </td>
                       <td className="px-4 py-3 align-top text-right">
                         <div className="inline-flex flex-col sm:flex-row gap-2 justify-end">
