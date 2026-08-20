@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   Truck as TruckIcon, 
@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { TruckType } from '../../types';
+import { matchingTruckBans } from '../../lib/truckBans';
+import { TruckBanAlert } from '../truckbans/TruckBanAlert';
 
 interface NewTripModalProps {
   isOpen: boolean;
@@ -38,6 +40,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     addTrip, 
     canCreateBooking,
     setIsUpgradeModalOpen,
+    truckBans,
   } = useFreight();
 
   // Form State
@@ -105,6 +108,26 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
 
   // Selected Truck Object
   const currentTruck = trucks.find(t => t.id === selectedTruckId);
+
+  const banHits = useMemo(() => matchingTruckBans({
+    bans: truckBans,
+    originZone,
+    originAddress,
+    destinationZone,
+    destinationAddress,
+    scheduledPickup,
+    scheduledDelivery,
+    truckType: currentTruck?.type,
+  }), [
+    truckBans,
+    originZone,
+    originAddress,
+    destinationZone,
+    destinationAddress,
+    scheduledPickup,
+    scheduledDelivery,
+    currentTruck?.type,
+  ]);
 
   // When Truck or Driver or Zone changes, auto-suggest RateCard
   useEffect(() => {
@@ -661,6 +684,10 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
                 />
               </div>
+            </div>
+
+            <div className="mt-4">
+              <TruckBanAlert hits={banHits} />
             </div>
           </div>
 

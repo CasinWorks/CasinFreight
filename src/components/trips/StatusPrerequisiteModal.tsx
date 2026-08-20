@@ -53,16 +53,10 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   const roleCheck = canManipulateTripStatus(targetStatus, trip.status);
 
   // Prerequisite form states
-  const [securitySealNumber, setSecuritySealNumber] = useState(
-    trip.securitySealNumber || `SEAL-PH-${Math.floor(100000 + Math.random() * 900000)}`
-  );
-  const [deliveryNoteNumber, setDeliveryNoteNumber] = useState(
-    trip.deliveryNoteNumber || `DN-2026-${trip.tripNumber.replace(/\D/g, '') || '0811'}`
-  );
-  const [gatePassNumber, setGatePassNumber] = useState(
-    trip.gatePassNumber || `GP-${trip.originZone.slice(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`
-  );
-  const [weightVerified, setWeightVerified] = useState(true);
+  const [securitySealNumber, setSecuritySealNumber] = useState(trip.securitySealNumber || '');
+  const [deliveryNoteNumber, setDeliveryNoteNumber] = useState(trip.deliveryNoteNumber || '');
+  const [gatePassNumber, setGatePassNumber] = useState(trip.gatePassNumber || '');
+  const [weightVerified, setWeightVerified] = useState(Boolean(trip.prerequisites?.tareWeightVerified));
 
   // POD details (for Delivered / Invoiced target)
   const [receiverName, setReceiverName] = useState(
@@ -90,15 +84,10 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
 
   useEffect(() => {
     if (isOpen) {
-      if (!trip.securitySealNumber) {
-        setSecuritySealNumber(`SEAL-PH-${Math.floor(100000 + Math.random() * 900000)}`);
-      }
-      if (!trip.deliveryNoteNumber) {
-        setDeliveryNoteNumber(`DN-2026-${trip.tripNumber.replace(/\D/g, '') || '0811'}`);
-      }
-      if (!trip.gatePassNumber) {
-        setGatePassNumber(`GP-${trip.originZone.slice(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`);
-      }
+      setSecuritySealNumber(trip.securitySealNumber || '');
+      setDeliveryNoteNumber(trip.deliveryNoteNumber || '');
+      setGatePassNumber(trip.gatePassNumber || '');
+      setWeightVerified(Boolean(trip.prerequisites?.tareWeightVerified));
     }
   }, [isOpen, trip]);
 
@@ -135,6 +124,14 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     let logNote = `Prerequisites validated for ${targetStatus}.`;
 
     if (targetStatus === 'Loaded') {
+      if (!securitySealNumber.trim()) {
+        window.alert('Enter the real container or truck seal number before marking this Loaded.');
+        return;
+      }
+      if (!weightVerified) {
+        window.alert('Tick weighbridge / cargo verified before the dispatcher signs this out.');
+        return;
+      }
       const dispatcherSig = dispatcherPadRef.current?.read(trip.dispatcherSignoff?.signatureDataUrl);
       if (!dispatcherSig) {
         window.alert('The dispatcher must sign the release pad before cargo can be marked Loaded.');
@@ -145,6 +142,14 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
         : makeSignoff(dispatcherName, currentUser.role, dispatcherSig);
       logNote = `Cargo loaded and released by ${dispatcherName}. Seal #${securitySealNumber}.`;
     } else if (targetStatus === 'In Transit') {
+      if (!securitySealNumber.trim()) {
+        window.alert('Enter the real seal number before dispatch.');
+        return;
+      }
+      if (!deliveryNoteNumber.trim() || !gatePassNumber.trim()) {
+        window.alert('Enter the delivery note number and gate pass before dispatch.');
+        return;
+      }
       if (!driverName) {
         window.alert('Assign a driver before releasing this shipment for hauling.');
         return;

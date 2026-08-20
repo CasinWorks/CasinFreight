@@ -27,14 +27,22 @@ import {
   Printer,
   Lock,
   ShieldAlert,
-  UserCheck
+  UserCheck,
+  Ban,
+  PauseCircle,
+  Play
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { canvasPointFromEvent, isPlaceholderSignatory, readSignatureDataUrl } from '../../lib/podSignoff';
 import { uploadCompanyFile } from '../../lib/uploads';
-import { Trip, TripStatus, AccessorialType, POD } from '../../types';
+import { Trip, TripStatus, AccessorialType, POD, HOLD_EXCEPTION_KINDS, CANCEL_EXCEPTION_KINDS, TripExceptionKind } from '../../types';
+import { matchingTruckBans } from '../../lib/truckBans';
+import { TruckBanAlert } from '../truckbans/TruckBanAlert';
 import { DeliveryNoteModal } from './DeliveryNoteModal';
 import { StatusPrerequisiteModal } from './StatusPrerequisiteModal';
+import { TripExceptionModal } from './TripExceptionModal';
+import { LiveTrackingPanel } from './LiveTrackingPanel';
+import { exceptionKindLabel, resumeTarget } from './TripKanbanCard';
 import { TripProfitabilityView } from './TripProfitabilityView';
 import { FuelLogModal } from '../fleet/FuelLogModal';
 
@@ -69,7 +77,10 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     canReassignFleet,
     canDeleteTrip,
     canAccess,
-    currentUser 
+    currentUser,
+    liveTracking,
+    fieldEvents,
+    truckBans,
   } = useFreight();
 
   // Modal sub-dialog states
@@ -109,6 +120,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   // Status transition note
   const [statusUpdateNote, setStatusUpdateNote] = useState('');
   const [statusUpdateLocation, setStatusUpdateLocation] = useState('');
+  const [exceptionMode, setExceptionMode] = useState<'hold' | 'cancel' | null>(null);
 
   const trip = trips.find(t => t.id === tripId);
 
@@ -132,15 +144,27 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   const drv = drivers.find(d => d.id === trip.driverId);
   const clt = clients.find(c => c.id === trip.clientId);
   const existingInvoice = getInvoiceByTripId(trip.id);
+  const banHits = matchingTruckBans({
+    bans: truckBans,
+    originZone: trip.originZone,
+    originAddress: trip.originAddress,
+    destinationZone: trip.destinationZone,
+    destinationAddress: trip.destinationAddress,
+    scheduledPickup: trip.scheduledPickup,
+    scheduledDelivery: trip.scheduledDelivery,
+    truckType: trk?.type,
+    includeNow: trip.status === 'In Transit' || trip.status === 'Loaded',
+  });
 
   const netCap = trk ? trk.netPayloadKg : 10000;
   const loadPercentage = Math.round((trip.cargoWeightKg / netCap) * 100);
   const totalApprovedAccessorials = trip.accessorials.filter(a => a.approved).reduce((sum, a) => sum + a.amountPhp, 0);
   const grossTripTotal = trip.baseRatePhp + totalApprovedAccessorials;
 
-  const dnNumber = trip.deliveryNoteNumber || `DN-2026-${trip.tripNumber.replace(/\D/g, '') || '0811'}`;
-  const sealNumber = trip.securitySealNumber || 'SEAL-PH-882941';
-  const gatePassNumber = trip.gatePassNumber || `GP-${trip.originZone.slice(0, 3).toUpperCase()}-9402`;
+  const dnNumber = trip.deliveryNoteNumber || 'Not recorded';
+  const sealNumber = trip.securitySealNumber || 'Not recorded';
+  const gatePassNumber = trip.gatePassNumber || 'Not recorded';
+  const opsStatus = trip.status === 'On Hold' || trip.status === 'Cancelled' ? resumeTarget(trip) : trip.status;
 
   // Signature canvas handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -253,13 +277,56 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   const handleInitiateAdvance = (nextStatus: TripStatus) => {
     if (nextStatus === trip.status) return;
 
+    if (nextStatus === 'On Hold' || nextStatus === 'Cancelled') {
+      if (trip.status === 'Invoiced') return;
+      if (nextStatus === 'On Hold' && trip.status === 'Cancelled') return;
+      setExceptionMode(nextStatus === 'On Hold' ? 'hold' : 'cancel');
+      return;
+    }
+
+    if (trip.status === 'Cancelled' && nextStatus !== 'Pending') return;
+
+    if (trip.status === 'On Hold') {
+      const from = resumeTarget(trip);
+      const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+      if (stages.indexOf(nextStatus) <= stages.indexOf(from)) {
+        updateTripStatus(trip.id, nextStatus, 'Resumed from hold.', statusUpdateLocation || undefined);
+        return;
+      }
+    }
+
     if (nextStatus === 'Pending') {
       updateTripStatus(trip.id, 'Pending', 'Trip reset to Pending status.');
       return;
     }
 
-    // Open prerequisite modal to collect/verify delivery note, seal, POD, etc.
     setPrerequisiteTargetStatus(nextStatus);
+  };
+
+  const handleExceptionConfirm = (kind: TripExceptionKind, note: string) => {
+    if (!exceptionMode) return;
+    if (trip.status === 'Invoiced') {
+      setExceptionMode(null);
+      return;
+    }
+    const kinds = exceptionMode === 'hold' ? HOLD_EXCEPTION_KINDS : CANCEL_EXCEPTION_KINDS;
+    const reasonLabel = kinds.find((item) => item.id === kind)?.label || kind;
+    const noteText = [reasonLabel, note].filter(Boolean).join('. ');
+    const previous = trip.status === 'On Hold' || trip.status === 'Cancelled'
+      ? resumeTarget(trip)
+      : trip.status;
+    updateTripStatus(
+      trip.id,
+      exceptionMode === 'hold' ? 'On Hold' : 'Cancelled',
+      noteText,
+      statusUpdateLocation || undefined,
+      {
+        holdFromStatus: previous,
+        exceptionKind: kind,
+        exceptionNote: note || undefined,
+      }
+    );
+    setExceptionMode(null);
   };
 
   const handleConfirmPrerequisiteAdvance = (updates: Partial<Trip>, note?: string) => {
@@ -268,9 +335,9 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     // Update prerequisite fields first
     updateTrip(trip.id, {
       ...updates,
-      deliveryNoteNumber: updates.deliveryNoteNumber || dnNumber,
-      securitySealNumber: updates.securitySealNumber || sealNumber,
-      gatePassNumber: updates.gatePassNumber || gatePassNumber,
+      deliveryNoteNumber: updates.deliveryNoteNumber || trip.deliveryNoteNumber,
+      securitySealNumber: updates.securitySealNumber || trip.securitySealNumber,
+      gatePassNumber: updates.gatePassNumber || trip.gatePassNumber,
     });
 
     if (prerequisiteTargetStatus === 'Invoiced') {
@@ -279,7 +346,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
         trip.id, 
         'Invoiced', 
         note || `Invoice #${inv.invoiceNumber} generated after prerequisite clearance.`,
-        statusUpdateLocation || undefined
+        statusUpdateLocation || undefined,
+        updates
       );
       setPrerequisiteTargetStatus(null);
       onOpenInvoice(inv.id);
@@ -288,7 +356,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
         trip.id, 
         prerequisiteTargetStatus, 
         note || statusUpdateNote || `Trip advanced to ${prerequisiteTargetStatus}`, 
-        statusUpdateLocation || undefined
+        statusUpdateLocation || undefined,
+        updates
       );
       setPrerequisiteTargetStatus(null);
     }
@@ -322,6 +391,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                   trip.status === 'Loaded' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                   trip.status === 'In Transit' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                   trip.status === 'Delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                  trip.status === 'On Hold' ? 'bg-amber-50 text-amber-900 border-amber-300' :
+                  trip.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                   'bg-purple-50 text-purple-700 border-purple-200'
                 }`}>
                   {trip.status}
@@ -343,6 +414,36 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               <FileText className="w-3.5 h-3.5 text-blue-600" />
               <span>Delivery Note</span>
             </button>
+
+            {trip.status === 'On Hold' && (
+              <button
+                onClick={() => updateTripStatus(trip.id, resumeTarget(trip), 'Resumed from hold.', statusUpdateLocation || undefined)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>Resume</span>
+              </button>
+            )}
+
+            {trip.status !== 'Invoiced' && trip.status !== 'Cancelled' && trip.status !== 'On Hold' && (
+              <button
+                onClick={() => setExceptionMode('hold')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold"
+              >
+                <PauseCircle className="w-3.5 h-3.5" />
+                <span>Hold</span>
+              </button>
+            )}
+
+            {trip.status !== 'Invoiced' && trip.status !== 'Cancelled' && (
+              <button
+                onClick={() => setExceptionMode('cancel')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                <span>Cancel</span>
+              </button>
+            )}
 
             {trip.status === 'Delivered' && (
               <button
@@ -373,13 +474,34 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
           </div>
         </div>
 
+        {(trip.status === 'On Hold' || trip.status === 'Cancelled') && (
+          <div className={`px-4 md:px-6 py-2.5 border-b text-xs flex items-start gap-2 ${
+            trip.status === 'Cancelled' ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-amber-50 border-amber-200 text-amber-950'
+          }`}>
+            {trip.status === 'Cancelled' ? <Ban className="w-4 h-4 mt-0.5 shrink-0" /> : <PauseCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+            <div>
+              <p className="font-bold">
+                {trip.status === 'Cancelled' ? 'This booking will not run.' : `On hold from ${resumeTarget(trip)}.`}
+                {exceptionKindLabel(trip.exceptionKind) ? ` ${exceptionKindLabel(trip.exceptionKind)}.` : ''}
+              </p>
+              {trip.exceptionNote && <p className="mt-0.5 text-[11px] opacity-80">{trip.exceptionNote}</p>}
+              {trip.status === 'On Hold' && (
+                <p className="mt-0.5 text-[11px] opacity-80">Resume returns the card to {resumeTarget(trip)} without asking for load or driver signatures again.</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Interactive 5-Stage Status Stepper Banner */}
         <div className="bg-slate-100/90 px-4 md:px-6 py-2.5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
           <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
             {(['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'] as TripStatus[]).map((stage, idx) => {
               const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
-              const currentIdx = stages.indexOf(trip.status);
-              const isPast = idx < currentIdx;
+              const pipelineStatus = trip.status === 'On Hold' || trip.status === 'Cancelled'
+                ? resumeTarget(trip)
+                : trip.status;
+              const currentIdx = stages.indexOf(pipelineStatus);
+              const isPast = idx < currentIdx || ((trip.status === 'On Hold' || trip.status === 'Cancelled') && idx === currentIdx);
               const isCurrent = trip.status === stage;
               const perm = canManipulateTripStatus(stage, trip.status);
               
@@ -425,7 +547,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {trip.status !== 'Invoiced' && (() => {
+            {trip.status !== 'Invoiced' && trip.status !== 'On Hold' && trip.status !== 'Cancelled' && (() => {
               const invoicePerm = canManipulateTripStatus('Invoiced', trip.status);
               return (
                 <button
@@ -486,7 +608,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
             <span className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold ${
               trip.pod 
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                : trip.status === 'Pending' || trip.status === 'Loaded'
+                : opsStatus === 'Pending' || opsStatus === 'Loaded'
                 ? 'bg-slate-100 text-slate-600 border-slate-200'
                 : 'bg-amber-50 text-amber-700 border-amber-200'
             }`}>
@@ -494,20 +616,22 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               <span>
                 {trip.pod 
                   ? `POD Verified (${trip.pod.receiverName})` 
-                  : trip.status === 'Pending' || trip.status === 'Loaded'
+                  : opsStatus === 'Pending' || opsStatus === 'Loaded'
                   ? 'POD Locked (Pre-Transit)'
                   : 'POD Pending at Destination'}
               </span>
             </span>
           </div>
 
-          <button
-            onClick={() => setPrerequisiteTargetStatus(trip.status === 'Delivered' ? 'Invoiced' : trip.status === 'In Transit' ? 'Delivered' : trip.status === 'Loaded' ? 'In Transit' : 'Loaded')}
-            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Manage Stage Prerequisites</span>
-          </button>
+          {trip.status !== 'On Hold' && trip.status !== 'Cancelled' && (
+            <button
+              onClick={() => setPrerequisiteTargetStatus(trip.status === 'Delivered' ? 'Invoiced' : trip.status === 'In Transit' ? 'Delivered' : trip.status === 'Loaded' ? 'In Transit' : 'Loaded')}
+              className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Manage Stage Prerequisites</span>
+            </button>
+          )}
         </div>
 
         {/* Navigation Tabs Header */}
@@ -606,6 +730,12 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                 </div>
               </div>
 
+              <LiveTrackingPanel
+                tripId={trip.id}
+                tracking={liveTracking.find((item) => item.tripId === trip.id || item.id === trip.id)}
+                events={fieldEvents}
+              />
+
               {/* Security Seal & Gate Pass Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-2xs">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -687,6 +817,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
           
           {/* Left Column: Route, Load, Timeline (7 cols) */}
           <div className="lg:col-span-7 space-y-5">
+
+            <TruckBanAlert hits={banHits} />
             
             {/* Route & Cargo Card */}
             <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3">
@@ -859,6 +991,30 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                         </button>
                       );
                     })}
+                    {trip.status !== 'Invoiced' && trip.status !== 'Cancelled' && trip.status !== 'On Hold' && (
+                      <button
+                        onClick={() => setExceptionMode('hold')}
+                        className="px-2.5 py-1 rounded text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                      >
+                        Hold
+                      </button>
+                    )}
+                    {trip.status !== 'Invoiced' && trip.status !== 'Cancelled' && (
+                      <button
+                        onClick={() => setExceptionMode('cancel')}
+                        className="px-2.5 py-1 rounded text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    {trip.status === 'On Hold' && (
+                      <button
+                        onClick={() => updateTripStatus(trip.id, resumeTarget(trip), 'Resumed from hold.', statusUpdateLocation || undefined)}
+                        className="px-2.5 py-1 rounded text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                      >
+                        Resume
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1076,7 +1232,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                     <span className="font-semibold text-slate-500">Notes:</span> {trip.pod.notes}
                   </div>
                 </div>
-              ) : trip.status === 'Pending' || trip.status === 'Loaded' ? (
+              ) : opsStatus === 'Pending' || opsStatus === 'Loaded' ? (
                 /* Pre-Transit Locked State: Explains why POD isn't available yet at Origin Yard */
                 <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3.5 shadow-2xs">
                   <div className="flex items-start gap-3">
@@ -1087,7 +1243,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-slate-900 text-xs">Proof of Delivery Locked</h4>
                         <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-                          {trip.status === 'Pending' ? 'Pending Loading' : 'Loaded at Origin Yard'}
+                          {opsStatus === 'Pending' ? 'Pending Loading' : 'Loaded at Origin Yard'}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 leading-relaxed">
@@ -1115,7 +1271,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                   </div>
 
                   {/* Quick Action Button to Advance to In Transit */}
-                  {canManipulateTripStatus('In Transit', trip.status).allowed && (
+                  {trip.status !== 'On Hold' && trip.status !== 'Cancelled' && canManipulateTripStatus('In Transit', trip.status).allowed && (
                     <button
                       type="button"
                       onClick={() => setPrerequisiteTargetStatus('In Transit')}
@@ -1394,6 +1550,15 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {exceptionMode && (
+        <TripExceptionModal
+          trip={trip}
+          mode={exceptionMode}
+          onClose={() => setExceptionMode(null)}
+          onConfirm={handleExceptionConfirm}
+        />
       )}
 
       {/* Status Transition Prerequisites Clearance Modal */}

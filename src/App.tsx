@@ -17,6 +17,7 @@ import { TruckRegistry } from './components/fleet/TruckRegistry';
 import { DriverRegistry } from './components/fleet/DriverRegistry';
 import { ClientRegistry } from './components/clients/ClientRegistry';
 import { RateCardRegistry } from './components/ratecards/RateCardRegistry';
+import { TruckBanRegistry } from './components/truckbans/TruckBanRegistry';
 import { OwnerDashboard } from './components/dashboard/OwnerDashboard';
 import { RbacManagementView } from './components/rbac/RbacManagementView';
 import { OrgSetupModal } from './components/onboarding/OrgSetupModal';
@@ -145,6 +146,10 @@ function MainLayout() {
 
           {activeTab === 'ratecards' && (
             <RateCardRegistry />
+          )}
+
+          {activeTab === 'truckbans' && (
+            <TruckBanRegistry />
           )}
 
           {activeTab === 'dashboard' && (

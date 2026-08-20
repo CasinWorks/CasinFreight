@@ -31,6 +31,7 @@ export const DriverRegistry: React.FC = () => {
   const [licenseRestrictions, setLicenseRestrictions] = useState('1, 2, 3 (Heavy Commercial)');
   const [licenseExpiry, setLicenseExpiry] = useState('2028-12-31');
   const [assignedTruckId, setAssignedTruckId] = useState('');
+  const [email, setEmail] = useState('');
   const [status, setStatus] = useState<DriverStatus>('Available');
   const [emergencyContact, setEmergencyContact] = useState('');
 
@@ -42,6 +43,7 @@ export const DriverRegistry: React.FC = () => {
     setLicenseRestrictions('1, 2, 3 (Heavy Trucks)');
     setLicenseExpiry('2028-12-31');
     setAssignedTruckId('');
+    setEmail('');
     setStatus('Available');
     setEmergencyContact('');
     setShowModal(true);
@@ -55,6 +57,7 @@ export const DriverRegistry: React.FC = () => {
     setLicenseRestrictions(drv.licenseRestrictions);
     setLicenseExpiry(drv.licenseExpiry);
     setAssignedTruckId(drv.assignedTruckId || '');
+    setEmail(drv.email || '');
     setStatus(drv.status);
     setEmergencyContact(drv.emergencyContact);
     setShowModal(true);
@@ -75,6 +78,7 @@ export const DriverRegistry: React.FC = () => {
         licenseRestrictions,
         licenseExpiry,
         assignedTruckId: assignedTruckId || undefined,
+        email: email.trim() || undefined,
         status,
         emergencyContact,
       });
@@ -86,6 +90,7 @@ export const DriverRegistry: React.FC = () => {
         licenseRestrictions,
         licenseExpiry,
         assignedTruckId: assignedTruckId || undefined,
+        email: email.trim() || undefined,
         status,
         emergencyContact,
       });
@@ -115,7 +120,7 @@ export const DriverRegistry: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Philippine Land Transportation Office (LTO) professional licenses, restriction codes & truck assignments.
+              Philippine LTO licenses, restriction codes, truck assignments, and driver-app login email.
             </p>
           </div>
 
@@ -287,6 +292,18 @@ export const DriverRegistry: React.FC = () => {
                   required
                   className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Driver app login email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Same email you invite under Company & Team"
+                  className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Invite this person as role Driver, then they sign in on the CasinFreight Driver phone app.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

@@ -9,3 +9,9 @@ coverage/
 .antigravity/
 .vercel/
 .vercel
+mobile/**/.dart_tool/
+mobile/**/build/
+mobile/**/.flutter-plugins
+mobile/**/.flutter-plugins-dependencies
+mobile/**/*.iml
+mobile/**/ios/Flutter/ephemeral/

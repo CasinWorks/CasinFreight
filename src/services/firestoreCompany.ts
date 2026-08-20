@@ -4,9 +4,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   setDoc,
   writeBatch,
   type DocumentData,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../lib/firebase';
 import { Company, Subscription, User } from '../types';
@@ -19,12 +21,15 @@ export type WorkspaceCollection =
   | 'drivers'
   | 'clients'
   | 'rateCards'
+  | 'truckBans'
   | 'trips'
   | 'invoices'
   | 'fuelLogs'
   | 'journalEntries'
   | 'notifications'
-  | 'auditLogs';
+  | 'auditLogs'
+  | 'liveTracking'
+  | 'fieldEvents';
 
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -113,12 +118,31 @@ export async function loadCollection<T extends { id: string }>(
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
 }
 
+export function listenCollection<T extends { id: string }>(
+  companyId: string,
+  name: WorkspaceCollection,
+  onData: (items: T[]) => void
+): Unsubscribe {
+  const colRef = collection(getFirebaseDb(), 'companies', companyId, name);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      onData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as T)));
+    },
+    (error) => {
+      console.error(`Firestore listen failed for ${name}`, error);
+    }
+  );
+}
+
 export async function replaceCollection<T extends { id: string }>(
   companyId: string,
   name: WorkspaceCollection,
-  items: T[]
+  items: T[],
+  options?: { merge?: boolean }
 ): Promise<void> {
   if (!companyId) return;
+  const merge = Boolean(options?.merge);
   const db = getFirebaseDb();
   const colRef = collection(db, 'companies', companyId, name);
   const existing = await getDocs(colRef);
@@ -145,7 +169,11 @@ export async function replaceCollection<T extends { id: string }>(
 
   for (const item of items) {
     const { password: _password, ...rest } = item as T & { password?: string };
-    batch.set(doc(colRef, item.id), stripUndefined(rest as unknown as Record<string, unknown>));
+    batch.set(
+      doc(colRef, item.id),
+      stripUndefined(rest as unknown as Record<string, unknown>),
+      { merge }
+    );
     ops += 1;
     await commitIfNeeded();
   }

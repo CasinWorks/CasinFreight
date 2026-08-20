@@ -1,5 +1,6 @@
 import React from 'react';
 import { 
+  Ban,
   LayoutDashboard, 
   KanbanSquare, 
   Calculator, 
@@ -20,6 +21,7 @@ import {
   Shield
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
+import { bansInEffectNow } from '../../lib/truckBans';
 
 export type NavTab = 
   | 'board' 
@@ -30,6 +32,7 @@ export type NavTab =
   | 'drivers' 
   | 'clients'
   | 'ratecards' 
+  | 'truckbans'
   | 'dashboard' 
   | 'rbac'
   | 'orgsetup'
@@ -48,12 +51,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileMenuOpen = false,
   onCloseMobileMenu
 }) => {
-  const { trips, invoices, trucks, roles, canAccess, currentUser, canManageBilling } = useFreight();
+  const { trips, invoices, trucks, roles, canAccess, currentUser, canManageBilling, truckBans } = useFreight();
 
   // Active counts for badges
   const activeTripsCount = trips.filter(t => t.status === 'In Transit' || t.status === 'Loaded').length;
-  const demurrageCount = trips.filter(t => t.demurrageHours > 0).length;
+  const holdCount = trips.filter(t => t.status === 'On Hold').length;
+  const cancelledCount = trips.filter(t => t.status === 'Cancelled').length;
+  const demurrageCount = trips.filter(t => t.demurrageHours > 0 && t.status !== 'Cancelled').length;
   const overweightCount = trips.filter(t => t.isOverweight).length;
+  const liveBanCount = bansInEffectNow(truckBans).length;
   const pendingInvoicesCount = invoices.filter(i => i.status === 'Draft' || i.status === 'Sent').length;
   const availableTrucksCount = trucks.filter(t => t.status === 'Available').length;
 
@@ -123,6 +129,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Tag,
       permission: 'ratecard_crud' as const,
       description: 'Port & Luzon zone tariffs',
+    },
+    {
+      id: 'truckbans' as NavTab,
+      label: 'Truck Bans & Hours',
+      icon: Ban,
+      permission: 'new_trip' as const,
+      badge: liveBanCount > 0 ? `${liveBanCount} now` : undefined,
+      badgeColor: 'bg-amber-50 text-amber-700 border border-amber-200',
+      description: 'MMDA / LGU restricted corridors',
     },
     {
       id: 'dashboard' as NavTab,
@@ -253,6 +268,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Overweight trips:</span>
               <span className={`font-mono font-medium ${overweightCount > 0 ? 'text-rose-600 font-bold' : 'text-slate-600'}`}>
                 {overweightCount} flagged
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>On hold:</span>
+              <span className={`font-mono font-medium ${holdCount > 0 ? 'text-amber-600 font-bold' : 'text-slate-600'}`}>
+                {holdCount}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Cancelled:</span>
+              <span className={`font-mono font-medium ${cancelledCount > 0 ? 'text-rose-600 font-bold' : 'text-slate-600'}`}>
+                {cancelledCount}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Truck bans now:</span>
+              <span className={`font-mono font-medium ${liveBanCount > 0 ? 'text-amber-600 font-bold' : 'text-slate-600'}`}>
+                {liveBanCount}
               </span>
             </div>
           </div>

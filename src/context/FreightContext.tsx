@@ -14,11 +14,14 @@ import {
   Truck, 
   Driver, 
   Client, 
-  RateCard, 
+  RateCard,
+  TruckBan, 
   Trip, 
   TripStatus, 
   TripAccessorial, 
-  POD, 
+  POD,
+  FieldEvent,
+  LiveTracking, 
   Invoice, 
   InvoiceStatus,
   InvoiceRetractionRequest,
@@ -44,6 +47,7 @@ import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, 
 import { initialChartOfAccounts } from '../data/mockData';
 import { getFirebaseAuth, isFirebaseConfigured } from '../lib/firebase';
 import { sendFirebaseInviteEmail } from '../lib/inviteAuth';
+import { METRO_MANILA_TRUCK_BAN_PRESETS } from '../lib/truckBans';
 import {
   CompanyDocument,
   UserProfile,
@@ -54,6 +58,7 @@ import {
   joinCompanyFromInvite,
   listCompanyDocuments,
   loadCollection,
+  listenCollection,
   replaceCollection,
   saveCompanyDocument,
   saveCompanySubscription,
@@ -64,6 +69,7 @@ import {
 import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, makeFreeSubscription } from '../config/plans';
 import { isPlatformAdminEmail } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
+import { missingSignaturesForStatus } from '../lib/stageGates';
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
   switch (type) {
@@ -129,11 +135,19 @@ interface FreightContextType {
   updateRateCard: (id: string, updates: Partial<RateCard>) => void;
   deleteRateCard: (id: string) => void;
   suggestRateCard: (originZone: string, destinationZone: string, truckType: TruckType) => RateCard | undefined;
+
+  truckBans: TruckBan[];
+  addTruckBan: (ban: Omit<TruckBan, 'id' | 'companyId' | 'createdAt'>) => TruckBan;
+  updateTruckBan: (id: string, updates: Partial<TruckBan>) => void;
+  deleteTruckBan: (id: string) => void;
+  seedMetroManilaTruckBans: () => number;
   
   trips: Trip[];
+  liveTracking: LiveTracking[];
+  fieldEvents: FieldEvent[];
   addTrip: (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>) => Trip | null;
   updateTrip: (id: string, updates: Partial<Trip>) => void;
-  updateTripStatus: (id: string, newStatus: TripStatus, note?: string, location?: string) => void;
+  updateTripStatus: (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>) => void;
   addAccessorialToTrip: (tripId: string, accessorial: Omit<TripAccessorial, 'id' | 'tripId'>) => void;
   removeAccessorialFromTrip: (tripId: string, accessorialId: string) => void;
   submitPOD: (tripId: string, podData: Omit<POD, 'id' | 'tripId' | 'signedAt'>) => void;
@@ -359,6 +373,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const persistReadyRef = useRef(false);
   const seedingRef = useRef(false);
   const companyCreatedByRef = useRef('');
+  const tripsDirtyRef = useRef(false);
+  const workspaceUnsubsRef = useRef<Array<() => void>>([]);
   const [company, setCompany] = useState<Company>(BLANK_COMPANY);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<RbacRole[]>([]);
@@ -371,7 +387,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [rateCards, setRateCards] = useState<RateCard[]>([]);
+  const [truckBans, setTruckBans] = useState<TruckBan[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [liveTracking, setLiveTracking] = useState<LiveTracking[]>([]);
+  const [fieldEvents, setFieldEvents] = useState<FieldEvent[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
@@ -388,6 +407,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const resetWorkspace = () => {
     persistReadyRef.current = false;
     companyCreatedByRef.current = '';
+    tripsDirtyRef.current = false;
+    workspaceUnsubsRef.current.forEach((unsub) => unsub());
+    workspaceUnsubsRef.current = [];
     setCompany(BLANK_COMPANY);
     setUsers([]);
     setRoles([]);
@@ -398,7 +420,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDrivers([]);
     setClients([]);
     setRateCards([]);
+    setTruckBans([]);
     setTrips([]);
+    setLiveTracking([]);
+    setFieldEvents([]);
     setInvoices([]);
     setNotifications([]);
     setFuelLogs([]);
@@ -424,6 +449,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       loadedDrivers,
       loadedClients,
       loadedRateCards,
+      loadedTruckBans,
       loadedTrips,
       loadedInvoices,
       loadedFuelLogs,
@@ -437,6 +463,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       loadCollection<Driver>(companyId, 'drivers'),
       loadCollection<Client>(companyId, 'clients'),
       loadCollection<RateCard>(companyId, 'rateCards'),
+      loadCollection<TruckBan>(companyId, 'truckBans'),
       loadCollection<Trip>(companyId, 'trips'),
       loadCollection<Invoice>(companyId, 'invoices'),
       loadCollection<FuelLog>(companyId, 'fuelLogs'),
@@ -482,6 +509,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDrivers(loadedDrivers);
     setClients(loadedClients);
     setRateCards(loadedRateCards);
+    setTruckBans(loadedTruckBans);
     setTrips(loadedTrips);
     setInvoices(loadedInvoices);
     setFuelLogs(loadedFuelLogs);
@@ -497,6 +525,23 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsOnboardingOpen(!onboardingComplete);
     persistReadyRef.current = true;
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || !company.id) return;
+    workspaceUnsubsRef.current.forEach((unsub) => unsub());
+    workspaceUnsubsRef.current = [
+      listenCollection<LiveTracking>(company.id, 'liveTracking', setLiveTracking),
+      listenCollection<FieldEvent>(company.id, 'fieldEvents', setFieldEvents),
+      listenCollection<Trip>(company.id, 'trips', (remote) => {
+        if (tripsDirtyRef.current) return;
+        setTrips(remote);
+      }),
+    ];
+    return () => {
+      workspaceUnsubsRef.current.forEach((unsub) => unsub());
+      workspaceUnsubsRef.current = [];
+    };
+  }, [isAuthenticated, company.id]);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -608,7 +653,20 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
-      replaceCollection(company.id, 'trips', trips).catch(console.error);
+      replaceCollection(company.id, 'truckBans', truckBans).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [truckBans, company.id]);
+
+  useEffect(() => {
+    if (!persistReadyRef.current || !company.id) return;
+    if (!tripsDirtyRef.current) return;
+    const timer = setTimeout(() => {
+      replaceCollection(company.id, 'trips', trips, { merge: true })
+        .then(() => {
+          tripsDirtyRef.current = false;
+        })
+        .catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
   }, [trips, company.id]);
@@ -1261,8 +1319,44 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  const addTruckBan = (banData: Omit<TruckBan, 'id' | 'companyId' | 'createdAt'>): TruckBan => {
+    const newBan: TruckBan = {
+      ...banData,
+      id: `tb-${Date.now().toString(36)}`,
+      companyId: company.id,
+      createdAt: new Date().toISOString(),
+    };
+    setTruckBans((prev) => [newBan, ...prev]);
+    return newBan;
+  };
+
+  const updateTruckBan = (id: string, updates: Partial<TruckBan>) => {
+    setTruckBans((prev) => prev.map((ban) => (ban.id === id ? { ...ban, ...updates } : ban)));
+  };
+
+  const deleteTruckBan = (id: string) => {
+    setTruckBans((prev) => prev.filter((ban) => ban.id !== id));
+  };
+
+  const seedMetroManilaTruckBans = (): number => {
+    const existing = new Set(truckBans.map((ban) => ban.name.toLowerCase()));
+    const now = Date.now();
+    const next = METRO_MANILA_TRUCK_BAN_PRESETS
+      .filter((preset) => !existing.has(preset.name.toLowerCase()))
+      .map((preset, index) => ({
+        ...preset,
+        id: `tb-preset-${now.toString(36)}-${index}`,
+        companyId: company.id,
+        createdAt: new Date().toISOString(),
+      }));
+    if (next.length === 0) return 0;
+    setTruckBans((prev) => [...next, ...prev]);
+    return next.length;
+  };
+
   const addTrip = (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>): Trip | null => {
     if (requireUpgrade(!canAddTransaction)) return null;
+    tripsDirtyRef.current = true;
     const trk = trucks.find(t => t.id === tripData.truckId);
     const netCap = trk ? trk.netPayloadKg : 10000;
     const isOverweight = tripData.cargoWeightKg > netCap;
@@ -1367,6 +1461,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateTrip = (id: string, updates: Partial<Trip>) => {
+    tripsDirtyRef.current = true;
     setTrips(prev => prev.map(trip => {
       if (trip.id === id) {
         return { ...trip, ...updates };
@@ -1375,9 +1470,18 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
   };
 
-  const updateTripStatus = (id: string, newStatus: TripStatus, note?: string, location?: string) => {
+  const updateTripStatus = (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>) => {
     setTrips(prev => prev.map(trip => {
       if (trip.id === id) {
+        const previousStatus = trip.status;
+        const merged = { ...trip, ...extras };
+        const blocked = missingSignaturesForStatus(merged, newStatus);
+        if (blocked) {
+          window.alert(blocked);
+          return trip;
+        }
+        tripsDirtyRef.current = true;
+
         const newEvent = {
           id: `tl-${Date.now()}`,
           tripId: id,
@@ -1389,10 +1493,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
 
         const updatedTrip = {
-          ...trip,
+          ...merged,
           status: newStatus,
-          actualDelivery: (newStatus === 'Delivered' || newStatus === 'Invoiced') ? (trip.actualDelivery || new Date().toISOString()) : trip.actualDelivery,
-          timeline: [...trip.timeline, newEvent],
+          actualDelivery: (newStatus === 'Delivered' || newStatus === 'Invoiced') ? (merged.actualDelivery || new Date().toISOString()) : merged.actualDelivery,
+          timeline: [...merged.timeline, newEvent],
         };
 
         // If delivered or invoiced, free the truck
@@ -1463,6 +1567,23 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (trk) {
             updateTruck(trk.id, { status: 'On Trip', currentTripId: id });
           }
+        } else if (newStatus === 'Cancelled') {
+          const trk = trucks.find(t => t.id === trip.truckId);
+          if (trk) {
+            updateTruck(trk.id, { status: 'Available', currentTripId: undefined });
+          }
+        } else if (newStatus === 'On Hold') {
+          const trk = trucks.find(t => t.id === trip.truckId);
+          if (trk) {
+            const kind = merged.exceptionKind;
+            if (kind === 'breakdown' || kind === 'accident') {
+              updateTruck(trk.id, { status: 'Maintenance', currentTripId: id });
+            } else if (previousStatus === 'In Transit') {
+              updateTruck(trk.id, { status: 'On Trip', currentTripId: id });
+            } else {
+              updateTruck(trk.id, { status: 'Available', currentTripId: undefined });
+            }
+          }
         }
 
         // Emit notification for status change
@@ -1473,7 +1594,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           title: `${trip.tripNumber}: Status updated to "${newStatus}"`,
           message: `${trk ? trk.plateNumber : 'Truck'} (${trip.originZone} ➔ ${trip.destinationZone}) is now marked as ${newStatus}.${note ? ` Note: ${note}` : ''}`,
           isRead: false,
-          severity: newStatus === 'Delivered' ? 'success' : newStatus === 'In Transit' ? 'info' : 'info',
+          severity: newStatus === 'Delivered' ? 'success' : newStatus === 'Cancelled' || newStatus === 'On Hold' ? 'warning' : 'info',
           tripId: id,
           actionType: 'view_trip',
           actionLabel: 'View Trip Dispatch',
@@ -1491,6 +1612,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const addAccessorialToTrip = (tripId: string, accessorial: Omit<TripAccessorial, 'id' | 'tripId'>) => {
+    tripsDirtyRef.current = true;
     setTrips(prev => prev.map(trip => {
       if (trip.id === tripId) {
         const newAcc: TripAccessorial = {
@@ -1508,6 +1630,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const removeAccessorialFromTrip = (tripId: string, accessorialId: string) => {
+    tripsDirtyRef.current = true;
     setTrips(prev => prev.map(trip => {
       if (trip.id === tripId) {
         return {
@@ -1520,6 +1643,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const submitPOD = (tripId: string, podData: Omit<POD, 'id' | 'tripId' | 'signedAt'>) => {
+    tripsDirtyRef.current = true;
     const pod: POD = {
       ...podData,
       id: `pod-${Date.now()}`,
@@ -2418,6 +2542,14 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         requiredPerm = 'trips.status_invoiced';
         label = 'audit transport deliverables and issue official VAT billing invoices';
         break;
+      case 'On Hold':
+        requiredPerm = 'trips.edit';
+        label = 'put shipments on hold';
+        break;
+      case 'Cancelled':
+        requiredPerm = 'trips.edit';
+        label = 'cancel shipments';
+        break;
       default:
         requiredPerm = 'trips.edit';
         label = 'manipulate shipment status';
@@ -2822,7 +2954,14 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updateRateCard,
       deleteRateCard,
       suggestRateCard,
+      truckBans,
+      addTruckBan,
+      updateTruckBan,
+      deleteTruckBan,
+      seedMetroManilaTruckBans,
       trips,
+      liveTracking,
+      fieldEvents,
       addTrip,
       updateTrip,
       updateTripStatus,

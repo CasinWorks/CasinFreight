@@ -144,7 +144,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
                 <span>Active Shipments</span>
               </div>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                {trips.filter((t) => t.status !== 'Pending').length} dispatched
+                {trips.filter((t) => t.status !== 'Pending' && t.status !== 'Cancelled' && t.status !== 'On Hold').length} dispatched
               </span>
             </div>
             <div className="text-3xl font-black text-slate-900 font-mono mt-1">

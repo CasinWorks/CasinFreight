@@ -129,6 +129,9 @@ export interface Driver {
   licenseRestrictions: string; // e.g. "1, 2, 3" or "Heavy Articulated (8)"
   licenseExpiry: string;
   assignedTruckId?: string;
+  /** Same email as the Company & Team invite so the driver app can log in. */
+  email?: string;
+  userId?: string;
   status: DriverStatus;
   approvalStatus?: 'Approved' | 'Pending' | 'Requires Review';
   clearanceNote?: string;
@@ -187,6 +190,29 @@ export interface RateCard {
   effectiveDate: string;
 }
 
+export type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+
+export interface TruckBanWindow {
+  startTime: string; // HH:mm, Asia/Manila
+  endTime: string;
+}
+
+export interface TruckBan {
+  id: string;
+  companyId: string;
+  name: string;
+  area: string;
+  cityOrLgu: string;
+  roadsOrZone: string;
+  days: Weekday[];
+  windows: TruckBanWindow[];
+  appliesToTruckTypes: TruckType[] | 'ALL';
+  exemptionNote?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export type AccessorialType = 
   | 'fuel_surcharge'
   | 'demurrage'
@@ -208,7 +234,42 @@ export interface TripAccessorial {
   approved: boolean;
 }
 
-export type TripStatus = 'Pending' | 'Loaded' | 'In Transit' | 'Delivered' | 'Invoiced';
+export type TripStatus = 'Pending' | 'Loaded' | 'In Transit' | 'Delivered' | 'Invoiced' | 'On Hold' | 'Cancelled';
+
+export type TripExceptionKind =
+  | 'client_hold'
+  | 'waiting_documents'
+  | 'weather'
+  | 'port_congestion'
+  | 'breakdown'
+  | 'accident'
+  | 'refused_delivery'
+  | 'checkpoint'
+  | 'shipper_cancelled'
+  | 'no_cargo'
+  | 'duplicate'
+  | 'other';
+
+export const HOLD_EXCEPTION_KINDS: { id: TripExceptionKind; label: string }[] = [
+  { id: 'client_hold', label: 'Client asked to hold' },
+  { id: 'waiting_documents', label: 'Waiting documents / gate pass' },
+  { id: 'weather', label: 'Weather / calamity' },
+  { id: 'port_congestion', label: 'Port or road congestion' },
+  { id: 'breakdown', label: 'Truck breakdown' },
+  { id: 'accident', label: 'Accident or incident' },
+  { id: 'refused_delivery', label: 'Consignee closed or refused' },
+  { id: 'checkpoint', label: 'Checkpoint / LTO / overweight hold' },
+  { id: 'other', label: 'Other operational problem' },
+];
+
+export const CANCEL_EXCEPTION_KINDS: { id: TripExceptionKind; label: string }[] = [
+  { id: 'shipper_cancelled', label: 'Shipper cancelled the booking' },
+  { id: 'no_cargo', label: 'No cargo at origin' },
+  { id: 'duplicate', label: 'Duplicate or wrong booking' },
+  { id: 'refused_delivery', label: 'Delivery refused, cannot recover' },
+  { id: 'breakdown', label: 'Unit down, trip cannot continue' },
+  { id: 'other', label: 'Other' },
+];
 
 export interface TripTimelineEvent {
   id: string;
@@ -318,6 +379,55 @@ export interface Trip {
   pod?: POD;
   notes?: string;
   createdAt: string;
+  holdFromStatus?: TripStatus;
+  exceptionKind?: TripExceptionKind;
+  exceptionNote?: string;
+}
+
+export type FieldEventKind =
+  | 'dispatch_signature'
+  | 'pod_signature'
+  | 'seal_photo'
+  | 'parcel_photo'
+  | 'container_photo'
+  | 'pickup_geo'
+  | 'delivery_geo'
+  | 'gps_disabled'
+  | 'gps_mocked';
+
+export interface FieldEvent {
+  id: string;
+  companyId: string;
+  tripId: string;
+  kind: FieldEventKind;
+  createdAt: string;
+  actorUid?: string;
+  actorName?: string;
+  lat?: number;
+  lng?: number;
+  accuracyM?: number;
+  photoUrl?: string;
+  signatureDataUrl?: string;
+  note?: string;
+  gpsEnabled: boolean;
+  isMocked?: boolean;
+}
+
+export interface LiveTracking {
+  id: string;
+  tripId: string;
+  companyId: string;
+  truckId?: string;
+  driverId?: string;
+  lat: number;
+  lng: number;
+  heading?: number;
+  speedKmh?: number;
+  accuracyM?: number;
+  updatedAt: string;
+  gpsEnabled: boolean;
+  isMocked: boolean;
+  gpsDisabledAt?: string;
 }
 
 export interface InvoiceLineItem {

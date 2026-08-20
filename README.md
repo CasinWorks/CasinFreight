@@ -13,7 +13,8 @@ CasinFreight is a React + Vite operations console built for PH freight companies
 | Invoices | Itemized bills, accessorials, payment reconciliation, retraction workflow |
 | General Ledger | Chart of accounts, journal vouchers, trial balance |
 | Fleet | Truck registry, fuel logs (km/L), Petron / Shell / Caltex fleet cards |
-| Drivers | LTO licenses, restrictions, approval status |
+| Drivers | LTO licenses, restrictions, approval status, driver-app email |
+| Driver app | Flutter phone app: live GPS, seal/parcel photos, dispatch & POD signatures |
 | Rate Cards | Origin/destination zone tariffs for Luzon and ports |
 | Owner Dashboard | Profitability, efficiency, and driver leaderboard |
 | RBAC | Custom roles and permission matrix |
