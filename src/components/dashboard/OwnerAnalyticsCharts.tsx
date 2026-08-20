@@ -96,177 +96,171 @@ interface FleetUtilizationData {
   totalDistanceKm: number;
 }
 
+function monthBuckets(count: number) {
+  const now = new Date();
+  return Array.from({ length: count }, (_, index) => {
+    const offset = count - 1 - index;
+    const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
+    return {
+      start,
+      end,
+      month: start.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }),
+      shortMonth: start.toLocaleDateString('en-PH', { month: 'short' }),
+    };
+  });
+}
+
+function inMonth(value: string | undefined, start: Date, end: Date) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return date >= start && date < end;
+}
+
+function tripStamp(trip: Trip) {
+  return trip.createdAt || trip.scheduledPickup;
+}
+
 export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
   trips,
   trucks,
   invoices
 }) => {
   const hasLiveData = trips.length > 0 || invoices.length > 0;
-  const [activeTab, setActiveTab] = useState<ChartTab>(hasLiveData ? 'ALL' : 'REVENUE');
+  const [activeTab, setActiveTab] = useState<ChartTab>('ALL');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('6M');
+  const monthCount = timeFilter === '12M' ? 12 : 6;
+  const fleetSize = trucks.length;
 
-  // 1. Calculate Monthly Revenue Data (Historical 2026 data + live invoices/trips)
   const monthlyRevenueData = useMemo<MonthlyRevenueData[]>(() => {
-    // Base monthly historical revenue for 2026 leading up to current August
-    const baseMonths = [
-      { month: 'January 2026', shortMonth: 'Jan', base: 142000, acc: 16500, collected: 158500, trips: 11, growth: 0 },
-      { month: 'February 2026', shortMonth: 'Feb', base: 158000, acc: 19200, collected: 177200, trips: 13, growth: 11.8 },
-      { month: 'March 2026', shortMonth: 'Mar', base: 184000, acc: 22800, collected: 206800, trips: 15, growth: 16.7 },
-      { month: 'April 2026', shortMonth: 'Apr', base: 176000, acc: 21400, collected: 197400, trips: 14, growth: -4.5 },
-      { month: 'May 2026', shortMonth: 'May', base: 215000, acc: 28600, collected: 243600, trips: 17, growth: 23.4 },
-      { month: 'June 2026', shortMonth: 'Jun', base: 228000, acc: 31200, collected: 259200, trips: 18, growth: 6.4 },
-      { month: 'July 2026', shortMonth: 'Jul', base: 245000, acc: 34500, collected: 279500, trips: 19, growth: 7.8 },
-      { month: 'August 2026', shortMonth: 'Aug', base: 272000, acc: 38400, collected: 225000, trips: 22, growth: 11.1 }
-    ];
-
-    // Factor in live invoice data for August if present
-    const liveInvoiceSum = invoices.reduce((acc, inv) => acc + inv.grandTotalPhp, 0);
-    if (liveInvoiceSum > 0) {
-      const augIndex = baseMonths.length - 1;
-      baseMonths[augIndex].base = Math.max(baseMonths[augIndex].base, Math.round(liveInvoiceSum * 0.85));
-      baseMonths[augIndex].acc = Math.max(baseMonths[augIndex].acc, Math.round(liveInvoiceSum * 0.15));
-    }
-
-    const filtered = timeFilter === '6M' ? baseMonths.slice(-6) : timeFilter === '12M' ? baseMonths : baseMonths;
-
-    return filtered.map(m => {
-      const totalRevenue = m.base + m.acc;
-      // Operating cost: ~64% (Fuel 38%, Tolls 8%, Driver incentive 14%, Maintenance reserve 4%)
+    const buckets = monthBuckets(monthCount);
+    return buckets.map((bucket, index) => {
+      const monthTrips = trips.filter((trip) => inMonth(tripStamp(trip), bucket.start, bucket.end));
+      const monthInvoices = invoices.filter((invoice) => inMonth(invoice.issueDate, bucket.start, bucket.end));
+      const baseRevenue = monthInvoices.length
+        ? monthInvoices.reduce((sum, invoice) => sum + (invoice.subtotalPhp || invoice.grandTotalPhp), 0)
+        : monthTrips.reduce((sum, trip) => sum + trip.baseRatePhp, 0);
+      const accessorialsRevenue = monthTrips.reduce(
+        (sum, trip) => sum + trip.accessorials.reduce((inner, item) => inner + item.amountPhp, 0),
+        0
+      );
+      const totalRevenue = monthInvoices.length
+        ? monthInvoices.reduce((sum, invoice) => sum + invoice.grandTotalPhp, 0)
+        : baseRevenue + accessorialsRevenue;
+      const collectedRevenue = monthInvoices
+        .filter((invoice) => invoice.status === 'Paid')
+        .reduce((sum, invoice) => sum + invoice.grandTotalPhp, 0);
       const estimatedCost = totalRevenue * 0.64;
       const netProfit = totalRevenue - estimatedCost;
-      const marginPercent = Math.round((netProfit / totalRevenue) * 100);
-      const avgRevenuePerTrip = Math.round(totalRevenue / m.trips);
-
-      return {
-        month: m.month,
-        shortMonth: m.shortMonth,
-        baseRevenue: m.base,
-        accessorialsRevenue: m.acc,
-        totalRevenue,
-        collectedRevenue: m.collected,
-        netProfit: Math.round(netProfit),
-        marginPercent,
-        tripsCount: m.trips,
-        avgRevenuePerTrip,
-        momGrowthPercent: m.growth
-      };
-    });
-  }, [invoices, timeFilter]);
-
-  // 2. Calculate Monthly Average Load per Trip Data
-  const monthlyLoadData = useMemo<MonthlyLoadData[]>(() => {
-    const rawLoads = [
-      { month: 'January 2026', shortMonth: 'Jan', avgKg: 13200, maxCapTons: 16.5, trips: 11, heavy: 3, opt: 9 },
-      { month: 'February 2026', shortMonth: 'Feb', avgKg: 13800, maxCapTons: 16.5, trips: 13, heavy: 4, opt: 11 },
-      { month: 'March 2026', shortMonth: 'Mar', avgKg: 14400, maxCapTons: 16.8, trips: 15, heavy: 5, opt: 13 },
-      { month: 'April 2026', shortMonth: 'Apr', avgKg: 14100, maxCapTons: 16.8, trips: 14, heavy: 4, opt: 12 },
-      { month: 'May 2026', shortMonth: 'May', avgKg: 14900, maxCapTons: 17.2, trips: 17, heavy: 6, opt: 15 },
-      { month: 'June 2026', shortMonth: 'Jun', avgKg: 15200, maxCapTons: 17.2, trips: 18, heavy: 7, opt: 16 },
-      { month: 'July 2026', shortMonth: 'Jul', avgKg: 15600, maxCapTons: 17.5, trips: 19, heavy: 8, opt: 17 },
-      { month: 'August 2026', shortMonth: 'Aug', avgKg: 16100, maxCapTons: 17.5, trips: 22, heavy: 9, opt: 20 }
-    ];
-
-    // Compute live trip cargo weight average
-    if (trips.length > 0) {
-      const liveAvgKg = trips.reduce((sum, t) => sum + (t.cargoWeightKg || 12000), 0) / trips.length;
-      const augIndex = rawLoads.length - 1;
-      rawLoads[augIndex].avgKg = Math.round(liveAvgKg);
-    }
-
-    const filtered = timeFilter === '6M' ? rawLoads.slice(-6) : rawLoads;
-
-    return filtered.map(item => {
-      const avgLoadTons = Math.round((item.avgKg / 1000) * 10) / 10;
-      const payloadUtilization = Math.round((avgLoadTons / item.maxCapTons) * 100);
-
-      return {
-        month: item.month,
-        shortMonth: item.shortMonth,
-        avgLoadKg: item.avgKg,
-        avgLoadTons,
-        maxCapacityTons: item.maxCapTons,
-        payloadUtilization,
-        tripsCount: item.trips,
-        heavyTonnageTrips: item.heavy,
-        optimalLoadedTrips: item.opt
-      };
-    });
-  }, [trips, timeFilter]);
-
-  // 3. Truck Category Load & Capacity Breakdown
-  const truckCategoryLoadData = useMemo<TruckCategoryLoadData[]>(() => {
-    return [
-      {
-        category: '10-Wheeler Wingvan',
-        truckCount: trucks.filter(t => t.type.toLowerCase().includes('10-wheeler') || t.type.toLowerCase().includes('wingvan')).length || 1,
-        avgPayloadTons: 14.8,
-        maxPayloadTons: 15.5,
-        utilizationPercent: 95.5,
-        tripsCount: 42,
-        color: '#3B82F6' // Blue
-      },
-      {
-        category: '40ft Container Chassis',
-        truckCount: trucks.filter(t => t.type.toLowerCase().includes('container') || t.type.toLowerCase().includes('40ft')).length || 1,
-        avgPayloadTons: 26.4,
-        maxPayloadTons: 27.8,
-        utilizationPercent: 95.0,
-        tripsCount: 28,
-        color: '#8B5CF6' // Purple
-      },
-      {
-        category: '6-Wheeler Closed/Dropside',
-        truckCount: trucks.filter(t => t.type.toLowerCase().includes('6-wheeler')).length || 2,
-        avgPayloadTons: 5.1,
-        maxPayloadTons: 5.8,
-        utilizationPercent: 87.9,
-        tripsCount: 36,
-        color: '#10B981' // Emerald
-      },
-      {
-        category: '4-Wheeler City Van',
-        truckCount: trucks.filter(t => t.type.toLowerCase().includes('4-wheeler')).length || 1,
-        avgPayloadTons: 1.7,
-        maxPayloadTons: 2.3,
-        utilizationPercent: 73.9,
-        tripsCount: 19,
-        color: '#F59E0B' // Amber
+      const tripsCount = monthTrips.length;
+      const previous = index > 0 ? buckets[index - 1] : null;
+      let momGrowthPercent = 0;
+      if (previous) {
+        const prevTrips = trips.filter((trip) => inMonth(tripStamp(trip), previous.start, previous.end));
+        const prevInvoices = invoices.filter((invoice) => inMonth(invoice.issueDate, previous.start, previous.end));
+        const prevTotal = prevInvoices.length
+          ? prevInvoices.reduce((sum, invoice) => sum + invoice.grandTotalPhp, 0)
+          : prevTrips.reduce((sum, trip) => sum + trip.baseRatePhp, 0);
+        if (prevTotal > 0) momGrowthPercent = Math.round(((totalRevenue - prevTotal) / prevTotal) * 1000) / 10;
       }
-    ];
-  }, [trucks]);
+      return {
+        month: bucket.month,
+        shortMonth: bucket.shortMonth,
+        baseRevenue: Math.round(baseRevenue),
+        accessorialsRevenue: Math.round(accessorialsRevenue),
+        totalRevenue: Math.round(totalRevenue),
+        collectedRevenue: Math.round(collectedRevenue),
+        netProfit: Math.round(netProfit),
+        marginPercent: totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0,
+        tripsCount,
+        avgRevenuePerTrip: tripsCount > 0 ? Math.round(totalRevenue / tripsCount) : 0,
+        momGrowthPercent,
+      };
+    });
+  }, [invoices, monthCount, trips]);
 
-  // 4. Fleet Utilization Rates Data
+  const monthlyLoadData = useMemo<MonthlyLoadData[]>(() => {
+    const buckets = monthBuckets(monthCount);
+    const fleetCapKg = trucks.reduce((sum, truck) => sum + (truck.netPayloadKg || 0), 0);
+    const maxCapacityTons = trucks.length > 0 ? Math.round((fleetCapKg / trucks.length / 1000) * 10) / 10 : 0;
+    return buckets.map((bucket) => {
+      const monthTrips = trips.filter((trip) => inMonth(tripStamp(trip), bucket.start, bucket.end));
+      const tripsCount = monthTrips.length;
+      const avgKg = tripsCount > 0
+        ? Math.round(monthTrips.reduce((sum, trip) => sum + (trip.cargoWeightKg || 0), 0) / tripsCount)
+        : 0;
+      const avgLoadTons = Math.round((avgKg / 1000) * 10) / 10;
+      const payloadUtilization = maxCapacityTons > 0 ? Math.round((avgLoadTons / maxCapacityTons) * 100) : 0;
+      return {
+        month: bucket.month,
+        shortMonth: bucket.shortMonth,
+        avgLoadKg: avgKg,
+        avgLoadTons,
+        maxCapacityTons,
+        payloadUtilization,
+        tripsCount,
+        heavyTonnageTrips: monthTrips.filter((trip) => trip.cargoWeightKg >= 20000).length,
+        optimalLoadedTrips: monthTrips.filter((trip) => !trip.isOverweight && trip.cargoWeightKg > 0).length,
+      };
+    });
+  }, [monthCount, trips, trucks]);
+
+  const truckCategoryLoadData = useMemo<TruckCategoryLoadData[]>(() => {
+    const colors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#0EA5E9'];
+    const groups = new Map<string, TruckType[]>();
+    trucks.forEach((truck) => {
+      const key = truck.type || 'Unspecified';
+      groups.set(key, [...(groups.get(key) || []), truck]);
+    });
+    return Array.from(groups.entries()).map(([category, group], index) => {
+      const ids = new Set(group.map((truck) => truck.id));
+      const groupTrips = trips.filter((trip) => ids.has(trip.truckId));
+      const maxPayloadTons = group.reduce((sum, truck) => sum + (truck.netPayloadKg || 0), 0) / Math.max(group.length, 1) / 1000;
+      const avgPayloadTons = groupTrips.length
+        ? groupTrips.reduce((sum, trip) => sum + (trip.cargoWeightKg || 0), 0) / groupTrips.length / 1000
+        : 0;
+      return {
+        category,
+        truckCount: group.length,
+        avgPayloadTons: Math.round(avgPayloadTons * 10) / 10,
+        maxPayloadTons: Math.round(maxPayloadTons * 10) / 10,
+        utilizationPercent: maxPayloadTons > 0 ? Math.round((avgPayloadTons / maxPayloadTons) * 100) : 0,
+        tripsCount: groupTrips.length,
+        color: colors[index % colors.length],
+      };
+    });
+  }, [trips, trucks]);
+
   const fleetUtilizationData = useMemo<FleetUtilizationData[]>(() => {
-    const rawUtil = [
-      { month: 'January 2026', shortMonth: 'Jan', rate: 74, activeAvg: 3.7, idleAvg: 0.9, maint: 8.2, km: 11400 },
-      { month: 'February 2026', shortMonth: 'Feb', rate: 77, activeAvg: 3.9, idleAvg: 0.7, maint: 7.5, km: 12200 },
-      { month: 'March 2026', shortMonth: 'Mar', rate: 82, activeAvg: 4.1, idleAvg: 0.5, maint: 6.8, km: 14100 },
-      { month: 'April 2026', shortMonth: 'Apr', rate: 79, activeAvg: 4.0, idleAvg: 0.6, maint: 7.2, km: 13500 },
-      { month: 'May 2026', shortMonth: 'May', rate: 85, activeAvg: 4.3, idleAvg: 0.4, maint: 5.9, km: 15800 },
-      { month: 'June 2026', shortMonth: 'Jun', rate: 88, activeAvg: 4.4, idleAvg: 0.3, maint: 5.5, km: 16900 },
-      { month: 'July 2026', shortMonth: 'Jul', rate: 86, activeAvg: 4.3, idleAvg: 0.4, maint: 6.2, km: 16400 },
-      { month: 'August 2026', shortMonth: 'Aug', rate: 89, activeAvg: 4.5, idleAvg: 0.2, maint: 5.0, km: 18200 }
-    ];
-
-    const filtered = timeFilter === '6M' ? rawUtil.slice(-6) : rawUtil;
-
-    return filtered.map(item => ({
-      month: item.month,
-      shortMonth: item.shortMonth,
-      utilizationRate: item.rate,
-      targetBenchmark: 75,
-      activeTrucksAvg: item.activeAvg,
-      idleTrucksAvg: item.idleAvg,
-      maintenanceHoursRate: item.maint,
-      totalDistanceKm: item.km
-    }));
-  }, [timeFilter]);
+    const buckets = monthBuckets(monthCount);
+    return buckets.map((bucket) => {
+      const monthTrips = trips.filter((trip) => inMonth(tripStamp(trip), bucket.start, bucket.end));
+      const activeIds = new Set(monthTrips.map((trip) => trip.truckId).filter(Boolean));
+      const activeTrucksAvg = activeIds.size;
+      const idleTrucksAvg = Math.max(0, fleetSize - activeTrucksAvg);
+      const utilizationRate = fleetSize > 0 ? Math.round((activeTrucksAvg / fleetSize) * 100) : 0;
+      const maintenanceHoursRate = fleetSize > 0
+        ? Math.round((trucks.filter((truck) => truck.status === 'Maintenance').length / fleetSize) * 100)
+        : 0;
+      return {
+        month: bucket.month,
+        shortMonth: bucket.shortMonth,
+        utilizationRate,
+        targetBenchmark: 75,
+        activeTrucksAvg,
+        idleTrucksAvg,
+        maintenanceHoursRate,
+        totalDistanceKm: 0,
+      };
+    });
+  }, [fleetSize, monthCount, trips, trucks]);
 
   // Aggregate Key Performance Metrics
   const currentMonthRevenue = monthlyRevenueData[monthlyRevenueData.length - 1];
   const totalPeriodRevenue = monthlyRevenueData.reduce((sum, m) => sum + m.totalRevenue, 0);
   const totalPeriodProfit = monthlyRevenueData.reduce((sum, m) => sum + m.netProfit, 0);
-  const avgPeriodMargin = Math.round((totalPeriodProfit / totalPeriodRevenue) * 100) || 36;
+  const avgPeriodMargin = totalPeriodRevenue > 0 ? Math.round((totalPeriodProfit / totalPeriodRevenue) * 100) : 0;
 
   const currentMonthLoad = monthlyLoadData[monthlyLoadData.length - 1];
   const avgPeriodLoadTons = (
@@ -370,7 +364,7 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
 
           <div className="pt-1.5 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
             <span>Optimal Loads: {data.optimalLoadedTrips}/{data.tripsCount}</span>
-            <span className="text-emerald-400 font-semibold">Zero Deadhead</span>
+            <span className="text-emerald-400 font-semibold">{data.tripsCount} trips</span>
           </div>
         </div>
       );
@@ -397,7 +391,7 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
           <div className="space-y-1.5 font-mono">
             <div className="flex items-center justify-between">
               <span className="text-slate-400">Fleet in Service:</span>
-              <span className="font-bold text-emerald-400">{data.activeTrucksAvg} / 5.0 Trucks</span>
+              <span className="font-bold text-emerald-400">{data.activeTrucksAvg} / {trucks.length || 0} Trucks</span>
             </div>
 
             <div className="flex items-center justify-between">
@@ -439,7 +433,7 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : 'bg-blue-50 text-blue-700 border-blue-200'
                 }`}>
-                  <Sparkles className="w-3 h-3" /> {hasLiveData ? 'Recharts Live' : 'Executive sample'}
+                  <Sparkles className="w-3 h-3" /> Live fleet data
                 </span>
               </div>
               <p className="text-xs text-slate-500">
@@ -540,15 +534,15 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
               Monthly Revenue
             </span>
             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-              <ArrowUpRight className="w-3 h-3" /> +{currentMonthRevenue?.momGrowthPercent || 11.1}%
+              <ArrowUpRight className="w-3 h-3" /> {currentMonthRevenue && currentMonthRevenue.momGrowthPercent >= 0 ? '+' : ''}{currentMonthRevenue?.momGrowthPercent || 0}%
             </span>
           </div>
           <div className="mt-1.5 flex items-baseline justify-between">
             <div className="text-xl font-black font-mono text-slate-900">
-              ₱{(currentMonthRevenue?.totalRevenue || 310400).toLocaleString()}
+              ₱{(currentMonthRevenue?.totalRevenue || 0).toLocaleString()}
             </div>
             <span className="text-[10px] text-slate-500 font-mono">
-              {currentMonthRevenue?.shortMonth} 2026
+              {currentMonthRevenue?.shortMonth || '—'}
             </span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
@@ -572,20 +566,20 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
               Avg Load per Trip
             </span>
             <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">
-              {currentMonthLoad?.payloadUtilization || 92}% Payload
+              {currentMonthLoad?.payloadUtilization || 0}% Payload
             </span>
           </div>
           <div className="mt-1.5 flex items-baseline justify-between">
             <div className="text-xl font-black font-mono text-slate-900">
-              {currentMonthLoad?.avgLoadTons || 16.1} <span className="text-xs font-semibold text-slate-500">Metric Tons</span>
+              {currentMonthLoad?.avgLoadTons || 0} <span className="text-xs font-semibold text-slate-500">Metric Tons</span>
             </div>
             <span className="text-[10px] text-slate-500 font-mono">
-              {(currentMonthLoad?.avgLoadKg || 16100).toLocaleString()} kg
+              {(currentMonthLoad?.avgLoadKg || 0).toLocaleString()} kg
             </span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>Rated Fleet Cap: <strong className="text-slate-700 font-mono">{currentMonthLoad?.maxCapacityTons || 17.5} MT</strong></span>
-            <span className="text-amber-600 font-semibold">{currentMonthLoad?.heavyTonnageTrips || 9} Heavy Linehauls</span>
+            <span>Rated Fleet Cap: <strong className="text-slate-700 font-mono">{currentMonthLoad?.maxCapacityTons || 0} MT</strong></span>
+            <span className="text-amber-600 font-semibold">{currentMonthLoad?.heavyTonnageTrips || 0} Heavy Linehauls</span>
           </div>
         </div>
 
@@ -604,20 +598,20 @@ export const OwnerAnalyticsCharts: React.FC<OwnerAnalyticsChartsProps> = ({
               Fleet Utilization
             </span>
             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">
-              ✓ &gt;75% Target
+              {currentFleetUtil && currentFleetUtil.utilizationRate >= 75 ? '✓ >75% Target' : 'Below 75% target'}
             </span>
           </div>
           <div className="mt-1.5 flex items-baseline justify-between">
             <div className="text-xl font-black font-mono text-emerald-600">
-              {currentFleetUtil?.utilizationRate || 89}%
+              {currentFleetUtil?.utilizationRate || 0}%
             </div>
             <span className="text-[10px] text-slate-500 font-mono">
-              {currentFleetUtil?.activeTrucksAvg || 4.5}/{trucks.length || 5} Trucks
+              {currentFleetUtil?.activeTrucksAvg || 0}/{trucks.length || 0} Trucks
             </span>
           </div>
           <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>Monthly Distance: <strong className="text-slate-700 font-mono">{currentFleetUtil?.totalDistanceKm.toLocaleString()} km</strong></span>
-            <span className="text-emerald-600 font-semibold">5% Downtime</span>
+            <span>Monthly Distance: <strong className="text-slate-700 font-mono">{(currentFleetUtil?.totalDistanceKm || 0).toLocaleString()} km</strong></span>
+            <span className="text-emerald-600 font-semibold">{currentFleetUtil?.maintenanceHoursRate || 0}% downtime</span>
           </div>
         </div>
 

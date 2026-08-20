@@ -67,15 +67,14 @@ export const DriverLeaderboard: React.FC<DriverLeaderboardProps> = ({
       // Base timeliness rate with realistic operational baseline (92-99%)
       const calculatedRate = completedTrips > 0 
         ? Math.round((onTimeTrips / completedTrips) * 100)
-        : (driver.rating >= 4.9 ? 98 : driver.rating >= 4.8 ? 95 : 92);
+        : 0;
 
       const totalRevenue = driverTrips.reduce((acc, t) => {
         const accFees = t.accessorials ? t.accessorials.reduce((sum, a) => sum + a.amountPhp, 0) : 0;
         return acc + t.baseRatePhp + accFees;
-      }, 0) || (driver.totalTripsCompleted * 14500);
+      }, 0);
 
-      const totalTonnage = driverTrips.reduce((acc, t) => acc + (t.cargoWeightKg || 6000), 0) / 1000 
-        || (driver.totalTripsCompleted * 8.2);
+      const totalTonnage = driverTrips.reduce((acc, t) => acc + (t.cargoWeightKg || 0), 0) / 1000;
 
       // Derive specialized achievement badge
       let badge = 'Linehaul Captain';
@@ -94,15 +93,15 @@ export const DriverLeaderboard: React.FC<DriverLeaderboardProps> = ({
       return {
         driver,
         assignedTruck,
-        totalTrips: driver.totalTripsCompleted + driverTrips.length,
-        completedTrips: driver.totalTripsCompleted || completedTrips,
+        totalTrips: driverTrips.length,
+        completedTrips,
         inTransitTrips,
-        onTimeDeliveries: Math.round(((driver.totalTripsCompleted || 10) * calculatedRate) / 100),
+        onTimeDeliveries: onTimeTrips,
         timelinessRate: Math.min(100, calculatedRate),
         totalRevenueGenerated: Math.round(totalRevenue),
         totalTonnageHauled: Math.round(totalTonnage),
-        rating: driver.rating || 4.8,
-        safetyScore: driver.rating >= 4.9 ? 99 : 96,
+        rating: driver.rating || 0,
+        safetyScore: driver.rating ? (driver.rating >= 4.9 ? 99 : Math.round(driver.rating * 20)) : 0,
         badge,
         badgeColor,
       };
@@ -127,7 +126,7 @@ export const DriverLeaderboard: React.FC<DriverLeaderboardProps> = ({
 
   // Overall Team Average Timeliness
   const teamAverageTimeliness = useMemo(() => {
-    if (leaderboardData.length === 0) return 96;
+    if (leaderboardData.length === 0) return 0;
     const total = leaderboardData.reduce((acc, curr) => acc + curr.timelinessRate, 0);
     return Math.round(total / leaderboardData.length);
   }, [leaderboardData]);

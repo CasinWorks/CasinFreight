@@ -37,7 +37,23 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
   
   const totalRevenue = invoices.reduce((sum, inv) => sum + inv.grandTotalPhp, 0);
   const totalCollected = invoices.filter(i => i.status === 'Paid').reduce((sum, inv) => sum + inv.grandTotalPhp, 0);
-  const totalReceivables = invoices.filter(i => i.status !== 'Paid').reduce((sum, inv) => sum + inv.grandTotalPhp, 0);
+  const accessorialRecovered = trips.reduce(
+    (sum, trip) => sum + trip.accessorials.reduce((inner, item) => inner + item.amountPhp, 0),
+    0
+  );
+  const unpaidInvoices = invoices.filter((invoice) => invoice.status !== 'Paid' && invoice.status !== 'Voided');
+  const agingBuckets = unpaidInvoices.reduce(
+    (acc, invoice) => {
+      const issued = new Date(invoice.issueDate).getTime();
+      const days = Number.isNaN(issued) ? 0 : Math.floor((Date.now() - issued) / 86400000);
+      if (days <= 15) acc.current += invoice.grandTotalPhp;
+      else if (days <= 30) acc.standard += invoice.grandTotalPhp;
+      else acc.overdue += invoice.grandTotalPhp;
+      return acc;
+    },
+    { current: 0, standard: 0, overdue: 0 }
+  );
+  const totalReceivables = agingBuckets.current + agingBuckets.standard + agingBuckets.overdue;
 
   const activeTrucks = trucks.filter(t => t.status === 'On Trip' || t.status === 'Loading').length;
   const fleetUtilizationRate = trucks.length > 0 ? Math.round((activeTrucks / trucks.length) * 100) : 0;
@@ -60,7 +76,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
       revenue,
       estimatedCost,
       netProfit,
-      marginPercent: revenue > 0 ? Math.round((netProfit / revenue) * 100) : 32,
+      marginPercent: revenue > 0 ? Math.round((netProfit / revenue) * 100) : 0,
     };
   }).sort((a, b) => b.revenue - a.revenue);
 
@@ -89,8 +105,8 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               {hasLiveData
-                ? 'Financial health, truck unit economics, fleet utilization and freight margin breakdown.'
-                : 'No bookings yet — showing the executive analytics baseline. Figures update when trips and invoices are recorded.'}
+                ? 'Figures come from this company’s trips, invoices, and trucks.'
+                : 'No bookings yet. Cards stay at zero until you record trips and invoices.'}
             </p>
           </div>
 
@@ -119,7 +135,6 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
 
       <div className="p-4 md:p-6 space-y-6">
         
-        {hasLiveData && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Active Shipments */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4.5 space-y-2 relative overflow-hidden shadow-2xs">
@@ -129,7 +144,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
                 <span>Active Shipments</span>
               </div>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                +4 dispatched
+                {trips.filter((t) => t.status !== 'Pending').length} dispatched
               </span>
             </div>
             <div className="text-3xl font-black text-slate-900 font-mono mt-1">
@@ -148,7 +163,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
                 <span>Gross Revenue (PHP)</span>
               </div>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5">
-                <ArrowUpRight className="w-3 h-3" /> +14.2%
+                {invoices.filter((invoice) => invoice.status === 'Paid').length} paid
               </span>
             </div>
             <div className="text-3xl font-black text-slate-900 font-mono mt-1">
@@ -174,7 +189,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
               {delayedOrDemurrageCount}
             </div>
             <div className="text-[11px] text-slate-500">
-              Recovered ₱26.9k via accessorial charges
+              Recovered ₱{accessorialRecovered.toLocaleString()} via accessorial charges
             </div>
           </div>
 
@@ -197,7 +212,6 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
             </div>
           </div>
         </div>
-        )}
 
         {/* Executive Recharts Section: Monthly Revenue, Avg Load per Trip & Fleet Utilization Rates */}
         <OwnerAnalyticsCharts trips={trips} trucks={trucks} invoices={invoices} />
@@ -273,7 +287,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
                     <span className="text-slate-700">Current (0 - 15 Days):</span>
                   </div>
-                  <span className="font-mono font-bold text-slate-900">₱{(totalReceivables * 0.65).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="font-mono font-bold text-slate-900">₱{agingBuckets.current.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
 
                 <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200">
@@ -281,7 +295,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
                     <span className="w-2 h-2 rounded-full bg-amber-500" />
                     <span className="text-slate-700">16 - 30 Days (Standard Terms):</span>
                   </div>
-                  <span className="font-mono font-bold text-amber-700">₱{(totalReceivables * 0.35).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="font-mono font-bold text-amber-700">₱{agingBuckets.standard.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
 
                 <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200">
@@ -289,7 +303,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
                     <span className="w-2 h-2 rounded-full bg-slate-400" />
                     <span className="text-slate-500">31+ Days (Overdue):</span>
                   </div>
-                  <span className="font-mono text-slate-500">₱0.00</span>
+                  <span className="font-mono text-slate-500">₱{agingBuckets.overdue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
               </div>
             </div>

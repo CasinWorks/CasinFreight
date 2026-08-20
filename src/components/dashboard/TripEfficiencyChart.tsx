@@ -49,14 +49,14 @@ export const TripEfficiencyChart: React.FC<TripEfficiencyChartProps> = ({ trips,
 
   // Generate continuous timeline data for the past N days up to today
   const chartData = useMemo<DailyMetrics[]>(() => {
-    const totalFleetCount = trucks.length || 5;
+    const totalFleetCount = trucks.length;
     const data: DailyMetrics[] = [];
-    const today = new Date('2026-08-16T12:00:00'); // Consistent reference date matching app context
+    const today = new Date();
 
     for (let i = daysSpan - 1; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const dateString = d.toISOString().split('T')[0]; // YYYY-MM-DD
+      const dateString = d.toISOString().split('T')[0];
       
       const dayLabel = d.toLocaleDateString('en-US', { 
         weekday: daysSpan > 14 ? undefined : 'short', 
@@ -64,49 +64,21 @@ export const TripEfficiencyChart: React.FC<TripEfficiencyChartProps> = ({ trips,
         day: 'numeric' 
       });
 
-      // Find real matching trips for this date
       const matchedTrips = trips.filter(t => {
         const tripDate = (t.scheduledPickup || t.createdAt || '').split('T')[0];
         return tripDate === dateString;
       });
 
-      // Deterministic simulation based on day of week to provide rich operational realism alongside real trips
-      const dayOfWeek = d.getDay(); // 0 is Sun, 6 is Sat
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      
-      // Base calculation
-      let volume = matchedTrips.length;
-      let activeTrucksSet = new Set<string>(matchedTrips.map(t => t.truckId).filter(Boolean));
-      let completedCount = matchedTrips.filter(t => t.status === 'Delivered' || t.status === 'Invoiced').length;
-      
-      // If we don't have enough mock bookings recorded on historical days, provide realistic freight operation pattern
-      if (volume === 0) {
-        if (isWeekend) {
-          // Weekend freight operations in PH (typically 2-3 trucks on port/inter-island duty)
-          volume = dayOfWeek === 6 ? 3 : 2;
-          const assignedCount = Math.min(volume, totalFleetCount);
-          trucks.slice(0, assignedCount).forEach(t => activeTrucksSet.add(t.id));
-          completedCount = volume;
-        } else {
-          // Weekday linehaul volume (4-6 loads across SLEX, NLEX, Subic, Batangas)
-          const baseVolume = 4 + ((i * 3 + dayOfWeek) % 3); // 4, 5, or 6
-          volume = Math.min(baseVolume, 7);
-          const activeCount = Math.min(totalFleetCount, Math.max(3, volume - 1));
-          trucks.slice(0, activeCount).forEach(t => activeTrucksSet.add(t.id));
-          completedCount = Math.max(1, volume - (i === 0 ? 2 : 1)); // Some ongoing today
-        }
-      } else {
-        // Boost realistic utilization if small mock data
-        if (activeTrucksSet.size < volume && activeTrucksSet.size < totalFleetCount) {
-          trucks.slice(0, Math.min(volume, totalFleetCount)).forEach(t => activeTrucksSet.add(t.id));
-        }
-      }
-
-      const activeTrucks = Math.min(activeTrucksSet.size || Math.min(volume, totalFleetCount), totalFleetCount);
-      const utilizationRate = Math.min(100, Math.round((activeTrucks / totalFleetCount) * 100));
-      const onTimeDeliveries = Math.max(1, completedCount - (i % 4 === 0 ? 1 : 0));
-      const onTimeRate = completedCount > 0 ? Math.round((onTimeDeliveries / completedCount) * 100) : 100;
-      const totalTonnage = matchedTrips.reduce((acc, t) => acc + (t.cargoWeightKg || 4500), 0) / 1000 || (volume * 4.8);
+      const volume = matchedTrips.length;
+      const activeTrucksSet = new Set<string>(matchedTrips.map(t => t.truckId).filter(Boolean));
+      const completedCount = matchedTrips.filter(t => t.status === 'Delivered' || t.status === 'Invoiced').length;
+      const activeTrucks = totalFleetCount > 0 ? Math.min(activeTrucksSet.size, totalFleetCount) : 0;
+      const utilizationRate = totalFleetCount > 0 ? Math.min(100, Math.round((activeTrucks / totalFleetCount) * 100)) : 0;
+      const onTimeDeliveries = matchedTrips.filter(t =>
+        (t.status === 'Delivered' || t.status === 'Invoiced') && t.demurrageHours === 0
+      ).length;
+      const onTimeRate = completedCount > 0 ? Math.round((onTimeDeliveries / completedCount) * 100) : 0;
+      const totalTonnage = matchedTrips.reduce((acc, t) => acc + (t.cargoWeightKg || 0), 0) / 1000;
 
       data.push({
         dayLabel,
