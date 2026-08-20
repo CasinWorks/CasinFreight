@@ -54,10 +54,10 @@ export async function createPayMongoCheckoutSession(
           line_items: [
             {
               currency: 'PHP',
-              amount: 49900,
-              name: 'CasinFreight Founding (Monthly)',
+              amount: 1000,
+              name: 'CasinFreight Founding (₱10 live test)',
               quantity: 1,
-              description: 'Unlimited trucks, team seats, roles, and trip transactions.',
+              description: 'Temporary ₱10 live test charge. Founding unlocks after PayMongo confirms payment.',
             },
           ],
           description: `CasinFreight Founding ${input.customerEmail || input.userId} ${Date.now()}`,
@@ -93,7 +93,8 @@ export async function createPayMongoCheckoutSession(
   return { checkoutUrl, checkoutSessionId };
 }
 
-const FOUNDING_AMOUNT_CENTAVOS = 49900;
+const FOUNDING_AMOUNT_CENTAVOS = 1000;
+const FOUNDING_PRICE_PHP = 10;
 const RECENT_PAYMENT_WINDOW_SECONDS = 60 * 60 * 48;
 
 export interface FindPaidFoundingLookup {
@@ -115,7 +116,7 @@ type PaymongoPayload = {
 };
 
 function amountIsFounding(amount: number): boolean {
-  return amount === FOUNDING_AMOUNT_CENTAVOS || amount === 499;
+  return amount === FOUNDING_AMOUNT_CENTAVOS || amount === FOUNDING_PRICE_PHP;
 }
 
 function descriptionLooksFounding(description?: string): boolean {
@@ -387,7 +388,7 @@ export async function runPayMongoAction(
       status: 200,
       data: paid
         ? { paid: true, ...paid }
-        : { paid: false, error: 'No paid ₱499 Founding payment was found on this PayMongo account.' },
+        : { paid: false, error: 'No paid ₱10 Founding payment was found on this PayMongo account.' },
     };
   }
 

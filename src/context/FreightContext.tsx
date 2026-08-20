@@ -2608,7 +2608,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const confirmFoundingPayment = async (paymentId?: string) => {
     const unlocked = await tryUnlockFounding(paymentId);
     if (!unlocked) {
-      throw new Error('PayMongo has not confirmed a ₱499 Founding payment yet.');
+      throw new Error('PayMongo has not confirmed a ₱10 Founding payment yet.');
     }
   };
 
@@ -2779,7 +2779,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isUpgradeModalOpen,
       setIsUpgradeModalOpen,
       isBillingProviderReady: isPayMongoWired(),
-      isPayMongoTestMode: import.meta.env.VITE_PAYMONGO_TEST_MODE === 'true' || import.meta.env.VITE_PAYMONGO_USE_API === 'true',
+      isPayMongoTestMode: import.meta.env.VITE_PAYMONGO_TEST_MODE === 'true',
       createPayMongoCheckout,
       activateFoundingPlan,
       subscribeToFoundingPlan,

@@ -46,9 +46,13 @@ export const UpgradeModal: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">
               Free includes every module — 1 truck, 1 account, and 10 transactions. Each Subscribe opens a new PayMongo checkout. Founding unlocks automatically after that checkout is paid.
             </p>
-            {isPayMongoTestMode && (
+            {isPayMongoTestMode ? (
               <p className="text-[11px] font-semibold text-amber-700 mt-1.5">
                 PayMongo test mode — no real charges. Keep this tab open. QRPh stays on PayMongo; this tab upgrades when the new checkout is paid.
+              </p>
+            ) : (
+              <p className="text-[11px] font-semibold text-amber-800 mt-1.5">
+                Live PayMongo — this is a real ₱10 test charge. Keep this tab open until Founding unlocks.
               </p>
             )}
             {isWaitingForPayMongo && (
@@ -116,7 +120,7 @@ export const UpgradeModal: React.FC = () => {
                         ? 'Waiting for PayMongo…'
                         : isSubmitting
                           ? 'Opening checkout…'
-                          : 'Pay ₱499/mo with PayMongo'}
+                          : `Pay ₱${plan.price_php}/mo with PayMongo`}
                     {!isCurrent && !waiting && <Zap className="w-3.5 h-3.5" />}
                   </button>
                 ) : (
