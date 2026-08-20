@@ -308,6 +308,17 @@ function asPayMongoMethod(value?: string): PayMongoPaymentMethod {
   return 'qrph';
 }
 
+async function readPayMongoJson(response: Response): Promise<Record<string, unknown>> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      `PayMongo is unavailable (${response.status}). Add PAYMONGO_SECRET_KEY (sk_test_...) on Vercel, then Redeploy.`
+    );
+  }
+}
+
 function isPayMongoWired(): boolean {
   return true;
 }
@@ -2513,11 +2524,12 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const cancelUrl = `${window.location.origin}/?billing=cancel`;
     sessionStorage.setItem(PENDING_FOUNDING_KEY, planId);
 
-    const endpoint = import.meta.env.VITE_PAYMONGO_CHECKOUT_URL || '/api/paymongo/checkout';
+    const endpoint = import.meta.env.VITE_PAYMONGO_CHECKOUT_URL || '/api/paymongo';
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        action: 'checkout',
         planId,
         companyId: company.id,
         userId: currentUserId,
@@ -2527,10 +2539,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         cancelUrl,
       }),
     });
-    const data = await response.json() as { checkoutUrl?: string; checkoutSessionId?: string; error?: string };
+    const data = await readPayMongoJson(response) as { checkoutUrl?: string; checkoutSessionId?: string; error?: string };
     if (!response.ok || !data.checkoutUrl || !data.checkoutSessionId) {
       sessionStorage.removeItem(PENDING_FOUNDING_KEY);
-      throw new Error(data.error || 'PayMongo checkout is not available. Set PAYMONGO_SECRET_KEY and VITE_PAYMONGO_USE_API=true on Vercel.');
+      throw new Error(data.error || 'PayMongo checkout is not available. Set PAYMONGO_SECRET_KEY on Vercel, then Redeploy.');
     }
     sessionStorage.setItem(`${PENDING_FOUNDING_KEY}_session`, data.checkoutSessionId);
     return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
@@ -2566,10 +2578,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const lookup = (paymentId || '').trim();
       const checkoutSessionId = sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '';
-      const response = await fetch('/api/paymongo/verify', {
+      const response = await fetch('/api/paymongo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'verify',
           paymentId: lookup,
           referenceNumber: lookup && !lookup.startsWith('pay_') && !lookup.startsWith('cs_') ? lookup : '',
           checkoutSessionId,
@@ -2577,7 +2590,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           sessionOnly: checkoutSessionId ? 'true' : 'false',
         }),
       });
-      const data = await response.json() as { paid?: boolean; paymentId?: string; method?: string; error?: string };
+      const data = await readPayMongoJson(response) as { paid?: boolean; paymentId?: string; method?: string; error?: string };
       if (!response.ok || !data.paid || !data.paymentId) return false;
       if (consumedPaymentIds().includes(data.paymentId)) return false;
       activateFoundingPlan(asPayMongoMethod(data.method), data.paymentId);

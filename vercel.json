@@ -2,6 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/paymongo/checkout", "destination": "/api/paymongo" },
+    { "source": "/api/paymongo/verify", "destination": "/api/paymongo" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ]
 }
