@@ -166,9 +166,9 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
         ? trip.driverSignoff
         : makeSignoff(driverName, 'Driver', driverSig);
       logNote = `Released by ${dispatcherName} and received for hauling by ${driverName}. DN #${deliveryNoteNumber}, Gate Pass #${gatePassNumber}.`;
-    } else if (targetStatus === 'Delivered' || targetStatus === 'Invoiced') {
+    } else if (targetStatus === 'Delivered') {
       if (isPlaceholderSignatory(receiverName)) {
-        window.alert('Enter the consignee’s real full name. Do not leave the demo placeholder.');
+        window.alert('Enter the consignee’s real full name.');
         return;
       }
       const sigDataUrl = consigneePadRef.current?.read(trip.pod?.signatureDataUrl);
@@ -192,6 +192,12 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
 
       updates.pod = pod;
       logNote = `POD signed by ${pod.receiverName} (${pod.receiverRole}) - ${conditionStatus}. Delivery Note #${deliveryNoteNumber} fulfilled.`;
+    } else if (targetStatus === 'Invoiced') {
+      if (!trip.pod?.signatureDataUrl) {
+        window.alert('This trip has no signed POD yet. Mark it Delivered and capture the consignee signature first.');
+        return;
+      }
+      logNote = `Billing audit passed. Invoice generated against signed DN #${trip.deliveryNoteNumber || deliveryNoteNumber} and POD by ${trip.pod.receiverName}.`;
     }
 
     onConfirmAdvance(updates, logNote);
@@ -221,7 +227,9 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 </span>
               </h3>
               <p className="text-[11px] text-slate-500">
-                Collect and verify required logistics documentation before changing shipment status.
+                {targetStatus === 'Invoiced'
+                  ? 'Signatures are already captured. This step only creates the invoice.'
+                  : 'Collect the signatures and documents required for this stage.'}
               </p>
             </div>
           </div>
@@ -268,7 +276,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
               <div className="flex items-center gap-2">
                 <UserCheck className="w-4 h-4 text-emerald-600" />
                 <span className="text-xs font-semibold">
-                  Authorized Operator: <span className="font-bold">{currentUser.name}</span> ({currentUser.role})
+                  Authorized Operator: <span className="font-bold">{currentUser.name?.trim() || currentUser.email || 'Signed-in user'}</span> ({currentUser.role})
                 </span>
               </div>
               <span className="text-[10px] bg-emerald-100/80 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
@@ -306,7 +314,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
           </div>
 
           {/* Target: LOADED Prerequisites */}
-          {(targetStatus === 'Loaded' || targetStatus === 'In Transit' || targetStatus === 'Delivered' || targetStatus === 'Invoiced') && (
+          {(targetStatus === 'Loaded' || targetStatus === 'In Transit') && (
             <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3 shadow-2xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-bold text-slate-900">
@@ -361,7 +369,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
           )}
 
           {/* Target: IN TRANSIT Prerequisites (Delivery Note & Gate Pass) */}
-          {(targetStatus === 'In Transit' || targetStatus === 'Delivered' || targetStatus === 'Invoiced') && (
+          {targetStatus === 'In Transit' && (
             <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3 shadow-2xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-bold text-slate-900">
@@ -424,8 +432,8 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
             </div>
           )}
 
-          {/* Target: DELIVERED / INVOICED Prerequisites (POD & Receiving Sign-off) */}
-          {(targetStatus === 'Delivered' || targetStatus === 'Invoiced') && (
+          {/* Target: DELIVERED Prerequisites (POD & Receiving Sign-off) */}
+          {targetStatus === 'Delivered' && (
             <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/30 space-y-3 shadow-2xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-bold text-slate-900">
@@ -540,16 +548,38 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
 
           {/* Target: INVOICED Prerequisites */}
           {targetStatus === 'Invoiced' && (
-            <div className="border border-purple-200 rounded-xl p-4 bg-purple-50/40 space-y-2 shadow-2xs">
+            <div className="border border-purple-200 rounded-xl p-4 bg-purple-50/40 space-y-3 shadow-2xs">
               <div className="flex items-center gap-2 font-bold text-purple-950">
                 <div className="w-5 h-5 rounded-full bg-purple-200 text-purple-800 flex items-center justify-center text-[10px] font-bold">
-                  4
+                  1
                 </div>
                 <span>Billing Audit & Invoice Generation</span>
               </div>
               <p className="text-[11px] text-purple-900">
-                All transport deliverables (Waybill, Delivery Note, and Signed POD) are validated. Generating client billing invoice with 12% VAT and itemized freight accessorials.
+                Signatures are already on the delivery note. This step only generates the client invoice (12% VAT and approved accessorials).
               </p>
+              {trip.pod?.signatureDataUrl ? (
+                <div className="bg-white border border-purple-100 rounded-lg p-3 space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase text-slate-500">Signed POD on file</div>
+                  <div className="font-bold text-slate-900">{trip.pod.receiverName}</div>
+                  <div className="text-[11px] text-slate-500">{trip.pod.receiverRole} • {trip.pod.conditionStatus}</div>
+                  <img src={trip.pod.signatureDataUrl} alt="POD signature" className="max-h-14 object-contain" />
+                </div>
+              ) : (
+                <p className="text-[11px] text-rose-700 font-semibold">
+                  No signed POD yet. Go back and mark the trip Delivered first.
+                </p>
+              )}
+              {onOpenDeliveryNote && (
+                <button
+                  type="button"
+                  onClick={onOpenDeliveryNote}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>View signed delivery note</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -587,7 +617,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition-all active:scale-95"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Validate Prerequisites & Advance to {targetStatus}</span>
+                <span>{targetStatus === 'Invoiced' ? 'Generate invoice' : `Advance to ${targetStatus}`}</span>
               </button>
             )}
           </div>
