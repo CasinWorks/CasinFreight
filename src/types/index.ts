@@ -220,6 +220,13 @@ export interface TripTimelineEvent {
   location?: string;
 }
 
+export interface CustodySignoff {
+  name: string;
+  role?: string;
+  signedAt: string;
+  signatureDataUrl: string;
+}
+
 export interface POD {
   id: string;
   tripId: string;
@@ -306,6 +313,8 @@ export interface Trip {
   securitySealNumber?: string;
   gatePassNumber?: string;
   prerequisites?: DeliveryPrerequisites;
+  dispatcherSignoff?: CustodySignoff;
+  driverSignoff?: CustodySignoff;
   pod?: POD;
   notes?: string;
   createdAt: string;

@@ -10,7 +10,6 @@ import {
   MapPin, 
   ArrowRight, 
   FileSignature, 
-  PenTool, 
   Check, 
   Sparkles, 
   ExternalLink,
@@ -22,9 +21,10 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { canvasPointFromEvent, isPlaceholderSignatory, readSignatureDataUrl } from '../../lib/podSignoff';
+import { isPlaceholderSignatory } from '../../lib/podSignoff';
 import { uploadCompanyFile } from '../../lib/uploads';
-import { Trip, TripStatus, Truck as TruckType, Driver, Client, POD } from '../../types';
+import { Trip, TripStatus, Truck as TruckType, Driver, Client, POD, CustodySignoff } from '../../types';
+import { SignaturePad, SignaturePadHandle } from './SignaturePad';
 
 interface StatusPrerequisiteModalProps {
   isOpen: boolean;
@@ -81,10 +81,9 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     trip.pod?.notes || 'Goods verified intact. Seals inspected and matching delivery note manifest.'
   );
 
-  // Signature canvas
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(Boolean(trip.pod?.signatureDataUrl));
+  const dispatcherPadRef = useRef<SignaturePadHandle>(null);
+  const driverPadRef = useRef<SignaturePadHandle>(null);
+  const consigneePadRef = useRef<SignaturePadHandle>(null);
   const [podPhotos, setPodPhotos] = useState<string[]>(trip.pod?.photoUrls || []);
   const [isUploadingPodPhoto, setIsUploadingPodPhoto] = useState(false);
   const podFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -105,49 +104,15 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
 
   if (!isOpen) return null;
 
-  // Signature handlers
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  const dispatcherName = currentUser.name?.trim() || currentUser.email || 'Dispatcher';
+  const driverName = driver?.name?.trim() || '';
 
-    setIsDrawing(true);
-    const { x, y } = canvasPointFromEvent(canvas, e);
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const { x, y } = canvasPointFromEvent(canvas, e);
-
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    setHasSignature(true);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-  };
+  const makeSignoff = (name: string, role: string | undefined, signatureDataUrl: string): CustodySignoff => ({
+    name,
+    role,
+    signedAt: new Date().toISOString(),
+    signatureDataUrl,
+  });
 
   const handleConfirm = () => {
     const updates: Partial<Trip> = {
@@ -170,15 +135,43 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     let logNote = `Prerequisites validated for ${targetStatus}.`;
 
     if (targetStatus === 'Loaded') {
-      logNote = `Cargo verified loaded with security seal #${securitySealNumber}. Tare weight confirmed.`;
+      const dispatcherSig = dispatcherPadRef.current?.read(trip.dispatcherSignoff?.signatureDataUrl);
+      if (!dispatcherSig) {
+        window.alert('The dispatcher must sign the release pad before cargo can be marked Loaded.');
+        return;
+      }
+      updates.dispatcherSignoff = trip.dispatcherSignoff?.signatureDataUrl === dispatcherSig
+        ? trip.dispatcherSignoff
+        : makeSignoff(dispatcherName, currentUser.role, dispatcherSig);
+      logNote = `Cargo loaded and released by ${dispatcherName}. Seal #${securitySealNumber}.`;
     } else if (targetStatus === 'In Transit') {
-      logNote = `Delivery Note #${deliveryNoteNumber} & Gate Pass #${gatePassNumber} cleared for departure.`;
+      if (!driverName) {
+        window.alert('Assign a driver before releasing this shipment for hauling.');
+        return;
+      }
+      const dispatcherSig = dispatcherPadRef.current?.read(trip.dispatcherSignoff?.signatureDataUrl);
+      if (!dispatcherSig) {
+        window.alert('The dispatcher must sign the release pad before this cargo can go In Transit.');
+        return;
+      }
+      const driverSig = driverPadRef.current?.read(trip.driverSignoff?.signatureDataUrl);
+      if (!driverSig) {
+        window.alert('Hand the device to the driver. They must sign that they received the cargo for hauling.');
+        return;
+      }
+      updates.dispatcherSignoff = trip.dispatcherSignoff?.signatureDataUrl === dispatcherSig
+        ? trip.dispatcherSignoff
+        : makeSignoff(dispatcherName, currentUser.role, dispatcherSig);
+      updates.driverSignoff = trip.driverSignoff?.signatureDataUrl === driverSig
+        ? trip.driverSignoff
+        : makeSignoff(driverName, 'Driver', driverSig);
+      logNote = `Released by ${dispatcherName} and received for hauling by ${driverName}. DN #${deliveryNoteNumber}, Gate Pass #${gatePassNumber}.`;
     } else if (targetStatus === 'Delivered' || targetStatus === 'Invoiced') {
       if (isPlaceholderSignatory(receiverName)) {
         window.alert('Enter the consignee’s real full name. Do not leave the demo placeholder.');
         return;
       }
-      const sigDataUrl = readSignatureDataUrl(canvasRef.current, trip.pod?.signatureDataUrl);
+      const sigDataUrl = consigneePadRef.current?.read(trip.pod?.signatureDataUrl);
       if (!sigDataUrl) {
         window.alert('The receiving officer must sign the pad before this trip can be marked delivered.');
         return;
@@ -355,6 +348,15 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                   </label>
                 </div>
               </div>
+
+              {(targetStatus === 'Loaded' || targetStatus === 'In Transit') && (
+                <SignaturePad
+                  ref={dispatcherPadRef}
+                  label={`Dispatcher release signature * — ${dispatcherName}`}
+                  hint="Sign to confirm cargo is sealed, weighed, and released from the origin yard."
+                  existingUrl={trip.dispatcherSignoff?.signatureDataUrl}
+                />
+              )}
             </div>
           )}
 
@@ -408,6 +410,17 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                   />
                 </div>
               </div>
+
+              {targetStatus === 'In Transit' && (
+                <SignaturePad
+                  ref={driverPadRef}
+                  label={`Driver hauling signature * — ${driverName || 'No driver assigned'}`}
+                  hint={driver?.licenseNo
+                    ? `Hand the phone or tablet to ${driverName} (Lic: ${driver.licenseNo}) to sign that they received the sealed cargo.`
+                    : 'Assign a driver, then hand them this pad to sign for the cargo.'}
+                  existingUrl={trip.driverSignoff?.signatureDataUrl}
+                />
+              )}
             </div>
           )}
 
@@ -469,43 +482,12 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 </div>
               </div>
 
-              {/* Signature Canvas Pad */}
-              <div className="pt-1">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                    <PenTool className="w-3 h-3 text-blue-600" />
-                    <span>Digital Signature of Receiving Officer *</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={clearSignature}
-                    className="text-[10px] font-semibold text-slate-500 hover:text-red-600"
-                  >
-                    Clear signature
-                  </button>
-                </div>
-
-                <div className="border border-slate-300 rounded-lg bg-white overflow-hidden shadow-inner relative">
-                  <canvas
-                    ref={canvasRef}
-                    width={560}
-                    height={100}
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    className="w-full h-24 cursor-crosshair bg-white touch-none"
-                  />
-                  {!hasSignature && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
-                      Sign or draw receiver signature here
-                    </div>
-                  )}
-                </div>
-              </div>
+              <SignaturePad
+                ref={consigneePadRef}
+                label="Digital signature of receiving officer *"
+                hint="The consignee or warehouse receiver signs that cargo arrived in the condition noted above."
+                existingUrl={trip.pod?.signatureDataUrl}
+              />
 
               <div>
                 <div className="flex items-center justify-between mb-1">

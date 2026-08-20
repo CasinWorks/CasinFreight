@@ -56,9 +56,13 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
   const dispatched = actorFromTimeline(trip, ['Loaded', 'In Transit']) || actorFromTimeline(trip, ['Pending']);
   const hauled = actorFromTimeline(trip, ['In Transit', 'Loaded']);
   const received = actorFromTimeline(trip, ['Delivered', 'Invoiced']);
-  const dispatcherName = dispatched?.name || 'Awaiting dispatcher';
-  const dispatchDate = formatPhStamp(dispatched?.at) || issuedDate;
-  const driverHandoffDate = formatPhStamp(hauled?.at);
+  const dispatcherName =
+    displaySignatory(trip.dispatcherSignoff?.name) ||
+    dispatched?.name ||
+    'Awaiting dispatcher signature';
+  const dispatchDate = formatPhStamp(trip.dispatcherSignoff?.signedAt) || formatPhStamp(dispatched?.at) || issuedDate;
+  const driverHandoffDate = formatPhStamp(trip.driverSignoff?.signedAt) || formatPhStamp(hauled?.at);
+  const driverSignName = displaySignatory(trip.driverSignoff?.name) || displaySignatory(driver?.name) || 'Awaiting driver signature';
   const consigneeName =
     displaySignatory(trip.pod?.receiverName) ||
     received?.name ||
@@ -298,14 +302,18 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
             <SignOffBox
               step="1. Dispatched / Released by"
               name={dispatcherName}
-              caption="Processed in CasinFreight by this dispatcher"
+              caption={trip.dispatcherSignoff ? 'Dispatcher signed this release' : 'Cargo cannot leave the yard until the dispatcher signs'}
               dateLabel={dispatchDate}
+              signatureUrl={trip.dispatcherSignoff?.signatureDataUrl}
+              verified={Boolean(trip.dispatcherSignoff?.signatureDataUrl)}
             />
             <SignOffBox
               step="2. Received for Hauling by Driver"
-              name={displaySignatory(driver?.name) || 'Assigned driver'}
-              caption={`Lic: ${driver?.licenseNo || 'N02-LTO'}`}
+              name={driverSignName}
+              caption={`Lic: ${driver?.licenseNo || 'N02-LTO'}${trip.driverSignoff ? ' • Driver signed' : ' • Driver must sign before In Transit'}`}
               dateLabel={driverHandoffDate}
+              signatureUrl={trip.driverSignoff?.signatureDataUrl}
+              verified={Boolean(trip.driverSignoff?.signatureDataUrl)}
             />
             <SignOffBox
               step="3. Received in Good Order"
@@ -352,12 +360,12 @@ function formatPhStamp(value?: string) {
 function actorFromTimeline(trip: Trip, statuses: TripStatus[]) {
   const match = [...trip.timeline].reverse().find((event) => {
     if (!statuses.includes(event.status) || !event.updatedBy) return false;
-    const name = event.updatedBy.replace(/\s*\([^)]*\)\s*$/, '').trim() || event.updatedBy;
-    return !isPlaceholderSignatory(name);
+    const name = event.updatedBy.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    if (!name || isPlaceholderSignatory(name)) return false;
   });
   if (!match?.updatedBy) return null;
   return {
-    name: match.updatedBy.replace(/\s*\([^)]*\)\s*$/, '').trim() || match.updatedBy,
+    name: match.updatedBy.replace(/\s*\([^)]*\)\s*$/, '').trim(),
     at: match.timestamp,
   };
 }
