@@ -1155,8 +1155,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           inviteUrl,
         }),
       });
-      const payload = await response.json().catch(() => ({})) as { sent?: boolean };
+      const payload = await response.json().catch(() => ({})) as { sent?: boolean; error?: string };
       emailed = Boolean(payload.sent);
+      if (!emailed) {
+        return { success: true, emailed: false, inviteUrl, error: payload.error };
+      }
     } catch {
       emailed = false;
     }
@@ -1385,26 +1388,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           location: location || undefined,
         };
 
-        let podUpdate = trip.pod;
-        if ((newStatus === 'Delivered' || newStatus === 'Invoiced') && !podUpdate) {
-          podUpdate = {
-            id: `pod-auto-${Date.now()}`,
-            tripId: id,
-            receiverName: 'Warehouse Receiving Officer',
-            receiverRole: 'Logistics Supervisor',
-            receiverIdNumber: 'PH-RECEIVE-VERIFIED',
-            notes: 'Goods received in full and inspected at unloading dock.',
-            conditionStatus: 'Good Condition',
-            signedAt: new Date().toISOString(),
-            photoUrls: ['https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80']
-          };
-        }
-
         const updatedTrip = {
           ...trip,
           status: newStatus,
           actualDelivery: (newStatus === 'Delivered' || newStatus === 'Invoiced') ? (trip.actualDelivery || new Date().toISOString()) : trip.actualDelivery,
-          pod: podUpdate,
           timeline: [...trip.timeline, newEvent],
         };
 

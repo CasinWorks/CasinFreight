@@ -16,7 +16,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { Trip, Truck as TruckType, Driver, Client, Company } from '../../types';
+import { Trip, Truck as TruckType, Driver, Client, Company, TripStatus } from '../../types';
 
 interface DeliveryNoteModalProps {
   isOpen: boolean;
@@ -44,11 +44,16 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
   const deliveryNoteNo = trip.deliveryNoteNumber || `DN-2026-${trip.tripNumber.replace(/\D/g, '') || '0811'}`;
   const sealNo = trip.securitySealNumber || 'SEAL-PH-882941';
   const gatePassNo = trip.gatePassNumber || `GP-${trip.originZone.slice(0, 3).toUpperCase()}-9402`;
-  const issuedDate = new Date().toLocaleDateString('en-PH', {
+  const issuedDate = new Date(trip.createdAt || Date.now()).toLocaleDateString('en-PH', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
+  const dispatched = actorFromTimeline(trip, ['Loaded', 'In Transit']) || actorFromTimeline(trip, ['Pending']);
+  const hauled = actorFromTimeline(trip, ['In Transit', 'Loaded']);
+  const dispatcherName = dispatched?.name || 'Dispatcher on file';
+  const dispatchDate = formatPhStamp(dispatched?.at) || issuedDate;
+  const driverHandoffDate = formatPhStamp(hauled?.at);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(deliveryNoteNo);
@@ -280,45 +285,31 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
 
           {/* Formal 3-Column Sign-Off Section */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-200">
-            {/* 1. Shipper / Warehouse Dispatcher */}
-            <div className="border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between h-36 bg-slate-50/50">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                1. Dispatched / Released by
-              </div>
-              <div className="border-b border-dashed border-slate-400 pb-1 text-center font-bold text-slate-900 text-xs">
-                Mark Lester Santos
-              </div>
-              <div className="text-[10px] text-slate-500 text-center">
-                Shipper Dispatcher / Signature & Date
-              </div>
-            </div>
-
-            {/* 2. Assigned Driver / Transporter */}
-            <div className="border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between h-36 bg-slate-50/50">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                2. Received for Hauling by Driver
-              </div>
-              <div className="border-b border-dashed border-slate-400 pb-1 text-center font-bold text-slate-900 text-xs">
-                {driver?.name || 'Authorized Driver'}
-              </div>
-              <div className="text-[10px] text-slate-500 text-center font-mono">
-                Lic: {driver?.licenseNo || 'N02-LTO'} • Signature
-              </div>
-            </div>
-
-            {/* 3. Consignee Receiving Officer */}
-            <div className="border border-blue-200 rounded-xl p-3.5 flex flex-col justify-between h-36 bg-blue-50/30">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700 flex items-center justify-between">
-                <span>3. Received in Good Order</span>
-                {trip.pod && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-              </div>
-              <div className="border-b border-dashed border-blue-400 pb-1 text-center font-bold text-slate-900 text-xs">
-                {trip.pod?.receiverName || 'Consignee Receiving Officer'}
-              </div>
-              <div className="text-[10px] text-slate-500 text-center">
-                {trip.pod ? `Signed: ${new Date(trip.pod.signedAt).toLocaleDateString()}` : 'Printed Name, Signature & Stamp'}
-              </div>
-            </div>
+            <SignOffBox
+              step="1. Dispatched / Released by"
+              name={dispatcherName}
+              caption="Processed in CasinFreight by this dispatcher"
+              dateLabel={dispatchDate}
+            />
+            <SignOffBox
+              step="2. Received for Hauling by Driver"
+              name={driver?.name || 'Authorized Driver'}
+              caption={`Lic: ${driver?.licenseNo || 'N02-LTO'}`}
+              dateLabel={driverHandoffDate}
+            />
+            <SignOffBox
+              step="3. Received in Good Order"
+              name={trip.pod?.receiverName || 'Consignee receiving officer'}
+              caption={
+                trip.pod
+                  ? `${trip.pod.receiverRole || 'Receiver'} signed this POD`
+                  : 'Awaiting consignee e-signature on the trip'
+              }
+              dateLabel={trip.pod ? formatPhStamp(trip.pod.signedAt) : undefined}
+              signatureUrl={trip.pod?.signatureDataUrl}
+              highlight
+              verified={Boolean(trip.pod?.signatureDataUrl)}
+            />
           </div>
 
           {/* Footer Notice */}
@@ -332,3 +323,72 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
     </div>
   );
 };
+
+function formatPhStamp(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function actorFromTimeline(trip: Trip, statuses: TripStatus[]) {
+  const match = [...trip.timeline].reverse().find((event) => statuses.includes(event.status) && event.updatedBy);
+  if (!match?.updatedBy) return null;
+  return {
+    name: match.updatedBy.replace(/\s*\([^)]*\)\s*$/, '').trim() || match.updatedBy,
+    at: match.timestamp,
+  };
+}
+
+function SignOffBox({
+  step,
+  name,
+  caption,
+  dateLabel,
+  signatureUrl,
+  highlight,
+  verified,
+}: {
+  step: string;
+  name: string;
+  caption: string;
+  dateLabel?: string;
+  signatureUrl?: string;
+  highlight?: boolean;
+  verified?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl p-3.5 flex flex-col min-h-[10.5rem] ${
+        highlight ? 'border border-blue-200 bg-blue-50/30' : 'border border-slate-200 bg-slate-50/50'
+      }`}
+    >
+      <div className={`text-[10px] font-bold uppercase tracking-wider flex items-center justify-between ${highlight ? 'text-blue-700' : 'text-slate-500'}`}>
+        <span>{step}</span>
+        {verified && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+      </div>
+      <div className={`mt-3 flex-1 flex flex-col items-center justify-end border-b border-dashed pb-1 ${highlight ? 'border-blue-400' : 'border-slate-400'}`}>
+        {signatureUrl ? (
+          <img
+            src={signatureUrl}
+            alt={`${name} signature`}
+            className="max-h-16 w-full object-contain object-bottom"
+          />
+        ) : (
+          <span className="font-bold text-slate-900 text-xs text-center">{name}</span>
+        )}
+      </div>
+      <div className="text-[10px] text-slate-500 text-center mt-1.5 leading-snug">
+        {signatureUrl && <div className="font-semibold text-slate-800">{name}</div>}
+        <div>{caption}</div>
+        {dateLabel && <div>{dateLabel}</div>}
+      </div>
+    </div>
+  );
+}

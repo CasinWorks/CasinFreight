@@ -213,15 +213,15 @@ export const RbacManagementView: React.FC = () => {
     setIsAddUserOpen(false);
     if (result.emailed) {
       showToast(`Invite emailed to ${invitedEmail}. They join with that same address.`);
-    } else if (result.inviteUrl) {
-      try {
-        await navigator.clipboard.writeText(result.inviteUrl);
-        showToast('Invite saved. Join link copied — send it if email is not set up yet.');
-      } catch {
-        showToast(`Invite saved. Send this join link: ${result.inviteUrl}`);
-      }
     } else {
-      showToast(`Invited "${invitedName}". They can sign up with ${invitedEmail} to join.`);
+      try {
+        if (result.inviteUrl) await navigator.clipboard.writeText(result.inviteUrl);
+      } catch {
+        /* clipboard may be blocked */
+      }
+      showToast(
+        `Invite saved, but no email was sent. ${result.error || 'Add RESEND_API_KEY on Vercel to email invites.'} Join link copied — send it to ${invitedEmail}.`
+      );
     }
   };
 
@@ -745,7 +745,25 @@ export const RbacManagementView: React.FC = () => {
                         </td>
 
                         <td className="p-3.5 text-right">
-                          <span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                          <div className="flex items-center justify-end gap-2">
+                            {u.status === 'invited' && u.email && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const link = `${window.location.origin}/?join=1&email=${encodeURIComponent(u.email)}`;
+                                  try {
+                                    await navigator.clipboard.writeText(link);
+                                    showToast(`Join link copied for ${u.email}. Send it — invite email is not connected yet.`);
+                                  } catch {
+                                    showToast(link);
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-700 hover:bg-slate-50"
+                              >
+                                Copy join link
+                              </button>
+                            )}
+                            <span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
                             isCurrentUser
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : u.status === 'invited'
@@ -754,6 +772,7 @@ export const RbacManagementView: React.FC = () => {
                           }`}>
                             {isCurrentUser ? 'Signed in' : u.status === 'invited' ? 'Invite pending' : 'Active'}
                           </span>
+                          </div>
                         </td>
                       </tr>
                     );
