@@ -314,9 +314,18 @@ async function readPayMongoJson(response: Response): Promise<Record<string, unkn
     return JSON.parse(text) as Record<string, unknown>;
   } catch {
     throw new Error(
-      `PayMongo is unavailable (${response.status}). Add PAYMONGO_SECRET_KEY (sk_test_...) on Vercel, then Redeploy.`
+      `PayMongo is unavailable (${response.status}). Add PAYMONGO_SECRET_KEY on Vercel, then Redeploy.`
     );
   }
+}
+
+async function paymongoRequestHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (isFirebaseConfigured()) {
+    const token = await getFirebaseAuth().currentUser?.getIdToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 function isPayMongoWired(): boolean {
@@ -343,6 +352,7 @@ function mapAuthError(error: unknown): string {
 export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const persistReadyRef = useRef(false);
   const seedingRef = useRef(false);
+  const companyCreatedByRef = useRef('');
   const [company, setCompany] = useState<Company>(BLANK_COMPANY);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<RbacRole[]>([]);
@@ -371,6 +381,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const resetWorkspace = () => {
     persistReadyRef.current = false;
+    companyCreatedByRef.current = '';
     setCompany(BLANK_COMPANY);
     setUsers([]);
     setRoles([]);
@@ -428,11 +439,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       loadCollection<RbacAuditEntry>(companyId, 'auditLogs'),
     ]);
 
-    const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, ...companyFields } = companyDoc;
+    const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, createdBy, ...companyFields } = companyDoc;
+    companyCreatedByRef.current = createdBy || uid;
     let nextSub = savedSub || makeFreeSubscription(uid, companyId);
     if (isFoundingPeriodExpired(nextSub)) {
       nextSub = makeFreeSubscription(uid, companyId, nextSub);
-      await saveCompanySubscription(companyId, nextSub, 'Free');
+      try {
+        await saveCompanySubscription(companyId, nextSub, 'Free');
+      } catch (error) {
+        console.error('Could not persist expired Founding period', error);
+      }
     }
     setCompany({
       ...companyFields,
@@ -523,7 +539,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const timer = setTimeout(() => {
       const companyDoc: CompanyDocument = {
         ...company,
-        createdBy: currentUserId,
+        createdBy: companyCreatedByRef.current || currentUserId,
         onboardingComplete: !isOnboardingOpen,
         subscription,
         chartOfAccounts,
@@ -535,19 +551,21 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
+    if (currentUserId !== companyCreatedByRef.current) return;
     const timer = setTimeout(() => {
       replaceCollection(company.id, 'roles', roles).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
-  }, [roles, company.id]);
+  }, [roles, company.id, currentUserId]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
+    if (currentUserId !== companyCreatedByRef.current) return;
     const timer = setTimeout(() => {
       replaceCollection(company.id, 'members', users).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
-  }, [users, company.id]);
+  }, [users, company.id, currentUserId]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
@@ -736,10 +754,17 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     || currentUser.role.toLowerCase().includes('owner');
 
   const listPlatformSubscriptions = async () => {
+    if (!isPlatformAdmin) {
+      const existing = await getCompanyDocument(company.id);
+      return existing ? [existing] : [];
+    }
     return listCompanyDocuments();
   };
 
   const setCompanyPlanByAdmin = async (companyId: string, planId: string) => {
+    if (planId === PLAN_FOUNDING_ID && !isPlatformAdmin) {
+      throw new Error('Only the platform admin can grant Founding without a PayMongo payment.');
+    }
     if (!canManageBilling) {
       throw new Error('Only the company owner can change the plan.');
     }
@@ -2557,13 +2582,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const endpoint = import.meta.env.VITE_PAYMONGO_CHECKOUT_URL || '/api/paymongo';
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await paymongoRequestHeaders(),
       body: JSON.stringify({
         action: 'checkout',
         planId,
         companyId: company.id,
-        userId: currentUserId,
-        customerEmail: currentUser.email,
         customerName: currentUser.name,
         successUrl,
         cancelUrl,
@@ -2602,22 +2625,19 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     subscription.payment_provider_checkout_id || '',
   ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
 
-  const tryUnlockFounding = async (paymentId?: string): Promise<boolean> => {
+  const tryUnlockFounding = async (_paymentId?: string): Promise<boolean> => {
     if (unlockingFoundingRef.current || subscription.plan_id === PLAN_FOUNDING_ID) return false;
+    const checkoutSessionId = sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '';
+    if (!checkoutSessionId.startsWith('cs_')) return false;
     unlockingFoundingRef.current = true;
     try {
-      const lookup = (paymentId || '').trim();
-      const checkoutSessionId = sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '';
       const response = await fetch('/api/paymongo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await paymongoRequestHeaders(),
         body: JSON.stringify({
           action: 'verify',
-          paymentId: lookup,
-          referenceNumber: lookup && !lookup.startsWith('pay_') && !lookup.startsWith('cs_') ? lookup : '',
           checkoutSessionId,
           excludePaymentIds: consumedPaymentIds().join(','),
-          sessionOnly: checkoutSessionId ? 'true' : 'false',
         }),
       });
       const data = await readPayMongoJson(response) as { paid?: boolean; paymentId?: string; method?: string; error?: string };
@@ -2658,8 +2678,14 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const pending = Boolean(sessionStorage.getItem(PENDING_FOUNDING_KEY));
-    if (pending || params.get('billing') === 'success') {
+    const checkoutSessionId = sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '';
+    const billingSuccess = params.get('billing') === 'success';
+    if (pending || billingSuccess) {
       setIsWaitingForPayMongo(true);
+    }
+
+    if (!checkoutSessionId.startsWith('cs_')) {
+      return;
     }
 
     let cancelled = false;
@@ -2672,7 +2698,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     run();
 
-    const shouldPoll = pending || isWaitingForPayMongo || params.get('billing') === 'success';
+    const shouldPoll = pending || isWaitingForPayMongo || billingSuccess;
     const interval = shouldPoll ? window.setInterval(run, 3000) : undefined;
     const onVisible = () => {
       if (document.visibilityState === 'visible') run();

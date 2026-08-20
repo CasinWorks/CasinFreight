@@ -343,52 +343,130 @@ export async function findPaidFoundingPayment(
 
 type PayMongoBody = Record<string, string>;
 
+type FirebaseCaller = { uid: string; email?: string };
+
 function secretKey(): string {
   return (process.env.PAYMONGO_SECRET_KEY || '').trim().replace(/^['"]|['"]$/g, '');
 }
 
+function readHeader(
+  headers: Headers | Record<string, string | string[] | undefined>,
+  name: string
+): string {
+  if (headers instanceof Headers) return headers.get(name) || '';
+  const value = headers[name] ?? headers[name.toLowerCase()];
+  return Array.isArray(value) ? value[0] || '' : value || '';
+}
+
 function requestOrigin(headers: Headers | Record<string, string | string[] | undefined>, fallback = 'https://casin-freight.vercel.app'): string {
-  const read = (name: string): string => {
-    if (headers instanceof Headers) return headers.get(name) || '';
-    const value = headers[name] ?? headers[name.toLowerCase()];
-    return Array.isArray(value) ? value[0] || '' : value || '';
-  };
-  const origin = read('origin');
+  const origin = readHeader(headers, 'origin');
   if (origin) return origin;
-  const host = read('x-forwarded-host') || read('host');
-  const proto = read('x-forwarded-proto') || 'https';
+  const host = readHeader(headers, 'x-forwarded-host') || readHeader(headers, 'host');
+  const proto = readHeader(headers, 'x-forwarded-proto') || 'https';
   return host ? `${proto}://${host}` : fallback;
+}
+
+function originAllowed(origin: string): boolean {
+  if (!origin) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+    if (url.hostname === 'casin-freight.vercel.app') return true;
+    if (url.hostname.endsWith('.vercel.app') && url.hostname.includes('casin-freight')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function checkoutMetadataUserId(attributes: Record<string, unknown>): string {
+  const metadata = attributes.metadata;
+  if (!metadata || typeof metadata !== 'object') return '';
+  return String((metadata as { user_id?: string }).user_id || '');
+}
+
+async function requireFirebaseUser(authHeader: string): Promise<FirebaseCaller | null> {
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+  const apiKey = (process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || '').trim();
+  if (!apiKey) return null;
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: token }),
+    }
+  );
+  if (!response.ok) return null;
+  const payload = await response.json() as { users?: Array<{ localId?: string; email?: string }> };
+  const user = payload.users?.[0];
+  if (!user?.localId) return null;
+  return { uid: user.localId, email: user.email };
 }
 
 export async function runPayMongoAction(
   action: string,
   body: PayMongoBody,
-  origin: string
+  origin: string,
+  authHeader = ''
 ): Promise<{ status: number; data: unknown }> {
+  if (origin && !originAllowed(origin)) {
+    return { status: 403, data: { error: 'This billing request was blocked.' } };
+  }
+
+  const caller = await requireFirebaseUser(authHeader);
+  if (!caller) {
+    return {
+      status: 401,
+      data: { error: 'Sign in required. Missing or invalid Firebase session.' },
+    };
+  }
+
   const key = secretKey();
   if (!key) {
     return {
       status: 503,
       data: {
-        error: 'PAYMONGO_SECRET_KEY is not set on Vercel. Add the sk_test_ secret (not a VITE_ variable), then Redeploy.',
+        error: 'PAYMONGO_SECRET_KEY is not set on Vercel. Add the live sk_ secret (not a VITE_ variable), then Redeploy.',
       },
     };
   }
 
   const op = (action || body.action || 'checkout').toLowerCase();
   if (op === 'verify') {
+    const checkoutSessionId = (body.checkoutSessionId || '').trim();
+    if (!checkoutSessionId.startsWith('cs_')) {
+      return {
+        status: 400,
+        data: { paid: false, error: 'Checkout session is required to confirm payment.' },
+      };
+    }
+
+    const headers = {
+      Authorization: paymongoAuthHeader(key),
+      'Content-Type': 'application/json',
+    };
+    const session = await paymongoGet(`/v1/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`, headers);
+    const resource = asResourceList(session.payload.data)[0];
+    if (!resource) {
+      return { status: 404, data: { paid: false, error: 'Checkout session was not found.' } };
+    }
+    const ownerId = checkoutMetadataUserId(resource.attributes || {});
+    if (!ownerId || ownerId !== caller.uid) {
+      return { status: 403, data: { paid: false, error: 'This checkout does not belong to the signed-in account.' } };
+    }
+
     const paid = await findPaidFoundingPayment(key, {
-      paymentId: body.paymentId,
-      referenceNumber: body.referenceNumber,
-      checkoutSessionId: body.checkoutSessionId,
+      checkoutSessionId,
       excludePaymentIds: (body.excludePaymentIds || '').split(',').map((id) => id.trim()).filter(Boolean),
-      sessionOnly: body.sessionOnly === 'true',
+      sessionOnly: true,
     });
     return {
       status: 200,
       data: paid
         ? { paid: true, ...paid }
-        : { paid: false, error: 'No paid ₱899 Founding payment was found on this PayMongo account.' },
+        : { paid: false, error: 'PayMongo has not confirmed this checkout yet.' },
     };
   }
 
@@ -396,8 +474,8 @@ export async function runPayMongoAction(
     secretKey: key,
     planId: body.planId || 'plan_founding',
     companyId: body.companyId || '',
-    userId: body.userId || '',
-    customerEmail: body.customerEmail,
+    userId: caller.uid,
+    customerEmail: caller.email || body.customerEmail,
     customerName: body.customerName,
     successUrl: body.successUrl || `${origin}/?billing=success`,
     cancelUrl: body.cancelUrl || `${origin}/?billing=cancel`,
@@ -423,7 +501,12 @@ export async function POST(request: Request): Promise<Response> {
     const body = await request.json().catch(() => ({})) as PayMongoBody;
     const pathname = new URL(request.url).pathname;
     const action = body.action || (pathname.includes('verify') ? 'verify' : 'checkout');
-    const result = await runPayMongoAction(action, body, requestOrigin(request.headers));
+    const result = await runPayMongoAction(
+      action,
+      body,
+      requestOrigin(request.headers),
+      request.headers.get('authorization') || ''
+    );
     return jsonResponse(result.data, result.status);
   } catch (error) {
     return jsonResponse(
@@ -489,7 +572,12 @@ export default async function handler(req: NodeLikeRequest | Request, res?: Node
       }
       const parsed = JSON.parse((await readNodeBody(req)) || '{}') as PayMongoBody;
       const action = parsed.action || (String(req.url || '').includes('verify') ? 'verify' : 'checkout');
-      const result = await runPayMongoAction(action, parsed, requestOrigin(req.headers));
+      const result = await runPayMongoAction(
+        action,
+        parsed,
+        requestOrigin(req.headers),
+        readHeader(req.headers, 'authorization')
+      );
       res.statusCode = result.status;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(result.data));

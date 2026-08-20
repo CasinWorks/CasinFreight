@@ -29,7 +29,8 @@ function paymongoDevApi(): Plugin {
             : {};
           const origin = (req.headers.origin as string) || 'http://localhost:3000';
           const action = body.action || ((req.url || '').includes('verify') ? 'verify' : 'checkout');
-          const result = await runPayMongoAction(action, body, origin);
+          const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+          const result = await runPayMongoAction(action, body, origin, authHeader);
           res.statusCode = result.status;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(result.data));

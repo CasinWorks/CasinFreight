@@ -35,24 +35,60 @@ service cloud.firestore {
         && request.auth.token.email.lower() in ['christianjoshuacasin@gmail.com'];
     }
 
+    function authEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function matchingInvite(companyId) {
+      return signedIn()
+        && request.auth.token.email is string
+        && exists(/databases/$(database)/documents/invites/$(authEmail()))
+        && get(/databases/$(database)/documents/invites/$(authEmail())).data.companyId == companyId;
+    }
+
+    function isCompanyOwner(companyId) {
+      return createdCompany(companyId) || isPlatformAdmin();
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
         (exists(userPath()) && resource.data.companyId == userData().companyId)
       );
+
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.companyId is string;
-      allow update, delete: if signedIn() && request.auth.uid == uid;
+        && request.resource.data.companyId is string
+        && (
+          createdCompany(request.resource.data.companyId) ||
+          matchingInvite(request.resource.data.companyId)
+        );
+
+      // Members cannot jump companies or self-promote. The company creator can
+      // update teammate profiles, including role, but cannot change companyId.
+      allow update: if signedIn() && (
+        (
+          request.auth.uid == uid
+          && request.resource.data.companyId == resource.data.companyId
+          && request.resource.data.role == resource.data.role
+        )
+        || (
+          createdCompany(resource.data.companyId)
+          && request.resource.data.companyId == resource.data.companyId
+        )
+        || isPlatformAdmin()
+      );
+
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     match /invites/{email} {
       allow read: if signedIn()
         && request.auth.token.email is string
         && request.auth.token.email.lower() == email;
-      allow create, update: if signedIn() && canAccessCompany(request.resource.data.companyId);
+      allow create, update: if signedIn() && isCompanyOwner(request.resource.data.companyId);
       allow delete: if signedIn() && (
-        canAccessCompany(resource.data.companyId) ||
+        isCompanyOwner(resource.data.companyId) ||
         (request.auth.token.email is string && request.auth.token.email.lower() == email)
       );
     }
@@ -61,11 +97,43 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.id == companyId;
-      allow read, update: if canAccessCompany(companyId) || isPlatformAdmin();
-      allow delete: if inCompany(companyId);
+      allow read: if canAccessCompany(companyId) || isPlatformAdmin();
+      allow update: if isCompanyOwner(companyId)
+        || (
+          canAccessCompany(companyId)
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['subscription', 'subscriptionTier', 'createdBy', 'id'])
+        );
+      allow delete: if isCompanyOwner(companyId);
 
-      match /{document=**} {
-        allow read, write: if canAccessCompany(companyId);
+      match /members/{memberId} {
+        allow read: if canAccessCompany(companyId) || isPlatformAdmin();
+        allow create: if isCompanyOwner(companyId)
+          || (
+            inCompany(companyId)
+            && request.auth.uid == memberId
+            && matchingInvite(companyId)
+          );
+        allow update: if isCompanyOwner(companyId)
+          || (
+            inCompany(companyId)
+            && request.auth.uid == memberId
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.companyId == resource.data.companyId
+          );
+        allow delete: if isCompanyOwner(companyId);
+      }
+
+      match /roles/{roleId} {
+        allow read: if canAccessCompany(companyId) || isPlatformAdmin();
+        allow write: if isCompanyOwner(companyId);
+      }
+
+      match /{subcol}/{docId} {
+        allow read: if canAccessCompany(companyId) || isPlatformAdmin();
+        allow write: if canAccessCompany(companyId)
+          && subcol != 'members'
+          && subcol != 'roles';
       }
     }
   }

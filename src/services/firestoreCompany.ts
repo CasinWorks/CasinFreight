@@ -193,9 +193,9 @@ export async function seedCompanyWorkspace(params: {
     has_seen_tutorial: false,
   };
 
-  // User profile first so company/subcollection rules can authorize via companyId.
-  await saveUserProfile(profile);
+  // Company first so user create can prove createdBy, without letting a new account join an arbitrary companyId.
   await saveCompanyDocument(company);
+  await saveUserProfile(profile);
   await setDoc(
     doc(getFirebaseDb(), 'companies', companyId, 'roles', params.role.id),
     stripUndefined(params.role as unknown as Record<string, unknown>)

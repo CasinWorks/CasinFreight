@@ -21,7 +21,7 @@ function daysLeft(iso?: string) {
 }
 
 export const AdminSubscriptionsView: React.FC = () => {
-  const { company, invoices, trips, listPlatformSubscriptions, setCompanyPlanByAdmin } = useFreight();
+  const { company, invoices, trips, listPlatformSubscriptions, setCompanyPlanByAdmin, isPlatformAdmin } = useFreight();
   const [rows, setRows] = useState<CompanyDocument[]>([]);
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -265,7 +265,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                               {busyId === row.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
                               Set to Free
                             </button>
-                          ) : (
+                          ) : isPlatformAdmin ? (
                             <button
                               type="button"
                               disabled={busyId === row.id}
@@ -275,7 +275,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                               {busyId === row.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Crown className="w-3 h-3" />}
                               Set to Founding
                             </button>
-                          )}
+                          ) : null}
                         </div>
                       </td>
                     </tr>
