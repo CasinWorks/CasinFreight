@@ -344,19 +344,6 @@ function secretKey(): string {
   return (process.env.PAYMONGO_SECRET_KEY || '').trim().replace(/^['"]|['"]$/g, '');
 }
 
-function originAllowed(origin: string): boolean {
-  if (!origin) return true;
-  try {
-    const url = new URL(origin);
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
-    if (url.hostname === 'casin-freight.vercel.app') return true;
-    if (url.hostname.endsWith('.vercel.app') && url.hostname.includes('casin-freight')) return true;
-  } catch {
-    return false;
-  }
-  return false;
-}
-
 function checkoutMetadataUserId(attributes: Record<string, unknown>): string {
   const metadata = attributes.metadata;
   if (!metadata || typeof metadata !== 'object') return '';
@@ -369,10 +356,6 @@ export async function runPayMongoAction(
   origin: string,
   authHeader = ''
 ): Promise<{ status: number; data: unknown }> {
-  if (origin && !originAllowed(origin)) {
-    return { status: 403, data: { error: 'This billing request was blocked.' } };
-  }
-
   const caller = await requireFirebaseUser(authHeader);
   if (!caller) {
     return {

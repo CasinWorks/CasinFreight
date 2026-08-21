@@ -24,25 +24,16 @@ function readHeader(headers, name) {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 
-function requestOrigin(headers) {
-  const origin = readHeader(headers, 'origin');
-  if (origin) return origin;
-  const host = readHeader(headers, 'x-forwarded-host') || readHeader(headers, 'host');
-  const proto = readHeader(headers, 'x-forwarded-proto') || 'https';
-  return host ? `${proto}://${host}` : 'https://casin-freight.vercel.app';
+function firstHost(value) {
+  return String(value || '').split(',')[0].trim();
 }
 
-function originAllowed(origin) {
-  if (!origin) return true;
-  try {
-    const url = new URL(origin);
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
-    if (url.hostname === 'casin-freight.vercel.app') return true;
-    if (url.hostname.endsWith('.vercel.app') && url.hostname.includes('casin-freight')) return true;
-  } catch {
-    return false;
-  }
-  return false;
+function requestOrigin(headers) {
+  const origin = firstHost(readHeader(headers, 'origin'));
+  if (origin) return origin;
+  const host = firstHost(readHeader(headers, 'x-forwarded-host') || readHeader(headers, 'host'));
+  const proto = firstHost(readHeader(headers, 'x-forwarded-proto')) || 'https';
+  return host ? `${proto}://${host}` : 'https://casin-freight.vercel.app';
 }
 
 async function readBody(req) {
@@ -185,9 +176,6 @@ function checkoutOwnerId(attributes) {
 }
 
 async function runAction(action, body, origin, authHeader) {
-  if (origin && !originAllowed(origin)) {
-    return { status: 403, data: { error: 'This billing request was blocked.' } };
-  }
   const caller = await requireFirebaseUser(authHeader);
   if (!caller) {
     return { status: 401, data: { error: 'Sign in required. Missing or invalid Firebase session.' } };
@@ -259,7 +247,12 @@ module.exports = async function handler(req, res) {
     }
     const parsed = await readBody(req);
     const action = parsed.action || (String(req.url || '').includes('verify') ? 'verify' : 'checkout');
-    const result = await runAction(action, parsed, requestOrigin(req.headers), readHeader(req.headers, 'authorization'));
+    const result = await runAction(
+      action,
+      parsed,
+      requestOrigin(req.headers),
+      readHeader(req.headers, 'authorization')
+    );
     res.statusCode = result.status;
     res.end(JSON.stringify(result.data));
   } catch (error) {
