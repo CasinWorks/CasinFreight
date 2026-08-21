@@ -1,4 +1,4 @@
-import { requireFirebaseUser } from './firebaseUser';
+import { requireFirebaseUser } from './firebaseCaller';
 
 export interface CreateCheckoutInput {
   secretKey: string;
@@ -344,23 +344,6 @@ function secretKey(): string {
   return (process.env.PAYMONGO_SECRET_KEY || '').trim().replace(/^['"]|['"]$/g, '');
 }
 
-function readHeader(
-  headers: Headers | Record<string, string | string[] | undefined>,
-  name: string
-): string {
-  if (headers instanceof Headers) return headers.get(name) || '';
-  const value = headers[name] ?? headers[name.toLowerCase()];
-  return Array.isArray(value) ? value[0] || '' : value || '';
-}
-
-function requestOrigin(headers: Headers | Record<string, string | string[] | undefined>, fallback = 'https://casin-freight.vercel.app'): string {
-  const origin = readHeader(headers, 'origin');
-  if (origin) return origin;
-  const host = readHeader(headers, 'x-forwarded-host') || readHeader(headers, 'host');
-  const proto = readHeader(headers, 'x-forwarded-proto') || 'https';
-  return host ? `${proto}://${host}` : fallback;
-}
-
 function originAllowed(origin: string): boolean {
   if (!origin) return true;
   try {
@@ -456,72 +439,4 @@ export async function runPayMongoAction(
     cancelUrl: body.cancelUrl || `${origin}/?billing=cancel`,
   });
   return { status: 200, data: result };
-}
-
-type NodeLikeRequest = {
-  method?: string;
-  url?: string;
-  body?: PayMongoBody | string;
-  headers: Record<string, string | string[] | undefined>;
-  [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
-};
-
-type NodeLikeResponse = {
-  setHeader: (name: string, value: string) => void;
-  statusCode: number;
-  end: (body?: string) => void;
-};
-
-async function readNodeBody(req: NodeLikeRequest): Promise<PayMongoBody> {
-  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
-    return req.body as PayMongoBody;
-  }
-  if (typeof req.body === 'string' && req.body.trim()) {
-    return JSON.parse(req.body) as PayMongoBody;
-  }
-  if (typeof req[Symbol.asyncIterator] !== 'function') return {};
-  const chunks: Buffer[] = [];
-  for await (const chunk of req as AsyncIterable<unknown>) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
-  }
-  const raw = Buffer.concat(chunks).toString('utf8');
-  if (!raw.trim()) return {};
-  return JSON.parse(raw) as PayMongoBody;
-}
-
-export default async function handler(req: NodeLikeRequest, res: NodeLikeResponse) {
-  res.setHeader('Content-Type', 'application/json');
-  try {
-    if (req.method === 'OPTIONS') {
-      res.statusCode = 204;
-      res.end();
-      return;
-    }
-    if (req.method === 'GET') {
-      res.statusCode = 200;
-      res.end(JSON.stringify({ ok: true, paymongoConfigured: Boolean(secretKey()) }));
-      return;
-    }
-    if (req.method !== 'POST') {
-      res.statusCode = 405;
-      res.end(JSON.stringify({ error: 'Use POST to start or verify PayMongo checkout.' }));
-      return;
-    }
-
-    const parsed = await readNodeBody(req);
-    const action = parsed.action || (String(req.url || '').includes('verify') ? 'verify' : 'checkout');
-    const result = await runPayMongoAction(
-      action,
-      parsed,
-      requestOrigin(req.headers),
-      readHeader(req.headers, 'authorization')
-    );
-    res.statusCode = result.status;
-    res.end(JSON.stringify(result.data));
-  } catch (error) {
-    res.statusCode = 500;
-    res.end(JSON.stringify({
-      error: error instanceof Error ? error.message : 'PayMongo request failed.',
-    }));
-  }
 }

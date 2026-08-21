@@ -334,7 +334,7 @@ async function readPayMongoJson(response: Response): Promise<Record<string, unkn
     const hint = text.replace(/\s+/g, ' ').trim().slice(0, 160);
     throw new Error(
       hint.includes('FUNCTION_INVOCATION_FAILED')
-        ? 'PayMongo billing API crashed on Vercel. Redeploy after the latest api/paymongo.ts fix, and confirm PAYMONGO_SECRET_KEY is set (not a VITE_ variable).'
+        ? 'PayMongo billing API crashed on Vercel. Redeploy the latest /api/paymongo.js CommonJS function, then retry checkout.'
         : `PayMongo checkout failed (${response.status})${hint ? `: ${hint}` : '. Check Vercel logs.'}`
     );
   }

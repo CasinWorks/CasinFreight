@@ -2,10 +2,10 @@ export {
   createPayMongoCheckoutSession,
   findPaidFoundingPayment,
   runPayMongoAction,
-} from '../api/paymongo';
+} from '../src/lib/paymongoBilling';
 export type {
   CreateCheckoutInput,
   CreateCheckoutResult,
   FindPaidFoundingLookup,
   PaidFoundingPayment,
-} from '../api/paymongo';
+} from '../src/lib/paymongoBilling';
