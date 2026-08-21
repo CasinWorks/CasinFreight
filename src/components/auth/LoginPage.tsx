@@ -17,6 +17,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
+import { CasinWorksCredit } from '../brand/CasinWorksCredit';
 
 export const LoginPage: React.FC = () => {
   const { login, signup, joinTeam, requestPasswordReset } = useFreight();
@@ -344,6 +345,10 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
       </main>
+
+      <footer className="relative z-10 px-6 py-4 border-t border-slate-800/80 bg-slate-950/60">
+        <CasinWorksCredit className="text-center text-[11px] text-slate-400" />
+      </footer>
     </div>
   );
 };

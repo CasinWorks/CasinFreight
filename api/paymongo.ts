@@ -24,12 +24,7 @@ export interface PaidFoundingPayment {
 }
 
 function toBase64(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  return Buffer.from(value, 'utf8').toString('base64');
 }
 
 function paymongoAuthHeader(secretKey: string): string {
@@ -463,39 +458,6 @@ export async function runPayMongoAction(
   return { status: 200, data: result };
 }
 
-function jsonResponse(data: unknown, status: number): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-export const config = { runtime: 'nodejs' };
-
-export async function OPTIONS(): Promise<Response> {
-  return new Response(null, { status: 204 });
-}
-
-export async function POST(request: Request): Promise<Response> {
-  try {
-    const body = await request.json().catch(() => ({})) as PayMongoBody;
-    const pathname = new URL(request.url).pathname;
-    const action = body.action || (pathname.includes('verify') ? 'verify' : 'checkout');
-    const result = await runPayMongoAction(
-      action,
-      body,
-      requestOrigin(request.headers),
-      request.headers.get('authorization') || ''
-    );
-    return jsonResponse(result.data, result.status);
-  } catch (error) {
-    return jsonResponse(
-      { error: error instanceof Error ? error.message : 'PayMongo request failed.' },
-      500
-    );
-  }
-}
-
 type NodeLikeRequest = {
   method?: string;
   url?: string;
@@ -510,63 +472,56 @@ type NodeLikeResponse = {
   end: (body?: string) => void;
 };
 
-function isWebRequest(req: unknown): req is Request {
-  return Boolean(
-    req &&
-    typeof req === 'object' &&
-    typeof (req as Request).json === 'function' &&
-    typeof (req as Request).headers?.get === 'function'
-  );
-}
-
-async function readNodeBody(req: NodeLikeRequest): Promise<string> {
-  if (req.body && typeof req.body === 'object') return JSON.stringify(req.body);
-  if (typeof req.body === 'string') return req.body;
-  if (typeof req[Symbol.asyncIterator] !== 'function') return '';
-  const chunks: Uint8Array[] = [];
+async function readNodeBody(req: NodeLikeRequest): Promise<PayMongoBody> {
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    return req.body as PayMongoBody;
+  }
+  if (typeof req.body === 'string' && req.body.trim()) {
+    return JSON.parse(req.body) as PayMongoBody;
+  }
+  if (typeof req[Symbol.asyncIterator] !== 'function') return {};
+  const chunks: Buffer[] = [];
   for await (const chunk of req as AsyncIterable<unknown>) {
-    if (typeof chunk === 'string') chunks.push(new TextEncoder().encode(chunk));
-    else if (chunk instanceof Uint8Array) chunks.push(chunk);
-    else chunks.push(new TextEncoder().encode(String(chunk)));
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
   }
-  let length = 0;
-  chunks.forEach((part) => {
-    length += part.length;
-  });
-  const merged = new Uint8Array(length);
-  let offset = 0;
-  chunks.forEach((part) => {
-    merged.set(part, offset);
-    offset += part.length;
-  });
-  return new TextDecoder().decode(merged);
+  const raw = Buffer.concat(chunks).toString('utf8');
+  if (!raw.trim()) return {};
+  return JSON.parse(raw) as PayMongoBody;
 }
 
-export default async function handler(req: NodeLikeRequest | Request, res?: NodeLikeResponse) {
-  if (res && typeof res.end === 'function' && !isWebRequest(req)) {
-    try {
-      if (req.method === 'OPTIONS') {
-        res.statusCode = 204;
-        res.end();
-        return;
-      }
-      const parsed = JSON.parse((await readNodeBody(req)) || '{}') as PayMongoBody;
-      const action = parsed.action || (String(req.url || '').includes('verify') ? 'verify' : 'checkout');
-      const result = await runPayMongoAction(
-        action,
-        parsed,
-        requestOrigin(req.headers),
-        readHeader(req.headers, 'authorization')
-      );
-      res.statusCode = result.status;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(result.data));
-    } catch (error) {
-      res.statusCode = 500;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'PayMongo request failed.' }));
+export default async function handler(req: NodeLikeRequest, res: NodeLikeResponse) {
+  res.setHeader('Content-Type', 'application/json');
+  try {
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204;
+      res.end();
+      return;
     }
-    return;
+    if (req.method === 'GET') {
+      res.statusCode = 200;
+      res.end(JSON.stringify({ ok: true, paymongoConfigured: Boolean(secretKey()) }));
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.statusCode = 405;
+      res.end(JSON.stringify({ error: 'Use POST to start or verify PayMongo checkout.' }));
+      return;
+    }
+
+    const parsed = await readNodeBody(req);
+    const action = parsed.action || (String(req.url || '').includes('verify') ? 'verify' : 'checkout');
+    const result = await runPayMongoAction(
+      action,
+      parsed,
+      requestOrigin(req.headers),
+      readHeader(req.headers, 'authorization')
+    );
+    res.statusCode = result.status;
+    res.end(JSON.stringify(result.data));
+  } catch (error) {
+    res.statusCode = 500;
+    res.end(JSON.stringify({
+      error: error instanceof Error ? error.message : 'PayMongo request failed.',
+    }));
   }
-  return POST(req as Request);
 }

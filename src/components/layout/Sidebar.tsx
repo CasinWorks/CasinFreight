@@ -23,6 +23,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { bansInEffectNow } from '../../lib/truckBans';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
+import { CasinWorksCredit } from '../brand/CasinWorksCredit';
 
 export type NavTab = 
   | 'board' 
@@ -292,8 +293,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <div className="mt-2 text-center text-[10px] text-slate-400">
-          Logged as <span className="font-semibold text-slate-600">{currentUser.role}</span>
+        <div className="mt-2 text-center text-[10px] text-slate-400 space-y-1">
+          <div>
+            Logged as <span className="font-semibold text-slate-600">{currentUser.role}</span>
+          </div>
+          <CasinWorksCredit className="text-[10px] text-slate-400" />
         </div>
       </div>
     </div>

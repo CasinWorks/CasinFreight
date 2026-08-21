@@ -331,8 +331,11 @@ async function readPayMongoJson(response: Response): Promise<Record<string, unkn
   try {
     return JSON.parse(text) as Record<string, unknown>;
   } catch {
+    const hint = text.replace(/\s+/g, ' ').trim().slice(0, 160);
     throw new Error(
-      `PayMongo is unavailable (${response.status}). Add PAYMONGO_SECRET_KEY on Vercel, then Redeploy.`
+      hint.includes('FUNCTION_INVOCATION_FAILED')
+        ? 'PayMongo billing API crashed on Vercel. Redeploy after the latest api/paymongo.ts fix, and confirm PAYMONGO_SECRET_KEY is set (not a VITE_ variable).'
+        : `PayMongo checkout failed (${response.status})${hint ? `: ${hint}` : '. Check Vercel logs.'}`
     );
   }
 }
