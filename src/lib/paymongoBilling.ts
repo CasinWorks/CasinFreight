@@ -1,5 +1,5 @@
 import { requireFirebaseUser } from './firebaseCaller';
-import { calculateSubscriptionPrice, formatPhp, parseBillingCycle, type SubscriptionPrice } from './subscriptionPrice';
+import { calculateSubscriptionPrice, billableTruckCount, formatPhp, parseBillingCycle, type SubscriptionPrice } from './subscriptionPrice';
 
 export interface CreateCheckoutInput {
   secretKey: string;
@@ -434,7 +434,7 @@ export async function runPayMongoAction(
     successUrl: body.successUrl || `${origin}/?billing=success`,
     cancelUrl: body.cancelUrl || `${origin}/?billing=cancel`,
     price: calculateSubscriptionPrice(
-      Number(body.truckCount || 0),
+      billableTruckCount(0, 0, body.truckCount),
       parseBillingCycle(body.billingCycle)
     ),
   });

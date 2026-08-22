@@ -83,7 +83,8 @@ import {
   type BackupRecord,
   type WorkspaceBackup,
 } from '../lib/workspaceBackup';
-import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, makeFreeSubscription } from '../config/plans';
+import { PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, SAAS_PLANS, ALL_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, isUnlockedPlanId, makeFreeSubscription, makePromoSubscription, type AdminPlanGrant } from '../config/plans';
+import { paidTruckLimit, FOUNDING_INCLUDED_TRUCKS } from '../lib/subscriptionPrice';
 import { isPlatformAdminEmail } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 import { isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
@@ -307,9 +308,9 @@ interface FreightContextType {
   setIsUpgradeModalOpen: (open: boolean) => void;
   isBillingProviderReady: boolean;
   isPayMongoTestMode: boolean;
-  createPayMongoCheckout: (planId: string, billingCycle?: 'monthly' | 'annual') => Promise<{ checkoutUrl: string; checkoutSessionId: string }>;
+  createPayMongoCheckout: (planId: string, billingCycle?: 'monthly' | 'annual', truckCount?: number) => Promise<{ checkoutUrl: string; checkoutSessionId: string }>;
   activateFoundingPlan: (paymentMethod: PayMongoPaymentMethod, paymentId: string) => void;
-  subscribeToFoundingPlan: (billingCycle?: 'monthly' | 'annual') => Promise<void>;
+  subscribeToFoundingPlan: (billingCycle?: 'monthly' | 'annual', truckCount?: number) => Promise<void>;
   confirmFoundingPayment: (paymentId?: string) => Promise<void>;
   isWaitingForPayMongo: boolean;
   cancelSubscriptionAtPeriodEnd: () => Promise<void>;
@@ -323,7 +324,7 @@ interface FreightContextType {
   isPlatformAdmin: boolean;
   canManageBilling: boolean;
   listPlatformSubscriptions: () => Promise<CompanyDocument[]>;
-  setCompanyPlanByAdmin: (companyId: string, planId: string) => Promise<void>;
+  setCompanyPlanByAdmin: (companyId: string, planId: string, grant?: AdminPlanGrant) => Promise<void>;
   resetCurrentPlanToFree: () => Promise<void>;
   deleteCompanyWorkspace: () => Promise<void>;
   captureWorkspaceBackup: () => WorkspaceBackup;
@@ -433,7 +434,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
   const [chartOfAccounts, setChartOfAccounts] = useState<ChartOfAccount[]>(initialChartOfAccounts);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
-  const [plans, setPlans] = useState<Plan[]>(SAAS_PLANS);
+  const [plans, setPlans] = useState<Plan[]>(ALL_PLANS);
   const [subscription, setSubscription] = useState<Subscription>(() => makeFreeSubscription('', ''));
   const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
@@ -467,7 +468,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setFuelLogs([]);
     setChartOfAccounts(initialChartOfAccounts);
     setJournalEntries([]);
-    setPlans(SAAS_PLANS);
+    setPlans(ALL_PLANS);
     setSubscription(makeFreeSubscription('', ''));
     setBillingHistory([]);
     setIsOnboardingOpen(false);
@@ -523,7 +524,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     setCompany({
       ...companyFields,
-      subscriptionTier: nextSub.plan_id === PLAN_FOUNDING_ID ? 'Growth' : 'Free',
+      subscriptionTier: isUnlockedPlanId(nextSub.plan_id) ? 'Growth' : 'Free',
     });
     setSubscription(nextSub);
     setRoles(ensureDefaultSystemRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]));
@@ -936,9 +937,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return listCompanyDocuments();
   };
 
-  const setCompanyPlanByAdmin = async (companyId: string, planId: string) => {
-    if (planId === PLAN_FOUNDING_ID && !isPlatformAdmin) {
-      throw new Error('Only the platform admin can grant Founding without a PayMongo payment.');
+  const setCompanyPlanByAdmin = async (companyId: string, planId: string, grant?: AdminPlanGrant) => {
+    if ((planId === PLAN_FOUNDING_ID || planId === PLAN_PROMO_ID) && !isPlatformAdmin) {
+      throw new Error('Only the platform admin can grant this plan.');
     }
     if (!canManageBilling) {
       throw new Error('Only the company owner can change the plan.');
@@ -950,32 +951,40 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const now = new Date();
     const end = new Date(now);
     end.setMonth(end.getMonth() + 1);
-    const nextSub: Subscription = planId === PLAN_FOUNDING_ID
-      ? {
-          id: existing.subscription?.id || `sub-${companyId.slice(0, 8)}`,
-          user_id: existing.createdBy || existing.subscription?.user_id || '',
-          company_id: companyId,
-          plan_id: PLAN_FOUNDING_ID,
-          status: 'active',
-          current_period_start: now.toISOString(),
-          current_period_end: end.toISOString(),
-          cancel_at_period_end: false,
-          auto_renew: true,
-          payment_provider: 'paymongo',
-          ...(existing.subscription?.payment_provider_checkout_id
-            ? { payment_provider_checkout_id: existing.subscription.payment_provider_checkout_id }
-            : {}),
-          ...(existing.subscription?.last_payment_method
-            ? { last_payment_method: existing.subscription.last_payment_method }
-            : {}),
-          ...(existing.subscription?.consumed_payment_ids?.length
-            ? { consumed_payment_ids: existing.subscription.consumed_payment_ids }
-            : {}),
-          created_at: existing.subscription?.created_at || now.toISOString(),
-          updated_at: now.toISOString(),
-        }
-      : makeFreeSubscription(existing.createdBy || existing.subscription?.user_id || '', companyId, existing.subscription);
-    const tier = planId === PLAN_FOUNDING_ID ? 'Growth' : 'Free';
+    const ownerId = existing.createdBy || existing.subscription?.user_id || '';
+    let nextSub: Subscription;
+    if (planId === PLAN_PROMO_ID) {
+      nextSub = makePromoSubscription(ownerId, companyId, grant || {}, existing.subscription);
+    } else if (planId === PLAN_FOUNDING_ID) {
+      nextSub = {
+        id: existing.subscription?.id || `sub-${companyId.slice(0, 8)}`,
+        user_id: ownerId,
+        company_id: companyId,
+        plan_id: PLAN_FOUNDING_ID,
+        status: 'active',
+        current_period_start: now.toISOString(),
+        current_period_end: end.toISOString(),
+        cancel_at_period_end: false,
+        auto_renew: true,
+        payment_provider: 'paymongo',
+        grant_source: 'paymongo',
+        ...(existing.subscription?.payment_provider_checkout_id
+          ? { payment_provider_checkout_id: existing.subscription.payment_provider_checkout_id }
+          : {}),
+        ...(existing.subscription?.last_payment_method
+          ? { last_payment_method: existing.subscription.last_payment_method }
+          : {}),
+        ...(existing.subscription?.consumed_payment_ids?.length
+          ? { consumed_payment_ids: existing.subscription.consumed_payment_ids }
+          : {}),
+        created_at: existing.subscription?.created_at || now.toISOString(),
+        updated_at: now.toISOString(),
+        billed_truck_count: existing.subscription?.billed_truck_count || FOUNDING_INCLUDED_TRUCKS,
+      };
+    } else {
+      nextSub = makeFreeSubscription(ownerId, companyId, existing.subscription);
+    }
+    const tier = isUnlockedPlanId(nextSub.plan_id) ? 'Growth' : 'Free';
     await saveCompanySubscription(companyId, nextSub, tier);
     if (companyId === company.id) {
       setSubscription(nextSub);
@@ -1110,7 +1119,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const activePlan = plans.find((p) => p.id === subscription.plan_id) || SAAS_PLANS[0];
   const planLimits = getPlanLimits(subscription.plan_id);
-  const canAddTruck = !hasReachedLimit(trucks.length, planLimits.maxTrucks);
+  const truckLimit = paidTruckLimit(subscription);
+  const canAddTruck = !hasReachedLimit(trucks.length, truckLimit);
   const canAddAccount = !hasReachedLimit(users.length, planLimits.maxAccounts);
   const canAddRole = !hasReachedLimit(roles.length, planLimits.maxRoles);
   const canAddTransaction = !hasReachedLimit(trips.length, planLimits.maxTransactions);
@@ -1135,7 +1145,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     isSubscriptionActive: subscription.status === 'active' || subscription.status === 'trialing',
     daysRemainingInPeriod,
     trucksUsed: trucks.length,
-    maxTrucks: planLimits.maxTrucks,
+    maxTrucks: truckLimit,
     accountsUsed: users.length,
     maxAccounts: planLimits.maxAccounts,
     rolesUsed: roles.length,
@@ -3182,6 +3192,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       payment_provider_checkout_id: paymentId,
       last_payment_method: paymentMethod,
       consumed_payment_ids: consumed,
+      billed_truck_count: Math.max(
+        trucks.length,
+        paidTruckLimit({ plan_id: PLAN_FOUNDING_ID, billed_truck_count: subscription.billed_truck_count })
+      ),
       updated_at: now.toISOString(),
     };
     setSubscription(nextSub);
@@ -3214,7 +3228,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsUpgradeModalOpen(false);
   };
 
-  const createPayMongoCheckout = async (planId: string, billingCycle: 'monthly' | 'annual' = 'monthly') => {
+  const createPayMongoCheckout = async (
+    planId: string,
+    billingCycle: 'monthly' | 'annual' = 'monthly',
+    truckCount = trucks.length
+  ) => {
     const successUrl = `${window.location.origin}/?billing=success`;
     const cancelUrl = `${window.location.origin}/?billing=cancel`;
     sessionStorage.setItem(PENDING_FOUNDING_KEY, planId);
@@ -3229,7 +3247,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         planId,
         companyId: company.id,
         billingCycle,
-        truckCount: trucks.length,
+        truckCount,
         customerName: currentUser.name,
         successUrl,
         cancelUrl,
@@ -3244,10 +3262,13 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
   };
 
-  const subscribeToFoundingPlan = async (billingCycle: 'monthly' | 'annual' = 'monthly') => {
+  const subscribeToFoundingPlan = async (
+    billingCycle: 'monthly' | 'annual' = 'monthly',
+    truckCount = trucks.length
+  ) => {
     const checkoutWindow = window.open('about:blank', `casinfreight-paymongo-${Date.now()}`);
     try {
-      const result = await createPayMongoCheckout(PLAN_FOUNDING_ID, billingCycle);
+      const result = await createPayMongoCheckout(PLAN_FOUNDING_ID, billingCycle, truckCount);
       setIsWaitingForPayMongo(true);
       if (checkoutWindow && !checkoutWindow.closed) {
         checkoutWindow.location.replace(result.checkoutUrl);

@@ -115,6 +115,7 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
 
   const handleAddFirstTruck = () => {
     if (!canAddTruck) {
+      sessionStorage.setItem('casinfreight_extra_truck', '1');
       setIsUpgradeModalOpen(true);
       return;
     }

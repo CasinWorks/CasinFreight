@@ -34,3 +34,13 @@ export function parseBillingCycle(value?: string): BillingCycle;
 export function foundingLockHeadline(): string;
 
 export function foundingLockBody(): string;
+
+export const MAX_BILLABLE_TRUCKS: number;
+
+export function paidTruckLimit(subscription?: { plan_id?: string; billed_truck_count?: number } | null): number;
+
+export function billableTruckCount(
+  actualCount?: number,
+  billedCount?: number,
+  requestedCount?: number
+): number;

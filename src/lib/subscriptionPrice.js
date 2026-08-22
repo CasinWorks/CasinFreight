@@ -52,3 +52,27 @@ export function foundingLockHeadline() {
 export function foundingLockBody() {
   return `Founding companies keep ${formatPhp(FOUNDING_BASE_PHP)} as long as they stay subscribed. New companies later pay ${formatPhp(FOUNDING_LIST_PHP)}.`;
 }
+
+export const MAX_BILLABLE_TRUCKS = 200;
+
+/** Trucks this company already paid for. Free is 1. Founding with no bill record is the 2 included trucks. Promo uses the admin-set cap. */
+export function paidTruckLimit(subscription) {
+  const billed = Math.floor(Number(subscription && subscription.billed_truck_count));
+  if (subscription && subscription.plan_id === 'plan_promo') {
+    if (Number.isFinite(billed) && billed > 0) return billed;
+    return 1;
+  }
+  if (subscription && subscription.plan_id === 'plan_founding') {
+    if (Number.isFinite(billed) && billed > 0) return billed;
+    return FOUNDING_INCLUDED_TRUCKS;
+  }
+  return 1;
+}
+
+/** Charge for the larger of actual fleet, already-paid slots, and requested slots. */
+export function billableTruckCount(actualCount, billedCount, requestedCount) {
+  const actual = Math.max(0, Math.floor(Number(actualCount) || 0));
+  const billed = Math.max(0, Math.floor(Number(billedCount) || 0));
+  const requested = Math.max(0, Math.floor(Number(requestedCount) || 0));
+  return Math.min(MAX_BILLABLE_TRUCKS, Math.max(actual, billed, requested, 1));
+}

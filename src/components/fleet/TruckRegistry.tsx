@@ -37,6 +37,7 @@ export const TruckRegistry: React.FC = () => {
     getTruckFuelSummary,
     canAddTruck,
     setIsUpgradeModalOpen,
+    subscriptionUsage,
   } = useFreight();
 
   // Tab View Switch: Fleet Overview vs Fuel Analytics
@@ -128,6 +129,7 @@ export const TruckRegistry: React.FC = () => {
 
   const handleOpenAdd = () => {
     if (!canAddTruck) {
+      sessionStorage.setItem('casinfreight_extra_truck', '1');
       setIsUpgradeModalOpen(true);
       return;
     }
@@ -247,6 +249,11 @@ export const TruckRegistry: React.FC = () => {
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Manage tare weights, GVWR capacities, fuel expenses, and calculate average kilometers-per-liter (km/L).
+              {subscriptionUsage.maxTrucks != null && (
+                <span className="ml-1 font-semibold text-slate-700">
+                  {trucks.length}/{subscriptionUsage.maxTrucks} paid truck{subscriptionUsage.maxTrucks === 1 ? '' : 's'}.
+                </span>
+              )}
             </p>
           </div>
 
@@ -268,7 +275,7 @@ export const TruckRegistry: React.FC = () => {
                 className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>Add New Truck</span>
+                <span>{canAddTruck ? 'Add New Truck' : 'Pay to add a truck'}</span>
               </button>
             )}
           </div>

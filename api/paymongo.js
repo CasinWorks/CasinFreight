@@ -229,7 +229,7 @@ async function runAction(action, body, origin, authHeader) {
   }
 
   const op = String(action || body.action || 'checkout').toLowerCase();
-  const { calculateSubscriptionPrice, parseBillingCycle } = await loadPricing();
+  const { calculateSubscriptionPrice, parseBillingCycle, billableTruckCount } = await loadPricing();
   const db = getAdminDb();
   if (!db) {
     return {
@@ -299,7 +299,16 @@ async function runAction(action, body, origin, authHeader) {
   } catch {
     // Keep the client-supplied company id if the user profile cannot be read.
   }
-  const truckCount = await countTrucks(db, companyId);
+  const actualTrucks = await countTrucks(db, companyId);
+  let billedTrucks = 0;
+  try {
+    const companySnap = await db.collection('companies').doc(companyId).get();
+    const sub = companySnap.exists && companySnap.data() && companySnap.data().subscription;
+    billedTrucks = Number(sub && sub.billed_truck_count) || 0;
+  } catch {
+    billedTrucks = 0;
+  }
+  const truckCount = billableTruckCount(actualTrucks, billedTrucks, body.truckCount);
   const price = calculateSubscriptionPrice(truckCount, parseBillingCycle(body.billingCycle));
   const result = await createCheckout({
     secretKey: key,

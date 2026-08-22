@@ -106,14 +106,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border ${
             activePlan.id === 'plan_free'
               ? 'bg-amber-50 text-amber-800 border-amber-200'
-              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : activePlan.id === 'plan_promo'
+                ? 'bg-violet-50 text-violet-800 border-violet-200'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
           }`}
         >
           {activePlan.name}
           <span className="font-mono font-medium text-[10px] opacity-80">
             {activePlan.id === 'plan_free'
               ? `Lock ${formatPhp(FOUNDING_BASE_PHP)} · ${subscriptionUsage.transactionsUsed}/${subscriptionUsage.maxTransactions ?? '∞'} trips`
-              : subscription.cancel_at_period_end
+              : activePlan.id === 'plan_promo'
+                ? `ends ${formatPhDate(subscription.current_period_end)} · ${subscriptionUsage.trucksUsed}/${subscriptionUsage.maxTrucks ?? 0} trucks`
+                : subscription.cancel_at_period_end
                 ? `ends ${formatPhDate(subscription.current_period_end)}`
                 : `renews ${formatPhDate(subscription.current_period_end)} · ${formatPhp(renewalPrice.monthlyTotal)}/mo`}
           </span>
@@ -263,7 +267,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     {showRenewalNudge && (
       <div className="bg-amber-50 border-b border-amber-200 px-3 md:px-6 py-2 text-[11px] text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <span>
-          {subscription.cancel_at_period_end
+          {activePlan.id === 'plan_promo'
+            ? `Promo access ends ${formatPhDate(subscription.current_period_end)}. Then this workspace returns to Free unless you subscribe.`
+            : subscription.cancel_at_period_end
             ? `Founding ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ${formatPhp(renewalPrice.chargePhp)} again.`
             : `Founding renews ${formatPhDate(subscription.current_period_end)} — ${formatPhp(renewalPrice.monthlyTotal)}/month for ${renewalPrice.truckCount} truck${renewalPrice.truckCount === 1 ? '' : 's'}.`}
         </span>
@@ -272,7 +278,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => setIsUpgradeModalOpen(true)}
           className="self-start sm:self-auto font-bold text-amber-900 underline underline-offset-2"
         >
-          Pay now
+          {activePlan.id === 'plan_promo' ? 'Subscribe' : 'Pay now'}
         </button>
       </div>
     )}

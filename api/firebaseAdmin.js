@@ -113,7 +113,7 @@ function foundingSubscription(companyId, userId, previous, payment) {
     last_payment_method: payment.method || 'qrph',
     consumed_payment_ids: consumed,
     billing_cycle: payment.billingCycle === 'annual' ? 'annual' : 'monthly',
-    billed_truck_count: Number(payment.truckCount || 0),
+    billed_truck_count: Math.max(Number(payment.truckCount || 0), 2),
     last_billed_amount_php: Number(payment.amountPhp || 0),
     created_at: (previous && previous.created_at) || now.toISOString(),
     updated_at: now.toISOString(),

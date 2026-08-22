@@ -1,9 +1,11 @@
 import React from 'react';
 import { Check, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { PLAN_FOUNDING_ID, SAAS_PLANS, formatPhDate } from '../../config/plans';
-import { calculateSubscriptionPrice, formatPhp, FOUNDING_LIST_PHP, foundingLockBody, foundingLockHeadline, type BillingCycle } from '../../lib/subscriptionPrice';
+import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, SAAS_PLANS, formatPhDate } from '../../config/plans';
+import { calculateSubscriptionPrice, formatPhp, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, foundingLockBody, foundingLockHeadline, type BillingCycle } from '../../lib/subscriptionPrice';
 import { closeIfBackdrop } from '../../lib/modal';
+
+const EXTRA_TRUCK_INTENT_KEY = 'casinfreight_extra_truck';
 
 export const UpgradeModal: React.FC = () => {
   const {
@@ -24,17 +26,33 @@ export const UpgradeModal: React.FC = () => {
   const [billingCycle, setBillingCycle] = React.useState<BillingCycle>(
     subscription.billing_cycle === 'annual' ? 'annual' : 'monthly'
   );
+  const usedTrucks = subscriptionUsage.trucksUsed || 0;
+  const paidTrucks = subscriptionUsage.maxTrucks ?? 1;
+  const minTrucks = Math.max(usedTrucks, 1);
+  const [desiredTrucks, setDesiredTrucks] = React.useState(Math.max(minTrucks, paidTrucks));
+
+  React.useEffect(() => {
+    if (!isUpgradeModalOpen) return;
+    const wantExtra = sessionStorage.getItem(EXTRA_TRUCK_INTENT_KEY) === '1';
+    sessionStorage.removeItem(EXTRA_TRUCK_INTENT_KEY);
+    if (usedTrucks > paidTrucks) {
+      setDesiredTrucks(minTrucks);
+      return;
+    }
+    setDesiredTrucks(wantExtra ? Math.max(minTrucks, paidTrucks) + 1 : Math.max(minTrucks, paidTrucks));
+  }, [isUpgradeModalOpen, minTrucks, paidTrucks, usedTrucks]);
 
   if (!isUpgradeModalOpen) return null;
 
-  const truckCount = subscriptionUsage.trucksUsed || 0;
+  const truckCount = desiredTrucks;
   const price = calculateSubscriptionPrice(truckCount, billingCycle);
+  const overPaidFleet = usedTrucks > paidTrucks;
 
   const handleSubscribe = async () => {
     setIsSubmitting(true);
     setError(null);
     try {
-      await subscribeToFoundingPlan(billingCycle);
+      await subscribeToFoundingPlan(billingCycle, desiredTrucks);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start PayMongo checkout.');
     } finally {
@@ -56,11 +74,29 @@ export const UpgradeModal: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">
               Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is {formatPhp(price.basePhp)}/month for up to {price.includedTrucks} trucks, then {formatPhp(price.perExtraTruckPhp)} per extra truck.
             </p>
-            {activePlan.id !== PLAN_FOUNDING_ID && (
+            {activePlan.id === PLAN_PROMO_ID && (
+              <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2">
+                <span className="text-[11px] font-extrabold text-violet-950">Promo access — no charge</span>
+                <p className="text-[10px] text-violet-800 mt-0.5">
+                  Complimentary until {formatPhDate(subscription.current_period_end)}. {paidTrucks} truck slot{paidTrucks === 1 ? '' : 's'}. After that this workspace returns to Free unless you subscribe.
+                </p>
+              </div>
+            )}
+            {activePlan.id !== PLAN_FOUNDING_ID && activePlan.id !== PLAN_PROMO_ID && (
               <div className="mt-2 inline-flex flex-col gap-0.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
                 <span className="text-[11px] font-extrabold text-amber-950">{foundingLockHeadline()}</span>
                 <span className="text-[10px] text-amber-800">{foundingLockBody()}</span>
               </div>
+            )}
+            {overPaidFleet && (
+              <p className="text-[11px] font-semibold text-amber-800 mt-1.5">
+                This fleet has {usedTrucks} trucks but you paid for {paidTrucks}. Pay for {desiredTrucks} trucks before adding more.
+              </p>
+            )}
+            {activePlan.id === PLAN_FOUNDING_ID && !overPaidFleet && usedTrucks >= paidTrucks && (
+              <p className="text-[11px] font-semibold text-amber-800 mt-1.5">
+                You paid for {paidTrucks} truck{paidTrucks === 1 ? '' : 's'}. Use + below to add another for {formatPhp(price.perExtraTruckPhp)}/month each.
+              </p>
             )}
             {isWaitingForPayMongo && (
               <p className="text-[11px] font-semibold text-blue-700 mt-1.5">
@@ -125,6 +161,33 @@ export const UpgradeModal: React.FC = () => {
                           Save {price.annualDiscountPercent}%
                         </span>
                       </button>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Trucks on this plan</div>
+                        <div className="text-[11px] text-slate-500">
+                          {formatPhp(price.basePhp)} covers {price.includedTrucks}. Extra trucks are {formatPhp(price.perExtraTruckPhp)}/mo each.
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={desiredTrucks <= minTrucks}
+                          onClick={() => setDesiredTrucks((n) => Math.max(minTrucks, n - 1))}
+                          className="w-7 h-7 rounded-lg border border-slate-200 text-slate-700 font-bold disabled:opacity-40"
+                        >
+                          −
+                        </button>
+                        <span className="w-8 text-center text-sm font-black text-slate-900">{desiredTrucks}</span>
+                        <button
+                          type="button"
+                          disabled={desiredTrucks >= MAX_BILLABLE_TRUCKS}
+                          onClick={() => setDesiredTrucks((n) => Math.min(MAX_BILLABLE_TRUCKS, n + 1))}
+                          className="w-7 h-7 rounded-lg border border-slate-200 text-slate-700 font-bold disabled:opacity-40"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
                     <div className="mt-3">
                       {billingCycle === 'annual' ? (
@@ -233,7 +296,7 @@ export const UpgradeModal: React.FC = () => {
           })}
         </div>
 
-        {activePlan.id === PLAN_FOUNDING_ID && (
+        {(activePlan.id === PLAN_FOUNDING_ID || activePlan.id === PLAN_PROMO_ID) && (
           <div className="px-6 pb-4">
             <button
               type="button"
@@ -261,7 +324,7 @@ export const UpgradeModal: React.FC = () => {
         <div className="px-6 pb-5 grid grid-cols-3 gap-3 text-[11px] text-slate-500">
           <div className="flex items-center gap-1.5">
             <Truck className="w-3.5 h-3.5" />
-            <span>{subscriptionUsage.trucksUsed}/{subscriptionUsage.maxTrucks ?? '∞'} trucks</span>
+            <span>{subscriptionUsage.trucksUsed}/{subscriptionUsage.maxTrucks ?? 1} paid truck slots</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />

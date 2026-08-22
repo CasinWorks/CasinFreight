@@ -642,6 +642,7 @@ export interface Subscription {
   billing_cycle?: 'monthly' | 'annual';
   billed_truck_count?: number;
   last_billed_amount_php?: number;
+  grant_source?: 'paymongo' | 'promo';
   created_at: string;
   updated_at: string;
 }

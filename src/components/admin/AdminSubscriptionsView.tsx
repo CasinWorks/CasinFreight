@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Banknote, Crown, Loader2, RefreshCw, RotateCcw, Search, Shield, Wallet } from 'lucide-react';
+import { Banknote, Crown, Gift, Loader2, RefreshCw, RotateCcw, Search, Shield, Wallet, X } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, formatPhDate, formatPhp } from '../../config/plans';
+import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, formatPhp } from '../../config/plans';
+import { MAX_BILLABLE_TRUCKS } from '../../lib/subscriptionPrice';
 import type { CompanyDocument } from '../../services/firestoreCompany';
+import { closeIfBackdrop } from '../../lib/modal';
 
 function planLabel(planId?: string) {
   if (planId === PLAN_FOUNDING_ID) return 'Founding';
+  if (planId === PLAN_PROMO_ID) return 'Promo';
   return 'Free';
 }
 
@@ -20,6 +23,17 @@ function daysLeft(iso?: string) {
   return Math.ceil((end - Date.now()) / 86400000);
 }
 
+function todayInputDate() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function defaultPromoDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 export const AdminSubscriptionsView: React.FC = () => {
   const { company, invoices, trips, listPlatformSubscriptions, setCompanyPlanByAdmin, isPlatformAdmin } = useFreight();
   const [rows, setRows] = useState<CompanyDocument[]>([]);
@@ -27,6 +41,9 @@ export const AdminSubscriptionsView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [promoRow, setPromoRow] = useState<CompanyDocument | null>(null);
+  const [promoTrucks, setPromoTrucks] = useState('2');
+  const [promoDeadline, setPromoDeadline] = useState(defaultPromoDate());
 
   const load = async () => {
     setIsLoading(true);
@@ -59,7 +76,9 @@ export const AdminSubscriptionsView: React.FC = () => {
   }, [query, rows]);
 
   const foundingRows = rows.filter((row) => row.subscription?.plan_id === PLAN_FOUNDING_ID);
+  const promoRows = rows.filter((row) => row.subscription?.plan_id === PLAN_PROMO_ID);
   const foundingCount = foundingRows.length;
+  const promoCount = promoRows.length;
   const mrr = foundingRows.reduce((sum, row) => {
     const billed = Number(row.subscription?.last_billed_amount_php || 0);
     if (billed > 0) {
@@ -95,6 +114,31 @@ export const AdminSubscriptionsView: React.FC = () => {
     }
   };
 
+  const openPromo = (row: CompanyDocument) => {
+    setPromoRow(row);
+    setPromoTrucks(String(row.subscription?.billed_truck_count || 2));
+    const existingEnd = row.subscription?.plan_id === PLAN_PROMO_ID ? row.subscription?.current_period_end : '';
+    setPromoDeadline(existingEnd ? existingEnd.slice(0, 10) : defaultPromoDate());
+  };
+
+  const savePromo = async () => {
+    if (!promoRow) return;
+    setBusyId(promoRow.id);
+    setError(null);
+    try {
+      await setCompanyPlanByAdmin(promoRow.id, PLAN_PROMO_ID, {
+        maxTrucks: Number(promoTrucks),
+        endsAt: promoDeadline,
+      });
+      setPromoRow(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not grant promo access.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto p-4 md:p-6">
       <div className="max-w-6xl mx-auto space-y-5">
@@ -106,7 +150,7 @@ export const AdminSubscriptionsView: React.FC = () => {
             </div>
             <h1 className="text-xl font-extrabold text-slate-900 mt-1">Revenue & plans</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Founding is {formatPhp(FOUNDING_PRICE_PHP)}/month for up to 2 trucks, then ₱150 per extra truck. Annual billing is 15% off. PayMongo charges each checkout; membership lasts until the renewal date.
+              Founding is {formatPhp(FOUNDING_PRICE_PHP)}/month for up to 2 trucks, then ₱150 per extra truck. Use <span className="font-semibold">Give promo</span> to turn a company on for free, with your truck cap and deadline.
             </p>
           </div>
           <button
@@ -121,7 +165,7 @@ export const AdminSubscriptionsView: React.FC = () => {
 
         <div>
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">CasinFreight SaaS</div>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Companies</div>
               <div className="text-2xl font-black text-slate-900 mt-1">{rows.length}</div>
@@ -129,6 +173,10 @@ export const AdminSubscriptionsView: React.FC = () => {
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Founding</div>
               <div className="text-2xl font-black text-blue-700 mt-1">{foundingCount}</div>
+            </div>
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-violet-600">Promo</div>
+              <div className="text-2xl font-black text-violet-800 mt-1">{promoCount}</div>
             </div>
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
               <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Monthly SaaS revenue</div>
@@ -218,6 +266,8 @@ export const AdminSubscriptionsView: React.FC = () => {
                 )}
                 {!isLoading && filtered.map((row) => {
                   const isFounding = row.subscription?.plan_id === PLAN_FOUNDING_ID;
+                  const isPromo = row.subscription?.plan_id === PLAN_PROMO_ID;
+                  const isUnlocked = isFounding || isPromo;
                   const isCurrent = row.id === company.id;
                   const left = daysLeft(row.subscription?.current_period_end);
                   const autoRenew = isFounding && row.subscription?.auto_renew !== false && !row.subscription?.cancel_at_period_end;
@@ -235,16 +285,23 @@ export const AdminSubscriptionsView: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 align-top">
                         <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                          isFounding
+                          isPromo
+                            ? 'bg-violet-50 text-violet-700 border-violet-200'
+                            : isFounding
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
-                          {isFounding && <Crown className="w-3 h-3" />}
+                          {isPromo ? <Gift className="w-3 h-3" /> : isFounding ? <Crown className="w-3 h-3" /> : null}
                           {planLabel(row.subscription?.plan_id)}
                         </span>
+                        {isPromo && (
+                          <div className="text-[10px] text-violet-700 mt-1">
+                            {row.subscription?.billed_truck_count || 1} truck{(row.subscription?.billed_truck_count || 1) === 1 ? '' : 's'}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 align-top text-xs text-slate-600">
-                        {isFounding ? (
+                        {isUnlocked ? (
                           <>
                             <div>{formatPhDate(row.subscription?.current_period_end)}</div>
                             <div className="text-[10px] text-slate-400">
@@ -254,14 +311,25 @@ export const AdminSubscriptionsView: React.FC = () => {
                         ) : '—'}
                       </td>
                       <td className="px-4 py-3 align-top text-xs text-slate-600">
-                        {isFounding ? (autoRenew ? 'On' : 'Off') : '—'}
+                        {isFounding ? (autoRenew ? 'On' : 'Off') : isPromo ? 'Promo' : '—'}
                       </td>
                       <td className="px-4 py-3 align-top text-[11px] font-mono text-slate-500">
-                        {row.subscription?.last_payment_method || row.subscription?.payment_provider_checkout_id || '—'}
+                        {isPromo ? 'Complimentary' : (row.subscription?.last_payment_method || row.subscription?.payment_provider_checkout_id || '—')}
                       </td>
                       <td className="px-4 py-3 align-top text-right">
                         <div className="inline-flex flex-col sm:flex-row gap-2 justify-end">
-                          {isFounding ? (
+                          {isPlatformAdmin && (
+                            <button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => openPromo(row)}
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 text-violet-700 text-[11px] font-bold disabled:opacity-60"
+                            >
+                              {busyId === row.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Gift className="w-3 h-3" />}
+                              Give promo
+                            </button>
+                          )}
+                          {isUnlocked ? (
                             <button
                               type="button"
                               disabled={busyId === row.id}
@@ -292,6 +360,62 @@ export const AdminSubscriptionsView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {promoRow && (
+        <div
+          className="fixed inset-0 z-[90] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={closeIfBackdrop(() => setPromoRow(null), Boolean(busyId))}
+        >
+          <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-violet-700">
+                  <Gift className="w-4 h-4" />
+                  <h2 className="text-base font-extrabold text-slate-900">Give promo access</h2>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {promoRow.name || promoRow.email} stays free until the deadline. Same tools as Founding, with the truck cap you set.
+                </p>
+              </div>
+              <button type="button" onClick={() => setPromoRow(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <label className="block mt-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Maximum trucks
+              <input
+                type="number"
+                min={1}
+                max={MAX_BILLABLE_TRUCKS}
+                value={promoTrucks}
+                onChange={(e) => setPromoTrucks(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              />
+            </label>
+            <label className="block mt-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Deadline
+              <input
+                type="date"
+                value={promoDeadline}
+                min={todayInputDate()}
+                onChange={(e) => setPromoDeadline(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              />
+            </label>
+            <p className="text-[11px] text-slate-500 mt-2">
+              On that date this company returns to Free: 1 truck, 1 account, 10 trips.
+            </p>
+            <button
+              type="button"
+              disabled={Boolean(busyId)}
+              onClick={() => void savePromo()}
+              className="mt-4 w-full py-2.5 rounded-xl bg-violet-700 hover:bg-violet-800 text-white text-xs font-bold disabled:opacity-60"
+            >
+              {busyId === promoRow.id ? 'Saving…' : 'Turn on promo'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
