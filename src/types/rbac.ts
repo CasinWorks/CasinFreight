@@ -98,6 +98,12 @@ export const SYSTEM_PERMISSIONS: RbacPermission[] = [
     description: 'Verify transport deliverables and transition shipment to BIR billing.',
     category: 'operations',
   },
+  {
+    id: 'trips.status_retract_approve',
+    name: 'Approve Shipment Status Rollback',
+    description: 'Owner / General Manager clearance to move a shipment backward after reviewing the written reason.',
+    category: 'operations',
+  },
 
   // Fleet & Assets
   {

@@ -236,6 +236,32 @@ export interface TripAccessorial {
 
 export type TripStatus = 'Pending' | 'Loaded' | 'In Transit' | 'Delivered' | 'Invoiced' | 'On Hold' | 'Cancelled';
 
+export type TripRetractionReasonCategory =
+  | 'Wrong status posted'
+  | 'Loading not actually complete'
+  | 'Truck did not depart'
+  | 'Delivery not actually complete'
+  | 'POD / paperwork correction'
+  | 'Duplicate or mis-click'
+  | 'Other operational error';
+
+export interface TripStatusRetractionRequest {
+  id: string;
+  tripId: string;
+  fromStatus: TripStatus;
+  toStatus: TripStatus;
+  requestedBy: string;
+  requestedByRole: string;
+  requestedAt: string;
+  reasonCategory: TripRetractionReasonCategory;
+  detailedReason: string;
+  status: 'Pending_Approval' | 'Approved' | 'Rejected';
+  reviewedBy?: string;
+  reviewedByRole?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+}
+
 export type TripExceptionKind =
   | 'client_hold'
   | 'waiting_documents'
@@ -382,6 +408,8 @@ export interface Trip {
   holdFromStatus?: TripStatus;
   exceptionKind?: TripExceptionKind;
   exceptionNote?: string;
+  activeStatusRetraction?: TripStatusRetractionRequest | null;
+  statusRetractionHistory?: TripStatusRetractionRequest[];
 }
 
 export type FieldEventKind =
@@ -660,6 +688,23 @@ export interface SubscriptionUsageStats {
   hasReachedAccountCap: boolean;
   hasReachedRoleCap: boolean;
   hasReachedTransactionCap: boolean;
+}
+
+export type PlatformNoticeKind = 'maintenance' | 'update';
+
+export interface PlatformNotice {
+  id: string;
+  kind: PlatformNoticeKind;
+  title: string;
+  message: string;
+  hasDowntime: boolean;
+  downtimeStart?: string;
+  downtimeEnd?: string;
+  showUntil: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
 }
 
 

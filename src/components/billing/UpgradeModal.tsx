@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { SAAS_PLANS, formatPhDate } from '../../config/plans';
+import { closeIfBackdrop } from '../../lib/modal';
 
 export const UpgradeModal: React.FC = () => {
   const {
@@ -37,7 +38,7 @@ export const UpgradeModal: React.FC = () => {
   const waiting = isWaitingForPayMongo || isSubmitting;
 
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeIfBackdrop(() => setIsUpgradeModalOpen(false), isWaitingForPayMongo)}>
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between bg-slate-50">
           <div>

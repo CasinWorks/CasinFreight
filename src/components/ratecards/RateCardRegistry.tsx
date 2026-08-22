@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { RateCard, TruckType } from '../../types';
+import { closeIfBackdrop } from '../../lib/modal';
 
 export const RateCardRegistry: React.FC = () => {
   const { rateCards, addRateCard, updateRateCard, deleteRateCard, canAccess } = useFreight();
@@ -217,7 +218,7 @@ export const RateCardRegistry: React.FC = () => {
 
       {/* Add / Edit Rate Card Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={closeIfBackdrop(() => setShowModal(false))}>
           <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-xs text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h2 className="text-base font-bold text-slate-900">

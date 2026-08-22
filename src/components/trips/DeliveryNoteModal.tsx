@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { displaySignatory, isPlaceholderSignatory } from '../../lib/podSignoff';
+import { closeIfBackdrop } from '../../lib/modal';
 import { Trip, Truck as TruckType, Driver, Client, Company, TripStatus } from '../../types';
 
 interface DeliveryNoteModalProps {
@@ -80,7 +81,7 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-70 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-70 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 md:p-6 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-900 relative">
         
         {/* Header Action Bar */}

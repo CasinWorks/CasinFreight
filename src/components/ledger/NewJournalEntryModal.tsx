@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
+import { closeIfBackdrop } from '../../lib/modal';
 
 interface NewJournalEntryModalProps {
   isOpen: boolean;
@@ -128,7 +129,7 @@ export const NewJournalEntryModal: React.FC<NewJournalEntryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         
         {/* Header */}

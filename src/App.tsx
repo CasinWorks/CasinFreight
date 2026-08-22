@@ -25,8 +25,9 @@ import { NotificationDrawer } from './components/notifications/NotificationDrawe
 import { LoginPage } from './components/auth/LoginPage';
 import { Trip } from './types';
 import { KanbanSquare, PlusCircle, Receipt, Truck, LayoutDashboard, Menu } from 'lucide-react';
-import { AdminSubscriptionsView } from './components/admin/AdminSubscriptionsView';
+import { AdminConsoleView } from './components/admin/AdminConsoleView';
 import { UpgradeModal } from './components/billing/UpgradeModal';
+import { PlatformNoticeGate, MaintenanceLockScreen } from './components/notices/PlatformNoticeGate';
 import { TutorialProvider, useTutorial } from './components/tutorial';
 
 function MainLayout() {
@@ -105,7 +106,7 @@ function MainLayout() {
           onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
         />
 
-        <main data-tutorial="main-workspace" className="flex-1 flex flex-col min-w-0 w-full overflow-hidden bg-[#F8FAFC] pb-16 lg:pb-0">
+        <main data-tutorial="main-workspace" className="flex-1 flex flex-col min-w-0 w-full overflow-hidden bg-[#F8FAFC] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           {activeTab === 'board' && (
             <TripBoard
               onOpenNewTrip={() => {
@@ -164,13 +165,13 @@ function MainLayout() {
           )}
 
           {activeTab === 'admin' && canManageBilling && (
-            <AdminSubscriptionsView />
+            <AdminConsoleView />
           )}
         </main>
       </div>
 
       {/* Mobile Bottom Navigation Bar for rapid thumb access */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 flex items-center justify-around shadow-lg">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-lg">
         <button
           data-tutorial="nav-board"
           onClick={() => handleTabChange('board')}
@@ -304,7 +305,7 @@ function TutorialUpgradeGate() {
 }
 
 function AppContent() {
-  const { isAuthenticated, isAuthLoading } = useFreight();
+  const { isAuthenticated, isAuthLoading, isPlatformAdmin, activeDowntime } = useFreight();
 
   if (isAuthLoading) {
     return (
@@ -317,12 +318,27 @@ function AppContent() {
     );
   }
 
+  if (isAuthenticated && activeDowntime && !isPlatformAdmin) {
+    return <MaintenanceLockScreen notice={activeDowntime} />;
+  }
+
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return (
+      <>
+        <PlatformNoticeGate />
+        {activeDowntime && (
+          <div className="bg-amber-500 text-amber-950 text-center text-xs font-semibold px-4 py-2">
+            CasinFreight is in downtime — {activeDowntime.title}. Team members cannot operate after sign-in. The platform owner can sign in to turn this off.
+          </div>
+        )}
+        <LoginPage />
+      </>
+    );
   }
 
   return (
     <>
+      <PlatformNoticeGate />
       <MainLayout />
     </>
   );

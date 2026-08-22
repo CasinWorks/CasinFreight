@@ -24,15 +24,13 @@ import {
   LiveTracking,
 } from '../../types';
 
+import { resumeTarget } from '../../lib/stageGates';
+
+export { resumeTarget };
+
 export function exceptionKindLabel(kind?: TripExceptionKind): string | undefined {
   if (!kind) return undefined;
   return [...HOLD_EXCEPTION_KINDS, ...CANCEL_EXCEPTION_KINDS].find((item) => item.id === kind)?.label;
-}
-
-export function resumeTarget(trip: Trip): TripStatus {
-  const from = trip.holdFromStatus;
-  if (from && from !== 'On Hold' && from !== 'Cancelled') return from;
-  return 'Pending';
 }
 
 interface TripKanbanCardProps {
@@ -52,6 +50,7 @@ interface TripKanbanCardProps {
   canManipulateTripStatus: (targetStatus: TripStatus, currentStatus?: TripStatus) => RolePermissionCheck;
   tracking?: LiveTracking;
   hasTruckBan?: boolean;
+  compact?: boolean;
 }
 
 export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
@@ -71,6 +70,7 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
   canManipulateTripStatus,
   tracking,
   hasTruckBan,
+  compact = false,
 }) => {
   const netCap = truck ? truck.netPayloadKg : 10000;
   const loadPercent = Math.min(100, Math.round((trip.cargoWeightKg / netCap) * 100));
@@ -110,7 +110,9 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
   return (
     <div
       onClick={() => onSelectTrip(trip)}
-      className={`p-4 bg-white border border-slate-200 rounded-lg shadow-xs hover:shadow-md transition-all cursor-pointer group select-none text-left border-l-4 ${leftBorder}`}
+      className={`bg-white border border-slate-200 rounded-lg shadow-xs hover:shadow-md transition-all cursor-pointer group select-none text-left border-l-4 ${leftBorder} ${
+        compact ? 'p-2.5' : 'p-3'
+      }`}
     >
       <div className="flex justify-between items-start mb-2">
         <span className={`text-xs font-bold font-mono px-1.5 py-0.5 rounded ${
@@ -149,14 +151,19 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
           <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono font-medium">
             #{trip.tripNumber}
           </span>
+          {trip.activeStatusRetraction?.status === 'Pending_Approval' && (
+            <span className="text-[10px] bg-amber-50 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded font-bold">
+              Rollback pending
+            </span>
+          )}
         </div>
       </div>
 
-      <p className="font-bold text-sm text-slate-900 line-clamp-1 mb-1">
+      <p className="font-bold text-sm text-slate-900 line-clamp-1 mb-0.5">
         {trip.originZone} → {trip.destinationZone}
       </p>
 
-      <div className="text-xs mb-2 truncate">
+      <div className="text-xs mb-1.5 truncate">
         <span className={`font-semibold ${
           isClientMatched || selectedClientId === trip.clientId
             ? 'text-blue-700 bg-blue-50 px-1 rounded'
@@ -168,7 +175,8 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
         <span className="text-slate-500">{trip.cargoDescription}</span>
       </div>
 
-      <div className="mb-3 bg-slate-50 p-2 rounded border border-slate-100">
+      {!compact && (
+      <div className="mb-2 bg-slate-50 p-1.5 rounded border border-slate-100">
         <div className="flex items-center justify-between text-[10px] mb-1 text-slate-500">
           <span className="flex items-center gap-1 font-medium">
             <Weight className="w-3 h-3" />
@@ -189,8 +197,9 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
           />
         </div>
       </div>
+      )}
 
-      <div className="flex flex-wrap gap-1 mb-3">
+      <div className={`flex flex-wrap gap-1 ${compact ? 'mb-1.5' : 'mb-2'}`}>
         {exceptionLabel && (trip.status === 'On Hold' || trip.status === 'Cancelled') && (
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex items-center gap-1 ${
             trip.status === 'Cancelled'
@@ -231,8 +240,8 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
         )}
       </div>
 
-      {trip.status !== 'Cancelled' && trip.status !== 'On Hold' && (
-        <div className="mb-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
+      {trip.status !== 'Cancelled' && trip.status !== 'On Hold' && !compact && (
+        <div className="mb-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stage:</span>
           <div className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-md border border-slate-200/80">
             {(['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'] as TripStatus[]).map((stg) => {
@@ -262,19 +271,26 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
         </div>
       )}
 
-      {(canHold || canCancel) && (
-        <div className="mb-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-700 shrink-0">
+            {driver ? driver.name.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'DR'}
+          </div>
+          <p className="text-[11px] text-slate-600 font-medium truncate max-w-[72px]">
+            {driver?.name.split(' ')[0]}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           {canHold && (
             <button
               type="button"
               onClick={(e) => onHold(e, trip)}
               disabled={!holdPerm.allowed}
-              title={holdPerm.allowed ? 'Hold: client delay, weather, breakdown, checkpoint' : `Requires ${holdPerm.allowedRoles.join(', ')}`}
-              className="text-[10px] font-bold px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50 flex items-center gap-1"
+              title={holdPerm.allowed ? 'Hold this trip' : `Requires ${holdPerm.allowedRoles.join(', ')}`}
+              className="p-1 rounded border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
             >
-              {!holdPerm.allowed && <Lock className="w-2.5 h-2.5" />}
-              <PauseCircle className="w-3 h-3" />
-              Hold
+              <PauseCircle className="w-3.5 h-3.5" />
             </button>
           )}
           {canCancel && (
@@ -282,29 +298,13 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
               type="button"
               onClick={(e) => onCancel(e, trip)}
               disabled={!cancelPerm.allowed}
-              title={cancelPerm.allowed ? 'Cancel booking — truck is freed' : `Requires ${cancelPerm.allowedRoles.join(', ')}`}
-              className="text-[10px] font-bold px-2 py-1 rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50 flex items-center gap-1"
+              title={cancelPerm.allowed ? 'Cancel this trip' : `Requires ${cancelPerm.allowedRoles.join(', ')}`}
+              className="p-1 rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
             >
-              {!cancelPerm.allowed && <Lock className="w-2.5 h-2.5" />}
-              <Ban className="w-3 h-3" />
-              Cancel
+              <Ban className="w-3.5 h-3.5" />
             </button>
           )}
-        </div>
-      )}
-
-      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-700">
-            {driver ? driver.name.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'DR'}
-          </div>
-          <p className="text-[11px] text-slate-600 font-medium truncate max-w-[80px]">
-            {driver?.name.split(' ')[0]}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <span className="font-mono font-bold text-xs text-slate-800">
+          <span className="font-mono font-bold text-xs text-slate-800 ml-0.5">
             ₱{trip.baseRatePhp.toLocaleString()}
           </span>
           <button

@@ -1,5 +1,35 @@
 import { Trip, TripStatus } from '../types';
 
+export const PIPELINE_STAGES: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+
+export function resumeTarget(trip: Pick<Trip, 'holdFromStatus'>): TripStatus {
+  const from = trip.holdFromStatus;
+  if (from && from !== 'On Hold' && from !== 'Cancelled') return from;
+  return 'Pending';
+}
+
+export function isStatusRetraction(from: TripStatus, to: TripStatus, holdFrom?: TripStatus): boolean {
+  if (from === to) return false;
+  if (to === 'On Hold' || to === 'Cancelled') return false;
+
+  if (from === 'On Hold') {
+    const origin = holdFrom && holdFrom !== 'On Hold' && holdFrom !== 'Cancelled' ? holdFrom : 'Pending';
+    const originIdx = PIPELINE_STAGES.indexOf(origin);
+    const toIdx = PIPELINE_STAGES.indexOf(to);
+    if (toIdx < 0) return false;
+    return toIdx < originIdx;
+  }
+
+  if (from === 'Cancelled') {
+    return PIPELINE_STAGES.includes(to);
+  }
+
+  const fromIdx = PIPELINE_STAGES.indexOf(from);
+  const toIdx = PIPELINE_STAGES.indexOf(to);
+  if (fromIdx < 0 || toIdx < 0) return false;
+  return toIdx < fromIdx;
+}
+
 export function hasSignedInk(dataUrl?: string): boolean {
   if (!dataUrl) return false;
   const value = dataUrl.trim();

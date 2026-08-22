@@ -8,6 +8,15 @@
   }
 }
 
+/* Keep form fields at least 16px on phones so iOS does not zoom, and leave room for the home indicator. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Custom Scrollbars for Sleek Interface feel */
 ::-webkit-scrollbar {
   width: 6px;

@@ -18,6 +18,41 @@ export const OWNER_RBAC_ROLE: RbacRole = {
 export const DEFAULT_RBAC_ROLES: RbacRole[] = [
   OWNER_RBAC_ROLE,
   {
+    id: 'General Manager',
+    name: 'General Manager',
+    description: 'Company-wide operations lead. Can approve shipment status rollbacks after reviewing the written reason.',
+    color: 'slate',
+    isSystem: true,
+    permissions: [
+      'trips.view',
+      'trips.create',
+      'trips.edit',
+      'trips.delete',
+      'trips.reassign_fleet',
+      'trips.status_pending',
+      'trips.status_loaded',
+      'trips.status_in_transit',
+      'trips.status_delivered',
+      'trips.status_invoiced',
+      'trips.status_retract_approve',
+      'fleet.view',
+      'fleet.crud',
+      'drivers.view',
+      'drivers.crud',
+      'drivers.approve',
+      'fuel.view',
+      'fuel.log',
+      'invoices.view',
+      'invoices.create',
+      'ratecards.view',
+      'ratecards.manage',
+      'dashboard.view',
+      'settings.manage',
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
     id: 'Fleet Manager',
     name: 'Fleet & Operations Manager',
     description: 'Oversees fleet vehicle registry, driver certifications, dispatch schedules, and fuel auditing.',
@@ -156,12 +191,36 @@ export const DEFAULT_RBAC_ROLES: RbacRole[] = [
 ];
 
 export function checkPermission(roleId: string, permissionId: string, customRoles: RbacRole[] = []): boolean {
-  if (roleId.toLowerCase() === 'owner') return true;
+  if (roleId.toLowerCase() === 'owner' || roleId.toLowerCase().includes('owner')) return true;
   const role = customRoles.find(
     (r) => r.id.toLowerCase() === roleId.toLowerCase() || r.name.toLowerCase() === roleId.toLowerCase()
   );
   if (!role) return false;
   return role.permissions.includes(permissionId);
+}
+
+export function isTripRetractionApprover(roleId: string, customRoles: RbacRole[] = []): boolean {
+  const n = (roleId || '').toLowerCase();
+  if (n.includes('owner')) return true;
+  if (n.includes('general manager') || n === 'gm') return true;
+  return checkPermission(roleId, 'trips.status_retract_approve', customRoles);
+}
+
+export function ensureDefaultSystemRoles(loaded: RbacRole[]): RbacRole[] {
+  const byId = new Map(loaded.map((role) => [role.id, role]));
+  for (const systemRole of DEFAULT_RBAC_ROLES.filter((role) => role.isSystem)) {
+    if (!byId.has(systemRole.id)) {
+      byId.set(systemRole.id, systemRole);
+    }
+  }
+  const owner = byId.get(OWNER_ROLE_ID);
+  if (owner) {
+    const missing = SYSTEM_PERMISSIONS.map((permission) => permission.id).filter((id) => !owner.permissions.includes(id));
+    if (missing.length) {
+      byId.set(OWNER_ROLE_ID, { ...owner, permissions: [...owner.permissions, ...missing] });
+    }
+  }
+  return Array.from(byId.values());
 }
 
 export function getAllowedRolesForPermission(permissionId: string, customRoles: RbacRole[] = []): string[] {

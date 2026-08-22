@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AlertTriangle, PauseCircle, X } from 'lucide-react';
+import { closeIfBackdrop } from '../../lib/modal';
 import { CANCEL_EXCEPTION_KINDS, HOLD_EXCEPTION_KINDS, Trip, TripExceptionKind } from '../../types';
 
 interface TripExceptionModalProps {
@@ -20,7 +21,7 @@ export const TripExceptionModal: React.FC<TripExceptionModalProps> = ({
   const [note, setNote] = useState('');
 
   return (
-    <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">

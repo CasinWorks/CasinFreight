@@ -36,9 +36,11 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { Trip, TripStatus, HOLD_EXCEPTION_KINDS, CANCEL_EXCEPTION_KINDS, TripExceptionKind } from '../../types';
 import { matchingTruckBans } from '../../lib/truckBans';
+import { isStatusRetraction } from '../../lib/stageGates';
 import { DeliveryNoteModal } from './DeliveryNoteModal';
 import { StatusPrerequisiteModal } from './StatusPrerequisiteModal';
 import { TripExceptionModal } from './TripExceptionModal';
+import { TripStatusRetractionModal } from './TripStatusRetractionModal';
 import { resumeTarget, TripKanbanCard } from './TripKanbanCard';
 
 interface TripBoardProps {
@@ -78,6 +80,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
     createInvoiceForTrip, 
     getInvoiceByTripId,
     canManipulateTripStatus,
+    canApproveTripStatusRetraction,
     canCreateTrip,
     canAccess,
     currentUser,
@@ -90,6 +93,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
   const [prerequisiteTargetStatus, setPrerequisiteTargetStatus] = useState<TripStatus | null>(null);
   const [deliveryNoteTrip, setDeliveryNoteTrip] = useState<Trip | null>(null);
   const [exceptionTarget, setExceptionTarget] = useState<{ trip: Trip; mode: 'hold' | 'cancel' } | null>(null);
+  const [retractionTarget, setRetractionTarget] = useState<{ trip: Trip; toStatus: TripStatus } | null>(null);
 
   // View mode
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
@@ -184,6 +188,16 @@ export const TripBoard: React.FC<TripBoardProps> = ({
   const handleDirectStatusChange = (e: React.MouseEvent, trip: Trip, targetStatus: TripStatus) => {
     e.stopPropagation();
     if (targetStatus === trip.status) return;
+
+    if (trip.activeStatusRetraction?.status === 'Pending_Approval') {
+      setRetractionTarget({ trip, toStatus: trip.activeStatusRetraction.toStatus });
+      return;
+    }
+
+    if (isStatusRetraction(trip.status, targetStatus, trip.holdFromStatus)) {
+      setRetractionTarget({ trip, toStatus: targetStatus });
+      return;
+    }
 
     if (targetStatus === 'On Hold' || targetStatus === 'Cancelled') {
       if (trip.status === 'Invoiced') return;
@@ -656,6 +670,32 @@ export const TripBoard: React.FC<TripBoardProps> = ({
           </div>
         )}
 
+        {trips.some((trip) => trip.activeStatusRetraction?.status === 'Pending_Approval') && (
+          <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-950 text-xs px-3 py-2 rounded-lg flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
+              <span className="font-semibold">
+                {trips.filter((trip) => trip.activeStatusRetraction?.status === 'Pending_Approval').length} shipment status rollback
+                {trips.filter((trip) => trip.activeStatusRetraction?.status === 'Pending_Approval').length === 1 ? '' : 's'} waiting for Owner or General Manager review.
+              </span>
+            </div>
+            {canApproveTripStatusRetraction && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = trips.find((trip) => trip.activeStatusRetraction?.status === 'Pending_Approval');
+                  if (next?.activeStatusRetraction) {
+                    setRetractionTarget({ trip: next, toStatus: next.activeStatusRetraction.toStatus });
+                  }
+                }}
+                className="shrink-0 px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-bold hover:bg-amber-100"
+              >
+                Review
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Operational Quick-Stats Ribbon */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-slate-100">
           {/* Stat 1: Active Linehauls */}
@@ -956,18 +996,19 @@ export const TripBoard: React.FC<TripBoardProps> = ({
       </div>
 
       {/* Main Board Content */}
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto p-4 md:p-6 flex flex-col">
+      <div className={`flex-1 min-h-0 p-3 md:p-4 flex flex-col ${viewMode === 'kanban' ? 'overflow-hidden' : 'overflow-auto'}`}>
         {viewMode === 'kanban' ? (
-          <div className="flex flex-col gap-4 flex-1 min-h-0 pb-2">
-            <div className="flex gap-4 min-w-[1200px] flex-1 min-h-[420px] items-stretch">
+          <div className="flex flex-col gap-3 flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-x-auto">
+              <div className="flex gap-3 h-full min-w-[1100px] items-stretch">
               {COLUMNS.map((column) => {
                 const columnTrips = filteredTrips.filter(t => t.status === column.id);
                 return (
                   <div
                     key={column.id}
-                    className="flex-1 min-w-[280px] max-w-[340px] bg-slate-100/70 border border-slate-200 rounded-xl flex flex-col h-full shadow-2xs overflow-hidden"
+                    className="flex-1 min-w-[240px] max-w-[320px] bg-slate-100/70 border border-slate-200 rounded-xl flex flex-col h-full shadow-2xs overflow-hidden"
                   >
-                    <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-xl shrink-0">
+                    <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-xl shrink-0">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${
                           column.id === 'Pending' ? 'bg-slate-400' :
@@ -981,9 +1022,9 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                         {columnTrips.length}
                       </span>
                     </div>
-                    <div className="p-2.5 overflow-y-auto space-y-2.5 flex-1 min-h-0 custom-scrollbar">
+                    <div className="p-2 overflow-y-auto space-y-2 flex-1 min-h-0 custom-scrollbar">
                       {columnTrips.length === 0 ? (
-                        <div className="py-8 px-3 text-center border border-dashed border-slate-300 rounded-lg text-slate-400 text-xs bg-white/50 space-y-1">
+                        <div className="py-6 px-3 text-center border border-dashed border-slate-300 rounded-lg text-slate-400 text-xs bg-white/50 space-y-1">
                           <div>No shipments in {column.label.toLowerCase()}</div>
                           {hasActiveFilters && <div className="text-[10px] text-slate-400">matching current filter</div>}
                         </div>
@@ -996,44 +1037,43 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                   </div>
                 );
               })}
+              </div>
             </div>
 
-            <div className="min-w-[720px]">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="shrink-0">
+              <div className="flex items-center gap-2 mb-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Exceptions</span>
-                <span className="text-[11px] text-slate-400">Hold, breakdown, weather, cancel — these leave the happy path</span>
+                <span className="text-[11px] text-slate-400">Always on screen — hold and cancelled leave the pipeline</span>
               </div>
-              <div className="flex gap-4 items-stretch min-h-[240px]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[28vh] min-h-[7.5rem]">
                 {EXCEPTION_COLUMNS.map((column) => {
                   const columnTrips = filteredTrips.filter(t => t.status === column.id);
                   return (
                     <div
                       key={column.id}
-                      className={`flex-1 min-w-[320px] bg-slate-100/70 border rounded-xl flex flex-col shadow-2xs overflow-hidden ${
+                      className={`bg-white border rounded-xl flex flex-col overflow-hidden min-h-0 ${
                         column.id === 'On Hold' ? 'border-amber-200' : 'border-rose-200'
                       }`}
                     >
-                      <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-xl shrink-0">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${column.id === 'On Hold' ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                            <span className="text-xs font-bold tracking-tight text-slate-800">{column.label}</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{column.desc}</p>
+                      <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${column.id === 'On Hold' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                          <span className="text-xs font-bold tracking-tight text-slate-800">{column.label}</span>
+                          <span className="text-[10px] text-slate-400 hidden sm:inline">{column.desc}</span>
                         </div>
                         <span className={`text-[11px] font-mono px-2 py-0.5 rounded font-bold border ${column.countColor}`}>
                           {columnTrips.length}
                         </span>
                       </div>
-                      <div className="p-2.5 overflow-y-auto space-y-2.5 flex-1 min-h-0 custom-scrollbar">
+                      <div className="p-2 overflow-y-auto space-y-2 flex-1 min-h-0 custom-scrollbar max-h-[22vh]">
                         {columnTrips.length === 0 ? (
-                          <div className="py-8 px-3 text-center border border-dashed border-slate-300 rounded-lg text-slate-400 text-xs bg-white/50">
-                            No {column.label.toLowerCase()} shipments
+                          <div className="py-3 px-3 text-center text-slate-400 text-[11px]">
+                            No {column.label.toLowerCase()} trips
                           </div>
                         ) : (
                           columnTrips.map((trip) => (
-                            <TripKanbanCard key={trip.id} {...kanbanCardProps(trip)} />
+                            <TripKanbanCard key={trip.id} {...kanbanCardProps(trip)} compact />
                           ))
                         )}
                       </div>
@@ -1245,6 +1285,15 @@ export const TripBoard: React.FC<TripBoardProps> = ({
           mode={exceptionTarget.mode}
           onClose={() => setExceptionTarget(null)}
           onConfirm={handleExceptionConfirm}
+        />
+      )}
+
+      {retractionTarget && (
+        <TripStatusRetractionModal
+          isOpen
+          trip={trips.find((item) => item.id === retractionTarget.trip.id) || retractionTarget.trip}
+          toStatus={retractionTarget.toStatus}
+          onClose={() => setRetractionTarget(null)}
         />
       )}
 

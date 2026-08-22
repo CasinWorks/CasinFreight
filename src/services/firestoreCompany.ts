@@ -183,6 +183,36 @@ export async function replaceCollection<T extends { id: string }>(
   }
 }
 
+export async function upsertCollection<T extends { id: string }>(
+  companyId: string,
+  name: WorkspaceCollection,
+  items: T[]
+): Promise<void> {
+  if (!companyId || items.length === 0) return;
+  const db = getFirebaseDb();
+  const colRef = collection(db, 'companies', companyId, name);
+  let batch = writeBatch(db);
+  let ops = 0;
+
+  for (const item of items) {
+    if (!item.id) continue;
+    const { password: _password, ...rest } = item as T & { password?: string };
+    batch.set(
+      doc(colRef, item.id),
+      stripUndefined(rest as unknown as Record<string, unknown>),
+      { merge: true }
+    );
+    ops += 1;
+    if (ops >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      ops = 0;
+    }
+  }
+
+  if (ops > 0) await batch.commit();
+}
+
 export async function seedCompanyWorkspace(params: {
   uid: string;
   email: string;
@@ -278,6 +308,72 @@ export function createAuditLog(companyId: string, entry: RbacAuditEntry): Promis
 export async function listCompanyDocuments(): Promise<CompanyDocument[]> {
   const snap = await getDocs(collection(getFirebaseDb(), 'companies'));
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as CompanyDocument) }));
+}
+
+const WORKSPACE_COLLECTIONS: WorkspaceCollection[] = [
+  'roles',
+  'members',
+  'trucks',
+  'drivers',
+  'clients',
+  'rateCards',
+  'truckBans',
+  'trips',
+  'invoices',
+  'fuelLogs',
+  'journalEntries',
+  'notifications',
+  'auditLogs',
+  'liveTracking',
+  'fieldEvents',
+];
+
+async function deleteCollectionDocs(companyId: string, name: WorkspaceCollection): Promise<void> {
+  const db = getFirebaseDb();
+  const snap = await getDocs(collection(db, 'companies', companyId, name));
+  let batch = writeBatch(db);
+  let ops = 0;
+  for (const item of snap.docs) {
+    batch.delete(item.ref);
+    ops += 1;
+    if (ops >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      ops = 0;
+    }
+  }
+  if (ops > 0) await batch.commit();
+}
+
+export async function deleteCompanyWorkspace(params: {
+  companyId: string;
+  memberIds: string[];
+  memberEmails: string[];
+}): Promise<void> {
+  const db = getFirebaseDb();
+  const { companyId, memberIds, memberEmails } = params;
+
+  for (const uid of memberIds.filter(Boolean)) {
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+    } catch (error) {
+      console.error('Could not remove user profile during company delete', uid, error);
+    }
+  }
+
+  for (const email of memberEmails.filter(Boolean)) {
+    try {
+      await deleteInvite(email);
+    } catch {
+      // Pending invites may already be gone.
+    }
+  }
+
+  for (const name of WORKSPACE_COLLECTIONS) {
+    await deleteCollectionDocs(companyId, name);
+  }
+
+  await deleteDoc(doc(db, 'companies', companyId));
 }
 
 export async function saveCompanySubscription(

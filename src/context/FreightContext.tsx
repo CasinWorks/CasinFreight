@@ -19,6 +19,8 @@ import {
   Trip, 
   TripStatus, 
   TripAccessorial, 
+  TripRetractionReasonCategory,
+  TripStatusRetractionRequest,
   POD,
   FieldEvent,
   LiveTracking, 
@@ -41,9 +43,10 @@ import {
   SubscriptionUsageStats,
   PayMongoPaymentMethod,
   RbacRole,
-  RbacAuditEntry
+  RbacAuditEntry,
+  PlatformNotice,
 } from '../types';
-import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, getAllowedRolesForPermission } from '../services/rbac';
+import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, ensureDefaultSystemRoles, getAllowedRolesForPermission, isTripRetractionApprover } from '../services/rbac';
 import { initialChartOfAccounts } from '../data/mockData';
 import { getFirebaseAuth, isFirebaseConfigured } from '../lib/firebase';
 import { METRO_MANILA_TRUCK_BAN_PRESETS } from '../lib/truckBans';
@@ -59,16 +62,30 @@ import {
   loadCollection,
   listenCollection,
   replaceCollection,
+  upsertCollection,
   saveCompanyDocument,
   saveCompanySubscription,
   saveInvite,
   saveUserProfile,
   seedCompanyWorkspace,
+  deleteCompanyWorkspace as deleteCompanyWorkspaceDocs,
 } from '../services/firestoreCompany';
+import { deletePlatformNotice as deletePlatformNoticeDoc, listenPlatformNotices, savePlatformNotice as savePlatformNoticeDoc, activeDowntimeNotice } from '../services/firestoreNotices';
+import { saveWeeklyBackup } from '../lib/weeklyBackupStore';
+import {
+  BACKUP_COLLECTIONS,
+  BACKUP_FORMAT,
+  BACKUP_VERSION,
+  mergeChartOfAccounts,
+  remapCompanyId,
+  stripSecrets,
+  type BackupRecord,
+  type WorkspaceBackup,
+} from '../lib/workspaceBackup';
 import { PLAN_FOUNDING_ID, PLAN_FREE_ID, SAAS_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, makeFreeSubscription } from '../config/plans';
 import { isPlatformAdminEmail } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
-import { missingSignaturesForStatus } from '../lib/stageGates';
+import { isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
   switch (type) {
@@ -147,10 +164,15 @@ interface FreightContextType {
   fieldEvents: FieldEvent[];
   addTrip: (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>) => Trip | null;
   updateTrip: (id: string, updates: Partial<Trip>) => void;
-  updateTripStatus: (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>) => void;
+  updateTripStatus: (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>, options?: { allowRetraction?: boolean }) => void;
   addAccessorialToTrip: (tripId: string, accessorial: Omit<TripAccessorial, 'id' | 'tripId'>) => void;
   removeAccessorialFromTrip: (tripId: string, accessorialId: string) => void;
   submitPOD: (tripId: string, podData: Omit<POD, 'id' | 'tripId' | 'signedAt'>) => void;
+  requestTripStatusRetraction: (tripId: string, toStatus: TripStatus, reasonCategory: TripRetractionReasonCategory, detailedReason: string) => void;
+  applyOwnTripStatusRetraction: (tripId: string, toStatus: TripStatus, reasonCategory: TripRetractionReasonCategory, detailedReason: string) => void;
+  approveTripStatusRetraction: (tripId: string, reviewNote: string) => void;
+  rejectTripStatusRetraction: (tripId: string, reviewNote: string) => void;
+  canApproveTripStatusRetraction: boolean;
   
   invoices: Invoice[];
   createInvoiceForTrip: (tripId: string) => Invoice;
@@ -302,6 +324,15 @@ interface FreightContextType {
   listPlatformSubscriptions: () => Promise<CompanyDocument[]>;
   setCompanyPlanByAdmin: (companyId: string, planId: string) => Promise<void>;
   resetCurrentPlanToFree: () => Promise<void>;
+  deleteCompanyWorkspace: () => Promise<void>;
+  captureWorkspaceBackup: () => WorkspaceBackup;
+  restoreWorkspaceBackup: (backup: WorkspaceBackup) => Promise<void>;
+  saveWeeklyBackupNow: () => Promise<void>;
+  platformNotices: PlatformNotice[];
+  savePlatformNotice: (notice: PlatformNotice) => Promise<void>;
+  deletePlatformNotice: (id: string) => Promise<void>;
+  endActiveDowntime: () => Promise<void>;
+  activeDowntime: PlatformNotice | null;
 }
 
 const FreightContext = createContext<FreightContextType | undefined>(undefined);
@@ -407,6 +438,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isWaitingForPayMongo, setIsWaitingForPayMongo] = useState(false);
+  const [platformNotices, setPlatformNotices] = useState<PlatformNotice[]>([]);
   const unlockingFoundingRef = useRef(false);
 
   const resetWorkspace = () => {
@@ -493,7 +525,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       subscriptionTier: nextSub.plan_id === PLAN_FOUNDING_ID ? 'Growth' : 'Free',
     });
     setSubscription(nextSub);
-    setRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
+    setRoles(ensureDefaultSystemRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]));
     const seenTutorial = Boolean(profile?.has_seen_tutorial) || hasSeenTutorialLocally(uid);
     const uniqueMembers = Object.values(
       loadedMembers.reduce<Record<string, User>>((acc, member) => {
@@ -591,8 +623,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+    const unsub = listenPlatformNotices(setPlatformNotices);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       const companyDoc: CompanyDocument = {
         ...company,
         createdBy: companyCreatedByRef.current || currentUserId,
@@ -609,6 +648,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!persistReadyRef.current || !company.id) return;
     if (currentUserId !== companyCreatedByRef.current) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'roles', roles).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -618,6 +658,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!persistReadyRef.current || !company.id) return;
     if (currentUserId !== companyCreatedByRef.current) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'members', users).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -626,6 +667,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'trucks', trucks).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -634,6 +676,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'drivers', drivers).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -642,6 +685,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'clients', clients).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -650,6 +694,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'rateCards', rateCards).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -658,6 +703,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'truckBans', truckBans).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -667,6 +713,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!persistReadyRef.current || !company.id) return;
     if (!tripsDirtyRef.current) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'trips', trips, { merge: true })
         .then(() => {
           tripsDirtyRef.current = false;
@@ -679,6 +726,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'invoices', invoices).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -687,6 +735,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'fuelLogs', fuelLogs).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -695,6 +744,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'journalEntries', journalEntries).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -703,6 +753,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'notifications', notifications).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
@@ -711,10 +762,54 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => {
+      if (!persistReadyRef.current) return;
       replaceCollection(company.id, 'auditLogs', rbacAuditLogs).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
   }, [rbacAuditLogs, company.id]);
+
+  const captureWorkspaceBackup = (): WorkspaceBackup => ({
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    companyId: company.id,
+    companyName: company.name,
+    company: {
+      id: company.id,
+      name: company.name,
+      tin: company.tin,
+      address: company.address,
+      contactNumber: company.contactNumber,
+      email: company.email,
+      currency: company.currency,
+      logoUrl: company.logoUrl,
+      registeredDate: company.registeredDate,
+    },
+    chartOfAccounts,
+    collections: {
+      trucks: trucks.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      drivers: drivers.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      clients: clients.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      rateCards: rateCards.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      truckBans: truckBans.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      trips: trips.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      invoices: invoices.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      fuelLogs: fuelLogs.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      journalEntries: journalEntries.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      roles: roles.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      members: users.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      auditLogs: rbacAuditLogs.map((item) => stripSecrets(item as unknown as BackupRecord)),
+    },
+  });
+
+  useEffect(() => {
+    if (!isAuthenticated || !company.id) return;
+    const timer = window.setTimeout(() => {
+      if (!persistReadyRef.current) return;
+      saveWeeklyBackup(captureWorkspaceBackup()).catch((err) => console.warn('Could not save weekly local backup', err));
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, company.id]);
 
   const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
 
@@ -886,6 +981,121 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsWaitingForPayMongo(false);
     await setCompanyPlanByAdmin(company.id, PLAN_FREE_ID);
   };
+
+  const deleteCompanyWorkspace = async () => {
+    const isOwner = currentUser.role === 'Owner' || currentUser.role.toLowerCase().includes('owner') || companyCreatedByRef.current === currentUserId;
+    if (!isOwner) {
+      throw new Error('Only the company owner can delete this company.');
+    }
+    const companyId = company.id;
+    if (!companyId) {
+      throw new Error('No company workspace is loaded.');
+    }
+    persistReadyRef.current = false;
+    await deleteCompanyWorkspaceDocs({
+      companyId,
+      memberIds: users.map((member) => member.id).filter(Boolean),
+      memberEmails: users.map((member) => member.email).filter(Boolean),
+    });
+    await logout();
+  };
+
+  const restoreWorkspaceBackup = async (backup: WorkspaceBackup) => {
+    const isOwner = currentUser.role === 'Owner' || currentUser.role.toLowerCase().includes('owner') || companyCreatedByRef.current === currentUserId;
+    if (!isOwner) {
+      throw new Error('Only the company owner can restore a workspace backup.');
+    }
+    const companyId = company.id;
+    if (!companyId) {
+      throw new Error('No company workspace is loaded.');
+    }
+    persistReadyRef.current = false;
+    tripsDirtyRef.current = false;
+    let wrote = false;
+    try {
+      const existing = await getCompanyDocument(companyId);
+      if (!existing) {
+        throw new Error('Company workspace was not found.');
+      }
+
+      const mergedAccounts = mergeChartOfAccounts(
+        (Array.isArray(existing.chartOfAccounts) ? existing.chartOfAccounts as ChartOfAccount[] : chartOfAccounts),
+        backup.chartOfAccounts || []
+      );
+
+      await saveCompanyDocument({
+        ...existing,
+        name: backup.company.name || existing.name,
+        tin: backup.company.tin ?? existing.tin,
+        address: backup.company.address ?? existing.address,
+        contactNumber: backup.company.contactNumber ?? existing.contactNumber,
+        email: backup.company.email ?? existing.email,
+        currency: backup.company.currency || existing.currency,
+        logoUrl: backup.company.logoUrl ?? existing.logoUrl,
+        registeredDate: backup.company.registeredDate || existing.registeredDate,
+        chartOfAccounts: mergedAccounts,
+      });
+      wrote = true;
+
+      for (const name of BACKUP_COLLECTIONS) {
+        const items = (backup.collections[name] || []).map((item) => remapCompanyId(item, companyId));
+        await upsertCollection(companyId, name, items);
+      }
+
+      await hydrateCompany(companyId, currentUserId);
+    } catch (error) {
+      if (wrote) {
+        try {
+          await hydrateCompany(companyId, currentUserId);
+        } catch {
+          persistReadyRef.current = false;
+        }
+      } else {
+        persistReadyRef.current = true;
+      }
+      throw error;
+    }
+  };
+
+  const saveWeeklyBackupNow = async () => {
+    if (!company.id) {
+      throw new Error('No company workspace is loaded.');
+    }
+    const saved = await saveWeeklyBackup(captureWorkspaceBackup(), true);
+    if (!saved) {
+      throw new Error('Could not save a local weekly snapshot in this browser.');
+    }
+  };
+
+  const savePlatformNotice = async (notice: PlatformNotice) => {
+    if (!isPlatformAdmin) {
+      throw new Error('Only the CasinFreight owner can publish notices.');
+    }
+    await savePlatformNoticeDoc(notice);
+  };
+
+  const deletePlatformNotice = async (id: string) => {
+    if (!isPlatformAdmin) {
+      throw new Error('Only the CasinFreight owner can delete notices.');
+    }
+    await deletePlatformNoticeDoc(id);
+  };
+
+  const endActiveDowntime = async () => {
+    if (!isPlatformAdmin) {
+      throw new Error('Only the CasinFreight owner can end downtime.');
+    }
+    const current = activeDowntimeNotice(platformNotices);
+    if (!current) return;
+    await savePlatformNoticeDoc({
+      ...current,
+      isActive: false,
+      hasDowntime: false,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const activeDowntime = activeDowntimeNotice(platformNotices) || null;
 
   const activePlan = plans.find((p) => p.id === subscription.plan_id) || SAAS_PLANS[0];
   const planLimits = getPlanLimits(subscription.plan_id);
@@ -1521,15 +1731,24 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
   };
 
-  const updateTripStatus = (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>) => {
+  const updateTripStatus = (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>, options?: { allowRetraction?: boolean }) => {
     setTrips(prev => prev.map(trip => {
       if (trip.id === id) {
         const previousStatus = trip.status;
         const merged = { ...trip, ...extras };
-        const blocked = missingSignaturesForStatus(merged, newStatus);
-        if (blocked) {
-          window.alert(blocked);
+        if (
+          isStatusRetraction(previousStatus, newStatus, merged.holdFromStatus || trip.holdFromStatus)
+          && !options?.allowRetraction
+        ) {
+          window.alert('Shipment status cannot be rolled back directly. Submit a reason for Owner or General Manager approval.');
           return trip;
+        }
+        if (!options?.allowRetraction) {
+          const blocked = missingSignaturesForStatus(merged, newStatus);
+          if (blocked) {
+            window.alert(blocked);
+            return trip;
+          }
         }
         tripsDirtyRef.current = true;
 
@@ -1660,6 +1879,202 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return trip;
     }));
+  };
+
+  const requestTripStatusRetraction = (
+    tripId: string,
+    toStatus: TripStatus,
+    reasonCategory: TripRetractionReasonCategory,
+    detailedReason: string
+  ) => {
+    const trip = trips.find((item) => item.id === tripId);
+    if (!trip) {
+      throw new Error('Shipment was not found.');
+    }
+    if (trip.activeStatusRetraction?.status === 'Pending_Approval') {
+      throw new Error('This shipment already has a status rollback waiting for Owner or General Manager review.');
+    }
+    if (!isStatusRetraction(trip.status, toStatus, trip.holdFromStatus)) {
+      throw new Error('That is not a status rollback.');
+    }
+    const reason = detailedReason.trim();
+    if (reason.length < 10) {
+      throw new Error('Write a specific reason (at least 10 characters) before submitting.');
+    }
+
+    const req: TripStatusRetractionRequest = {
+      id: `trip-retract-${Date.now()}`,
+      tripId,
+      fromStatus: trip.status,
+      toStatus,
+      requestedBy: currentUser.name || currentUser.email,
+      requestedByRole: currentUser.role,
+      requestedAt: new Date().toISOString(),
+      reasonCategory,
+      detailedReason: reason,
+      status: 'Pending_Approval',
+    };
+
+    tripsDirtyRef.current = true;
+    setTrips((prev) => prev.map((item) => (
+      item.id === tripId ? { ...item, activeStatusRetraction: req } : item
+    )));
+
+    addNotification({
+      category: 'trip_update',
+      title: `${trip.tripNumber}: Status rollback requested`,
+      message: `${req.requestedBy} (${req.requestedByRole}) wants to move this shipment from ${req.fromStatus} back to ${req.toStatus}. Reason: "${reason}". Owner or General Manager must read the reason before approving.`,
+      isRead: false,
+      severity: 'warning',
+      tripId,
+      actionType: 'view_trip',
+      actionLabel: 'Review rollback request',
+      metadata: {
+        statusBadge: 'Rollback pending',
+      },
+    });
+  };
+
+  const applyOwnTripStatusRetraction = (
+    tripId: string,
+    toStatus: TripStatus,
+    reasonCategory: TripRetractionReasonCategory,
+    detailedReason: string
+  ) => {
+    if (!isTripRetractionApprover(currentUser.role, roles)) {
+      throw new Error('Only the Owner or General Manager can roll back status without a pending request.');
+    }
+    const trip = trips.find((item) => item.id === tripId);
+    if (!trip) {
+      throw new Error('Shipment was not found.');
+    }
+    if (!isStatusRetraction(trip.status, toStatus, trip.holdFromStatus)) {
+      throw new Error('That is not a status rollback.');
+    }
+    const reason = detailedReason.trim();
+    if (reason.length < 10) {
+      throw new Error('Write a specific reason (at least 10 characters) before rolling back.');
+    }
+
+    const resolved: TripStatusRetractionRequest = {
+      id: `trip-retract-${Date.now()}`,
+      tripId,
+      fromStatus: trip.status,
+      toStatus,
+      requestedBy: currentUser.name || currentUser.email,
+      requestedByRole: currentUser.role,
+      requestedAt: new Date().toISOString(),
+      reasonCategory,
+      detailedReason: reason,
+      status: 'Approved',
+      reviewedBy: currentUser.name || currentUser.email,
+      reviewedByRole: currentUser.role,
+      reviewedAt: new Date().toISOString(),
+      reviewNote: `Applied directly by ${currentUser.role}.`,
+    };
+
+    updateTripStatus(
+      tripId,
+      toStatus,
+      `Status rollback: ${trip.status} → ${toStatus}. ${reason}`,
+      undefined,
+      {
+        activeStatusRetraction: null,
+        statusRetractionHistory: [...(trip.statusRetractionHistory || []), resolved],
+      },
+      { allowRetraction: true }
+    );
+  };
+
+  const approveTripStatusRetraction = (tripId: string, reviewNote: string) => {
+    if (!isTripRetractionApprover(currentUser.role, roles)) {
+      throw new Error('Only the Owner or General Manager can approve a shipment status rollback.');
+    }
+    const trip = trips.find((item) => item.id === tripId);
+    const req = trip?.activeStatusRetraction;
+    if (!trip || !req || req.status !== 'Pending_Approval') {
+      throw new Error('There is no pending status rollback to approve.');
+    }
+
+    const resolved: TripStatusRetractionRequest = {
+      ...req,
+      status: 'Approved',
+      reviewedBy: currentUser.name || currentUser.email,
+      reviewedByRole: currentUser.role,
+      reviewedAt: new Date().toISOString(),
+      reviewNote: reviewNote.trim() || `Approved by ${currentUser.role} ${currentUser.name}.`,
+    };
+
+    updateTripStatus(
+      tripId,
+      req.toStatus,
+      `Status rollback approved: ${req.fromStatus} → ${req.toStatus}. ${resolved.reviewNote}`,
+      undefined,
+      {
+        activeStatusRetraction: null,
+        statusRetractionHistory: [...(trip.statusRetractionHistory || []), resolved],
+      },
+      { allowRetraction: true }
+    );
+
+    addNotification({
+      category: 'trip_update',
+      title: `${trip.tripNumber}: Status rollback approved`,
+      message: `${resolved.reviewedBy} approved moving this shipment back to ${req.toStatus}. Original reason: "${req.detailedReason}"`,
+      isRead: false,
+      severity: 'success',
+      tripId,
+      actionType: 'view_trip',
+      actionLabel: 'View shipment',
+      metadata: { statusBadge: req.toStatus },
+    });
+  };
+
+  const rejectTripStatusRetraction = (tripId: string, reviewNote: string) => {
+    if (!isTripRetractionApprover(currentUser.role, roles)) {
+      throw new Error('Only the Owner or General Manager can reject a shipment status rollback.');
+    }
+    const note = reviewNote.trim();
+    if (!note) {
+      throw new Error('Enter a note explaining why the rollback was rejected.');
+    }
+    const trip = trips.find((item) => item.id === tripId);
+    const req = trip?.activeStatusRetraction;
+    if (!trip || !req || req.status !== 'Pending_Approval') {
+      throw new Error('There is no pending status rollback to reject.');
+    }
+
+    const resolved: TripStatusRetractionRequest = {
+      ...req,
+      status: 'Rejected',
+      reviewedBy: currentUser.name || currentUser.email,
+      reviewedByRole: currentUser.role,
+      reviewedAt: new Date().toISOString(),
+      reviewNote: note,
+    };
+
+    tripsDirtyRef.current = true;
+    setTrips((prev) => prev.map((item) => (
+      item.id === tripId
+        ? {
+            ...item,
+            activeStatusRetraction: null,
+            statusRetractionHistory: [...(item.statusRetractionHistory || []), resolved],
+          }
+        : item
+    )));
+
+    addNotification({
+      category: 'trip_update',
+      title: `${trip.tripNumber}: Status rollback rejected`,
+      message: `${resolved.reviewedBy} kept the shipment at ${trip.status}. Note: "${note}"`,
+      isRead: false,
+      severity: 'warning',
+      tripId,
+      actionType: 'view_trip',
+      actionLabel: 'View shipment',
+      metadata: { statusBadge: trip.status },
+    });
   };
 
   const addAccessorialToTrip = (tripId: string, accessorial: Omit<TripAccessorial, 'id' | 'tripId'>) => {
@@ -2567,6 +2982,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const getClientById = (id: string) => clients.find(c => c.id === id);
   const getTripById = (id: string) => trips.find(t => t.id === id);
 
+  const canApproveTripStatusRetraction = isTripRetractionApprover(currentUser.role, roles);
+
   const canManipulateTripStatus = (targetStatus: TripStatus, currentStatus?: TripStatus): RolePermissionCheck => {
     const role = currentUser.role;
     let requiredPerm = 'trips.status_pending';
@@ -3017,6 +3434,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       addTrip,
       updateTrip,
       updateTripStatus,
+      requestTripStatusRetraction,
+      applyOwnTripStatusRetraction,
+      approveTripStatusRetraction,
+      rejectTripStatusRetraction,
+      canApproveTripStatusRetraction,
       addAccessorialToTrip,
       removeAccessorialFromTrip,
       submitPOD,
@@ -3104,6 +3526,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       listPlatformSubscriptions,
       setCompanyPlanByAdmin,
       resetCurrentPlanToFree,
+      deleteCompanyWorkspace,
+      captureWorkspaceBackup,
+      restoreWorkspaceBackup,
+      saveWeeklyBackupNow,
+      platformNotices,
+      savePlatformNotice,
+      deletePlatformNotice,
+      endActiveDowntime,
+      activeDowntime,
     }}>
       {children}
     </FreightContext.Provider>

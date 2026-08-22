@@ -32,6 +32,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { RbacRole, SYSTEM_PERMISSIONS, PermissionCategory } from '../../types/rbac';
 import { RoleEditorModal } from './RoleEditorModal';
+import { closeIfBackdrop } from '../../lib/modal';
 
 const ROLE_COLOR_MAP: Record<RbacRole['color'], { bg: string; border: string; text: string; badge: string; ring: string }> = {
   blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800 border-blue-200', ring: 'ring-blue-400' },
@@ -889,7 +890,7 @@ export const RbacManagementView: React.FC = () => {
 
       {/* Add Team Member Modal */}
       {isAddUserOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in" onClick={closeIfBackdrop(() => setIsAddUserOpen(false))}>
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -979,7 +980,7 @@ export const RbacManagementView: React.FC = () => {
 
       {/* Import Database JSON Modal */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in" onClick={closeIfBackdrop(() => setIsImportModalOpen(false))}>
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

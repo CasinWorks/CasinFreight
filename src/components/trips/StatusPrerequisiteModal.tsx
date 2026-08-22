@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { isPlaceholderSignatory } from '../../lib/podSignoff';
+import { closeIfBackdrop } from '../../lib/modal';
 import { uploadCompanyFile } from '../../lib/uploads';
 import { Trip, TripStatus, Truck as TruckType, Driver, Client, POD, CustodySignoff } from '../../types';
 import { SignaturePad, SignaturePadHandle } from './SignaturePad';
@@ -210,19 +211,19 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 md:p-6 overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-900">
+    <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-stretch sm:items-center justify-center p-0 sm:p-3 md:p-6 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
+      <div className="bg-white border-0 sm:border border-slate-200 rounded-none sm:rounded-2xl w-full max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-900">
         
         {/* Header */}
-        <div className="p-4 md:px-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div className="p-4 md:px-6 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-3 pt-[max(1rem,env(safe-area-inset-top))]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold shadow-2xs">
               <ShieldCheck className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                Mandatory Stage Clearance & Prerequisites
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+              <h3 className="font-bold text-slate-900 text-base sm:text-sm flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+                Sign & clear this stage
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border w-fit ${
                   targetStatus === 'Loaded' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                   targetStatus === 'In Transit' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                   targetStatus === 'Delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
@@ -241,14 +242,14 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors"
+            className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-5 md:p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+        <div className="p-4 sm:p-5 md:p-6 overflow-y-auto space-y-5 flex-1 text-sm sm:text-xs">
           
           {/* Role Permission Banner */}
           {!roleCheck.allowed ? (
@@ -344,18 +345,18 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                       value={securitySealNumber}
                       onChange={(e) => setSecuritySealNumber(e.target.value)}
                       placeholder="e.g. SEAL-PH-882941"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl sm:rounded-lg px-3 py-3 sm:py-1.5 text-base sm:text-xs min-h-12 sm:min-h-0 font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
                     />
                   </div>
                 </div>
 
                 <div className="flex flex-col justify-end">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                  <label className="flex items-center gap-3 text-sm sm:text-xs font-semibold text-slate-700 bg-slate-50 p-3 sm:p-2 rounded-xl sm:rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors min-h-12 sm:min-h-0">
                     <input
                       type="checkbox"
                       checked={weightVerified}
                       onChange={(e) => setWeightVerified(e.target.checked)}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-5 h-5 sm:w-4 sm:h-4"
                     />
                     <span>Weighbridge tare & cargo verified ({(trip.cargoWeightKg / 1000).toFixed(2)} MT)</span>
                   </label>
@@ -406,7 +407,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                     value={deliveryNoteNumber}
                     onChange={(e) => setDeliveryNoteNumber(e.target.value)}
                     placeholder="e.g. DN-2026-0811"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-blue-700 focus:bg-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl sm:rounded-lg px-3 py-3 sm:py-1.5 text-base sm:text-xs min-h-12 sm:min-h-0 font-mono font-bold text-blue-700 focus:bg-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -419,7 +420,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                     value={gatePassNumber}
                     onChange={(e) => setGatePassNumber(e.target.value)}
                     placeholder="e.g. GP-TAG-9402"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl sm:rounded-lg px-3 py-3 sm:py-1.5 text-base sm:text-xs min-h-12 sm:min-h-0 font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -462,7 +463,8 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                     value={receiverName}
                     onChange={(e) => setReceiverName(e.target.value)}
                     placeholder="e.g. Maria Santos"
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                    autoComplete="name"
+                    className="w-full bg-white border border-slate-200 rounded-xl sm:rounded-lg px-3 py-3 sm:py-1.5 text-base sm:text-xs min-h-12 sm:min-h-0 font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
@@ -475,7 +477,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                     value={receiverRole}
                     onChange={(e) => setReceiverRole(e.target.value)}
                     placeholder="e.g. Warehouse Supervisor"
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white border border-slate-200 rounded-xl sm:rounded-lg px-3 py-3 sm:py-1.5 text-base sm:text-xs min-h-12 sm:min-h-0 text-slate-900 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
@@ -486,7 +488,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                   <select
                     value={conditionStatus}
                     onChange={(e) => setConditionStatus(e.target.value as any)}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white border border-slate-200 rounded-xl sm:rounded-lg px-3 py-3 sm:py-1.5 text-base sm:text-xs min-h-12 sm:min-h-0 font-semibold text-slate-900 focus:outline-none focus:border-emerald-500"
                   >
                     <option value="Good Condition">✓ Good Condition (Seals OK)</option>
                     <option value="Partial Damage">⚠️ Partial Damage Noted</option>
@@ -498,23 +500,23 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
               <SignaturePad
                 ref={consigneePadRef}
                 label="Digital signature of receiving officer *"
-                hint="The consignee or warehouse receiver signs that cargo arrived in the condition noted above."
+                hint="Hand the phone to the warehouse receiver. Tap Sign full screen so they can sign with a finger."
                 existingUrl={trip.pod?.signatureDataUrl}
               />
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                    <Camera className="w-3 h-3 text-emerald-600" />
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                    <Camera className="w-4 h-4 text-emerald-600" />
                     Inspection photos
                   </label>
                   <button
                     type="button"
                     disabled={isUploadingPodPhoto}
                     onClick={() => podFileInputRef.current?.click()}
-                    className="text-[10px] font-semibold text-blue-600 disabled:opacity-50"
+                    className="text-white sm:text-blue-600 bg-blue-600 sm:bg-transparent text-xs font-bold disabled:opacity-50 min-h-10 px-3 rounded-lg sm:min-h-0 sm:px-0 sm:rounded-none"
                   >
-                    {isUploadingPodPhoto ? 'Uploading…' : '+ Add photo'}
+                    {isUploadingPodPhoto ? 'Uploading…' : 'Take / add photo'}
                   </button>
                   <input
                     ref={podFileInputRef}
@@ -591,15 +593,15 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors"
+            className="px-4 min-h-12 sm:min-h-0 py-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-sm sm:text-xs font-semibold text-slate-700 transition-colors"
           >
             Cancel
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {!roleCheck.allowed ? (
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 hidden sm:flex">
@@ -609,7 +611,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 <button
                   type="button"
                   disabled
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-slate-300 text-slate-500 font-bold text-xs cursor-not-allowed shadow-none"
+                  className="flex items-center gap-2 px-5 min-h-12 sm:min-h-0 py-3 sm:py-2 rounded-xl bg-slate-300 text-slate-500 font-bold text-sm sm:text-xs cursor-not-allowed shadow-none"
                   title={roleCheck.reason}
                 >
                   <Lock className="w-4 h-4 text-slate-400" />
@@ -619,7 +621,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
             ) : (
               <button
                 onClick={handleConfirm}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition-all active:scale-95"
+                className="flex items-center gap-2 px-5 min-h-12 sm:min-h-0 py-3 sm:py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm sm:text-xs shadow-md transition-all active:scale-95"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>{targetStatus === 'Invoiced' ? 'Generate invoice' : `Advance to ${targetStatus}`}</span>

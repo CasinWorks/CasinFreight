@@ -21,6 +21,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { TruckType } from '../../types';
 import { matchingTruckBans } from '../../lib/truckBans';
+import { closeIfBackdrop } from '../../lib/modal';
 import { TruckBanAlert } from '../truckbans/TruckBanAlert';
 
 interface NewTripModalProps {
@@ -266,7 +267,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     'Lipa City / Batangas Light Park',
     'Cabuyao Light Industry & Science Park'
   ];  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-900">
         
         {/* Header */}

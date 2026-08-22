@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useFreight, getTargetKmPerLiter } from '../../context/FreightContext';
 import { Truck, FuelLog } from '../../types';
+import { closeIfBackdrop } from '../../lib/modal';
 
 interface TruckFuelDetailModalProps {
   isOpen: boolean;
@@ -112,7 +113,7 @@ export const TruckFuelDetailModal: React.FC<TruckFuelDetailModalProps> = ({
   const canDelete = canDeleteFuelLog().allowed;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-xs text-slate-900 my-auto overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Modal Header */}

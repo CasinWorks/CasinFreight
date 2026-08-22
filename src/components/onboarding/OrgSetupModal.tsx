@@ -12,11 +12,15 @@ import {
   Plus,
   Trash2,
   Sparkles,
-  Award
+  Award,
+  HardDrive
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
 import { UserRole, TruckType } from '../../types';
+import { DeleteCompanyModal } from './DeleteCompanyModal';
+import { WorkspaceBackupModal } from './WorkspaceBackupModal';
+import { closeIfBackdrop } from '../../lib/modal';
 
 interface OrgSetupModalProps {
   isOpen: boolean;
@@ -37,9 +41,12 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
     canAddAccount,
     canAddTruck,
     setIsUpgradeModalOpen,
+    currentUser,
   } = useFreight();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isBackupOpen, setIsBackupOpen] = useState(false);
 
   // Step 1: Company details
   const [compName, setCompName] = useState(company.name);
@@ -142,7 +149,7 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
@@ -252,6 +259,40 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
+
+              {(currentUser.role === 'Owner' || currentUser.role.toLowerCase().includes('owner')) && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-2">
+                  <div className="font-bold text-slate-900">Backup & restore</div>
+                  <p className="text-slate-600">
+                    Download a CSV copy of this company. Restore is a merge by ID, not a wipe — newer live trips stay. Weekly snapshots stay in this browser only; keep the CSV off this computer as well.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsBackupOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 font-bold hover:bg-slate-100"
+                  >
+                    <HardDrive className="w-3.5 h-3.5" />
+                    Open backup…
+                  </button>
+                </div>
+              )}
+
+              {(currentUser.role === 'Owner' || currentUser.role.toLowerCase().includes('owner')) && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 space-y-2">
+                  <div className="font-bold text-rose-900">Danger zone</div>
+                  <p className="text-rose-800">
+                    Deleting this company removes trips, invoices, trucks, and team access. You will be asked to type the company name and DELETE so it cannot happen by accident.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-rose-300 text-rose-700 font-bold hover:bg-rose-100"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete company…
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -501,6 +542,8 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
         </div>
 
       </div>
+      <DeleteCompanyModal isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} />
+      <WorkspaceBackupModal isOpen={isBackupOpen} onClose={() => setIsBackupOpen(false)} />
     </div>
   );
 };

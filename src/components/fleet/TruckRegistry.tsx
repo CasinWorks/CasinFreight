@@ -21,6 +21,7 @@ import {
 import { useFreight, getTargetKmPerLiter } from '../../context/FreightContext';
 import { Truck, TruckType, TruckStatus, FuelLog } from '../../types';
 import { FuelLogModal } from './FuelLogModal';
+import { closeIfBackdrop } from '../../lib/modal';
 import { TruckFuelDetailModal } from './TruckFuelDetailModal';
 import { FuelAnalyticsDashboard } from './FuelAnalyticsDashboard';
 
@@ -241,7 +242,7 @@ export const TruckRegistry: React.FC = () => {
                 Truck & Fleet Registry
               </h1>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono border border-slate-200">
-                {trucks.length} vehicles
+                {trucks.filter((truck) => truck.status === 'Available').length}/{trucks.length} ready
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -522,7 +523,7 @@ export const TruckRegistry: React.FC = () => {
 
       {/* Add / Edit Truck Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={closeIfBackdrop(() => setShowModal(false))}>
           <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-xs text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h2 className="text-base font-bold text-slate-900">

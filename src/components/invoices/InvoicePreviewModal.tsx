@@ -28,6 +28,7 @@ import {
 import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
 import { Invoice, InvoiceStatus, InvoiceLineItem } from '../../types';
+import { closeIfBackdrop } from '../../lib/modal';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
@@ -156,7 +157,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white">
+      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white" onClick={closeIfBackdrop(onClose)}>
         <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden print:border-none print:shadow-none print:max-h-none print:bg-white print:text-black">
           
           {/* Top Controls Bar (Hidden during printing) */}
