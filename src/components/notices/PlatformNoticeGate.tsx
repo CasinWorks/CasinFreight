@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Clock, Megaphone, Wrench, X } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { isDowntimeBlocking, isNoticeLive } from '../../services/firestoreNotices';
@@ -52,25 +52,38 @@ export const PlatformNoticeGate: React.FC = () => {
   const { platformNotices, isPlatformAdmin, isAuthenticated, endActiveDowntime, activeDowntime } = useFreight();
   const [tick, setTick] = useState(0);
   const [ending, setEnding] = useState(false);
+  const [openPopup, setOpenPopup] = useState<PlatformNotice | null>(null);
+  const closedThisSession = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const timer = window.setInterval(() => setTick((value) => value + 1), 15000);
     return () => window.clearInterval(timer);
   }, []);
 
+  const hideNotice = (notice: PlatformNotice) => {
+    closedThisSession.current.add(notice.id);
+    dismissNotice(notice.id, notice.updatedAt);
+    setOpenPopup((current) => (current?.id === notice.id ? null : current));
+    setTick((value) => value + 1);
+  };
+
   const live = useMemo(
     () => platformNotices.filter((notice) => isNoticeLive(notice)),
     [platformNotices, tick]
   );
 
-  const blocking = activeDowntime || live.find((notice) => isDowntimeBlocking(notice));
-  const banners = live.filter((notice) => notice.id !== blocking?.id);
-  const popup = live.find((notice) => {
-    if (notice.id === blocking?.id) return false;
+  const visible = live.filter((notice) => {
+    if (closedThisSession.current.has(notice.id)) return false;
     return !isNoticeDismissed(notice.id, notice.updatedAt);
   });
 
-  const [openPopup, setOpenPopup] = useState<PlatformNotice | null>(null);
+  const blocking = activeDowntime || live.find((notice) => isDowntimeBlocking(notice));
+  const popup = visible.find((notice) => notice.id !== blocking?.id);
+  const banners = visible.filter((notice) => {
+    if (notice.id === blocking?.id) return false;
+    if (notice.kind === 'update') return false;
+    return true;
+  });
 
   useEffect(() => {
     setOpenPopup(popup || null);
@@ -79,23 +92,16 @@ export const PlatformNoticeGate: React.FC = () => {
   useEffect(() => {
     if (!openPopup) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closePopup();
+      if (event.key === 'Escape') hideNotice(openPopup);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [openPopup?.id, openPopup?.updatedAt]);
 
-  const closePopup = () => {
-    if (!openPopup) return;
-    dismissNotice(openPopup.id, openPopup.updatedAt);
-    setOpenPopup(null);
-    setTick((value) => value + 1);
-  };
-
   return (
     <>
       {banners.length > 0 && (
-        <div className="fixed top-0 left-0 right-0 z-[70] pointer-events-none">
+        <div className="fixed top-0 left-0 right-0 z-40 pointer-events-none">
           <div className="max-w-3xl mx-auto pt-2 px-3 space-y-2 pointer-events-auto">
             {banners.map((notice) => (
               <div
@@ -115,14 +121,15 @@ export const PlatformNoticeGate: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    dismissNotice(notice.id, notice.updatedAt);
-                    setTick((value) => value + 1);
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    hideNotice(notice);
                   }}
-                  className="p-1 rounded-md hover:bg-white/70 text-slate-500"
+                  className="w-11 h-11 shrink-0 rounded-lg hover:bg-white/70 text-slate-500 flex items-center justify-center"
                   aria-label="Dismiss notice"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             ))}
@@ -155,7 +162,7 @@ export const PlatformNoticeGate: React.FC = () => {
       {openPopup && (
         <div
           className="fixed inset-0 z-[75] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={closePopup}
+          onClick={() => hideNotice(openPopup)}
           role="presentation"
         >
           <div
@@ -181,18 +188,23 @@ export const PlatformNoticeGate: React.FC = () => {
                   <h2 id="platform-notice-title" className="text-lg font-black text-slate-900 mt-0.5">{openPopup.title}</h2>
                 </div>
               </div>
-              <button type="button" onClick={closePopup} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+              <button
+                type="button"
+                onClick={() => hideNotice(openPopup)}
+                className="w-11 h-11 rounded-lg text-slate-400 hover:bg-slate-100 flex items-center justify-center shrink-0"
+                aria-label="Close notice"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="px-5 py-4">
+            <div className="px-5 py-4 max-h-[50vh] overflow-y-auto">
               <NoticeBody notice={openPopup} />
             </div>
             <div className="px-5 py-4 border-t border-slate-100 flex justify-end">
               <button
                 type="button"
-                onClick={closePopup}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700"
+                onClick={() => hideNotice(openPopup)}
+                className="w-full sm:w-auto min-h-12 px-5 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700"
               >
                 Got it
               </button>

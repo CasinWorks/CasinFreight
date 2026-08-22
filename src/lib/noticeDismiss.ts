@@ -16,10 +16,19 @@ export function noticeDismissKey(id: string, updatedAt?: string): string {
 }
 
 export function isNoticeDismissed(id: string, updatedAt?: string): boolean {
-  return Boolean(readMap()[noticeDismissKey(id, updatedAt)]);
+  const map = readMap();
+  const version = updatedAt || '';
+  if (map[id] === version) return true;
+  if (map[noticeDismissKey(id, updatedAt)]) return true;
+  return false;
 }
 
 export function dismissNotice(id: string, updatedAt?: string): void {
-  const next = { ...readMap(), [noticeDismissKey(id, updatedAt)]: new Date().toISOString() };
+  const version = updatedAt || '';
+  const next = {
+    ...readMap(),
+    [id]: version,
+    [noticeDismissKey(id, updatedAt)]: new Date().toISOString(),
+  };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }

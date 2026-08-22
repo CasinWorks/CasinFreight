@@ -29,7 +29,9 @@ import {
   UserCheck,
   Ban,
   PauseCircle,
-  Play
+  Play,
+  MoreHorizontal,
+  ArrowDown
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { SignaturePad, SignaturePadHandle } from './SignaturePad';
@@ -121,6 +123,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   const [statusUpdateLocation, setStatusUpdateLocation] = useState('');
   const [exceptionMode, setExceptionMode] = useState<'hold' | 'cancel' | null>(null);
   const [retractionToStatus, setRetractionToStatus] = useState<TripStatus | null>(null);
+  const [showMoreActions, setShowMoreActions] = useState(false);
 
   const trip = trips.find(t => t.id === tripId);
 
@@ -165,6 +168,36 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   const sealNumber = trip.securitySealNumber || 'Not recorded';
   const gatePassNumber = trip.gatePassNumber || 'Not recorded';
   const opsStatus = trip.status === 'On Hold' || trip.status === 'Cancelled' ? resumeTarget(trip) : trip.status;
+  const pipeline: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+  const pipelineIndex = pipeline.indexOf(opsStatus);
+  const nextOpsStage = trip.status === 'On Hold' || trip.status === 'Cancelled' || trip.status === 'Invoiced'
+    ? null
+    : pipeline[pipelineIndex + 1] || null;
+  const fieldActionLabel =
+    trip.status === 'On Hold' ? 'Resume trip' :
+    trip.status === 'Pending' ? 'Mark loaded' :
+    trip.status === 'Loaded' ? 'Start in transit' :
+    trip.status === 'In Transit' && !trip.pod ? 'Capture signature' :
+    trip.status === 'In Transit' ? 'Mark delivered' :
+    null;
+
+  const runFieldAction = () => {
+    setShowMoreActions(false);
+    if (trip.status === 'On Hold') {
+      updateTripStatus(trip.id, resumeTarget(trip), 'Resumed from hold.', statusUpdateLocation || undefined);
+      return;
+    }
+    if (trip.status === 'In Transit' && !trip.pod) {
+      setActiveTab('OPERATIONS');
+      window.setTimeout(() => {
+        document.getElementById('trip-pod')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+      return;
+    }
+    if (nextOpsStage && nextOpsStage !== 'Invoiced') {
+      setPrerequisiteTargetStatus(nextOpsStage);
+    }
+  };
 
   const handleSavePOD = () => {
     if (isPlaceholderSignatory(receiverName)) {
@@ -340,8 +373,78 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-stretch sm:items-center justify-center p-0 sm:p-3 md:p-6 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border-0 sm:border border-slate-200 rounded-none sm:rounded-2xl w-full max-w-5xl h-[100dvh] sm:h-auto sm:max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-900">
         
-        {/* Header */}
-        <div className="p-4 md:px-6 md:py-4 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-[max(1rem,env(safe-area-inset-top))]">
+        {/* Mobile field header: route + one next action */}
+        <div className="sm:hidden px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-slate-200 bg-white">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center text-slate-700 shrink-0"
+              aria-label="Close trip"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="font-mono font-bold text-slate-900 truncate">{trip.tripNumber}</div>
+              <div className="text-sm text-slate-600 truncate">{clt?.name || 'Client'}</div>
+            </div>
+            <span className={`text-xs px-2.5 py-1 rounded-full font-bold border shrink-0 ${
+              trip.status === 'Pending' ? 'bg-slate-100 text-slate-700 border-slate-200' :
+              trip.status === 'Loaded' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+              trip.status === 'In Transit' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+              trip.status === 'Delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+              trip.status === 'On Hold' ? 'bg-amber-50 text-amber-900 border-amber-300' :
+              trip.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+              'bg-purple-50 text-purple-700 border-purple-200'
+            }`}>
+              {trip.status}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowMoreActions(true)}
+              className="w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center text-slate-700 shrink-0"
+              aria-label="More actions"
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="mt-3 rounded-2xl bg-slate-50 border border-slate-200 px-3 py-3">
+            <div className="text-base font-semibold text-slate-900 leading-snug">{trip.originZone}</div>
+            <ArrowDown className="w-4 h-4 text-slate-400 my-1" />
+            <div className="text-base font-semibold text-slate-900 leading-snug">{trip.destinationZone}</div>
+            <p className="text-sm text-slate-500 mt-2">
+              {drv?.name || 'No driver'} · {trk?.plateNumber || 'No truck'}
+            </p>
+          </div>
+
+          <div className="mt-3 flex items-center justify-center gap-1.5" aria-hidden>
+            {pipeline.map((stage, idx) => (
+              <span
+                key={stage}
+                className={`h-1.5 rounded-full transition-all ${
+                  idx === pipelineIndex ? 'w-6 bg-blue-600' : idx < pipelineIndex ? 'w-3 bg-blue-300' : 'w-3 bg-slate-200'
+                }`}
+              />
+            ))}
+          </div>
+          <p className="text-center text-xs text-slate-500 mt-1.5">
+            Step {Math.max(pipelineIndex, 0) + 1} of {pipeline.length}
+          </p>
+
+          {fieldActionLabel && (
+            <button
+              type="button"
+              onClick={runFieldAction}
+              className="mt-3 w-full min-h-12 rounded-2xl bg-blue-600 text-white text-base font-bold"
+            >
+              {fieldActionLabel}
+            </button>
+          )}
+        </div>
+
+        {/* Desktop header */}
+        <div className="hidden sm:flex p-4 md:px-6 md:py-4 bg-slate-50/80 border-b border-slate-200 flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold shadow-2xs">
               <TruckIcon className="w-5 h-5" />
@@ -490,7 +593,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
         )}
 
         {/* Interactive 5-Stage Status Stepper Banner */}
-        <div className="bg-slate-100/90 px-4 md:px-6 py-2.5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+        <div className="hidden sm:flex bg-slate-100/90 px-4 md:px-6 py-2.5 border-b border-slate-200 flex-col md:flex-row md:items-center justify-between gap-2.5">
           <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
             {(['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'] as TripStatus[]).map((stage, idx) => {
               const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
@@ -566,7 +669,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
         </div>
 
         {/* Prerequisites & Shipment Documents Ribbon */}
-        <div className="bg-slate-50 border-b border-slate-200 px-4 md:px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="hidden sm:flex bg-slate-50 border-b border-slate-200 px-4 md:px-6 py-2 flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3 flex-wrap">
             {/* Active User Role Indicator */}
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-800 text-[11px] font-semibold border border-slate-300">
@@ -632,45 +735,48 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
         </div>
 
         {/* Navigation Tabs Header */}
-        <div className="bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-2">
+        <div className="bg-white border-b border-slate-200 px-3 sm:px-4 md:px-6 flex items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto no-scrollbar py-2">
             <button
               onClick={() => setActiveTab('OPERATIONS')}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`flex-1 sm:flex-none min-h-11 sm:min-h-0 px-3 py-2 rounded-lg text-sm sm:text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                 activeTab === 'OPERATIONS'
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <TruckIcon className="w-3.5 h-3.5" />
-              <span>Shipment & Execution</span>
+              <TruckIcon className="hidden sm:block w-3.5 h-3.5" />
+              <span className="sm:hidden">Trip</span>
+              <span className="hidden sm:inline">Shipment & Execution</span>
             </button>
 
             <button
               onClick={() => setActiveTab('PROFITABILITY')}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`flex-1 sm:flex-none min-h-11 sm:min-h-0 px-3 py-2 rounded-lg text-sm sm:text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                 activeTab === 'PROFITABILITY'
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs ring-1 ring-emerald-400/30'
                   : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/50'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Profitability & Fuel Analytics (Recharts)</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[9px] font-mono font-black">
+              <Sparkles className="hidden sm:block w-3.5 h-3.5 text-emerald-600" />
+              <span className="sm:hidden">Money</span>
+              <span className="hidden sm:inline">Profitability & Fuel Analytics (Recharts)</span>
+              <span className="hidden sm:inline px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[9px] font-mono font-black">
                 PROFIT
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('DOCUMENTS')}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`flex-1 sm:flex-none min-h-11 sm:min-h-0 px-3 py-2 rounded-lg text-sm sm:text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                 activeTab === 'DOCUMENTS'
                   ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Consignment & Clearances</span>
+              <FileText className="hidden sm:block w-3.5 h-3.5" />
+              <span className="sm:hidden">Papers</span>
+              <span className="hidden sm:inline">Consignment & Clearances</span>
             </button>
           </div>
 
@@ -813,18 +919,18 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
           <div className="overflow-y-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 text-xs">
           
           {/* Left Column: Route, Load, Timeline (7 cols) */}
-          <div className="lg:col-span-7 space-y-5">
+          <div className="lg:col-span-7 flex flex-col gap-5">
 
             <TruckBanAlert hits={banHits} />
             
             {/* Route & Cargo Card */}
             <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between text-slate-500 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-200 pb-2">
+              <div className="hidden sm:flex items-center justify-between text-slate-500 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-200 pb-2">
                 <span>Shipment Route & Schedule</span>
                 <span className="font-mono text-slate-600">Created: {new Date(trip.createdAt).toLocaleDateString()}</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="hidden sm:grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
                   <div className="text-[10px] font-bold text-emerald-700 uppercase flex items-center gap-1 mb-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -875,7 +981,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               </div>
 
               {/* Driver & Truck Specs */}
-              <div className="grid grid-cols-2 gap-3 text-[11px] pt-1">
+              <div className="hidden sm:grid grid-cols-2 gap-3 text-[11px] pt-1">
                 <div className="flex items-center gap-2 text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
                   <User className="w-4 h-4 text-slate-400 shrink-0" />
                   <div className="truncate">
@@ -1145,7 +1251,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('PROFITABILITY')}
-                className="w-full mt-2 py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-50 to-blue-50 hover:from-emerald-100 hover:to-blue-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center justify-between transition-all group"
+                className="hidden sm:flex w-full mt-2 py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-50 to-blue-50 hover:from-emerald-100 hover:to-blue-100 border border-emerald-200 text-emerald-800 text-xs font-bold items-center justify-between transition-all group"
               >
                 <span className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
@@ -1156,7 +1262,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
             </div>
 
             {/* Proof of Delivery (POD) Interactive Section */}
-            <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3">
+            <div id="trip-pod" className={`${trip.status === 'In Transit' && !trip.pod ? 'order-first sm:order-none' : ''} bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3 scroll-mt-4`}>
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">
                   <FileSignature className="w-4 h-4 text-emerald-600" />
@@ -1415,7 +1521,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
       )}
 
         {/* Modal Footer */}
-        <div className="p-4 md:px-6 md:py-3 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="hidden sm:flex p-4 md:px-6 md:py-3 bg-slate-50/80 border-t border-slate-200 items-center justify-between gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="text-slate-500 text-xs truncate">
             Trip ID: <span className="font-mono text-slate-800">{trip.id}</span>
           </div>
@@ -1519,6 +1625,56 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showMoreActions && (
+        <div className="sm:hidden fixed inset-0 z-[90] bg-slate-900/40" onClick={() => setShowMoreActions(false)}>
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-4" />
+            <p className="text-sm font-bold text-slate-900 mb-2">More</p>
+            <div className="space-y-1">
+              <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-slate-800 hover:bg-slate-50" onClick={() => { setShowMoreActions(false); setShowDeliveryNoteModal(true); }}>
+                Delivery note
+              </button>
+              {trip.status === 'On Hold' && (
+                <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-amber-800 hover:bg-amber-50" onClick={runFieldAction}>
+                  Resume trip
+                </button>
+              )}
+              {trip.status !== 'Invoiced' && trip.status !== 'Cancelled' && trip.status !== 'On Hold' && (
+                <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-amber-800 hover:bg-amber-50" onClick={() => { setShowMoreActions(false); setExceptionMode('hold'); }}>
+                  Hold
+                </button>
+              )}
+              {trip.status !== 'Invoiced' && trip.status !== 'Cancelled' && (
+                <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-rose-700 hover:bg-rose-50" onClick={() => { setShowMoreActions(false); setExceptionMode('cancel'); }}>
+                  Cancel booking
+                </button>
+              )}
+              {trip.status === 'Delivered' && (
+                <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-slate-800 hover:bg-slate-50" onClick={() => { setShowMoreActions(false); handleGenerateInvoice(); }}>
+                  Generate invoice
+                </button>
+              )}
+              {existingInvoice && (
+                <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-slate-800 hover:bg-slate-50" onClick={() => { setShowMoreActions(false); onOpenInvoice(existingInvoice.id); }}>
+                  View invoice
+                </button>
+              )}
+              {trip.status !== 'Invoiced' && trip.status !== 'On Hold' && trip.status !== 'Cancelled' && (
+                <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-slate-800 hover:bg-slate-50" onClick={() => { setShowMoreActions(false); handleInitiateAdvance('Invoiced'); }}>
+                  Advance to invoiced
+                </button>
+              )}
+              <button type="button" className="w-full min-h-12 px-3 rounded-xl text-left font-semibold text-slate-500" onClick={() => setShowMoreActions(false)}>
+                Close menu
+              </button>
+            </div>
           </div>
         </div>
       )}
