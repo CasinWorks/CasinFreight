@@ -100,9 +100,12 @@ service cloud.firestore {
     match /companies/{companyId} {
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.id == companyId;
+        && request.resource.data.id == companyId
+        && request.resource.data.subscriptionTier == 'Free'
+        && request.resource.data.subscription.plan_id == 'plan_free';
       allow read: if canAccessCompany(companyId) || isPlatformAdmin();
-      allow update: if isCompanyOwner(companyId)
+      // Billing is server-only (PayMongo verify via Admin SDK). Platform admin can still grant/revoke in the console.
+      allow update: if isPlatformAdmin()
         || (
           canAccessCompany(companyId)
           && !request.resource.data.diff(resource.data).affectedKeys()

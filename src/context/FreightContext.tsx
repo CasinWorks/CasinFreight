@@ -61,6 +61,7 @@ import {
   listCompanyDocuments,
   loadCollection,
   listenCollection,
+  listenCompanyBilling,
   replaceCollection,
   upsertCollection,
   saveCompanyDocument,
@@ -572,6 +573,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       listenCollection<Trip>(company.id, 'trips', (remote) => {
         if (tripsDirtyRef.current) return;
         setTrips(remote);
+      }),
+      listenCompanyBilling(company.id, (billing) => {
+        if (billing.subscription) setSubscription(billing.subscription);
+        if (billing.subscriptionTier) {
+          setCompany((prev) => (
+            prev.subscriptionTier === billing.subscriptionTier
+              ? prev
+              : { ...prev, subscriptionTier: billing.subscriptionTier as Company['subscriptionTier'] }
+          ));
+        }
       }),
     ];
     return () => {
@@ -3198,11 +3209,6 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const missing = DEFAULT_RBAC_ROLES.filter((r) => !existingIds.has(r.id.toLowerCase()));
       return [...prev, ...missing];
     });
-    if (company.id) {
-      void saveCompanySubscription(company.id, nextSub, 'Growth').catch((error) => {
-        console.error('Failed to persist Founding plan', error);
-      });
-    }
     pushAudit('PERMISSIONS_RESET', `Activated Founding plan after PayMongo payment ${paymentId}.`);
     setIsWaitingForPayMongo(false);
     setIsUpgradeModalOpen(false);
@@ -3274,9 +3280,25 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           excludePaymentIds: consumedPaymentIds().join(','),
         }),
       });
-      const data = await readPayMongoJson(response) as { paid?: boolean; paymentId?: string; method?: string; error?: string };
+      const data = await readPayMongoJson(response) as {
+        paid?: boolean;
+        paymentId?: string;
+        method?: string;
+        error?: string;
+        subscription?: Subscription;
+        subscriptionTier?: Company['subscriptionTier'];
+      };
       if (!response.ok || !data.paid || !data.paymentId) return false;
-      if (consumedPaymentIds().includes(data.paymentId)) return false;
+      if (consumedPaymentIds().includes(data.paymentId) && !data.subscription) return false;
+      if (data.subscription) {
+        setSubscription(data.subscription);
+        setCompany((prev) => ({ ...prev, subscriptionTier: data.subscriptionTier || 'Growth' }));
+        setIsWaitingForPayMongo(false);
+        setIsUpgradeModalOpen(false);
+        sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+        sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
+        return true;
+      }
       activateFoundingPlan(asPayMongoMethod(data.method), data.paymentId);
       sessionStorage.removeItem(PENDING_FOUNDING_KEY);
       sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
@@ -3353,35 +3375,29 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [isAuthenticated, company.id, subscription.plan_id, isWaitingForPayMongo]);
 
-  const persistSubscriptionFlags = async (next: Subscription) => {
-    setSubscription(next);
+  const persistSubscriptionFlags = async (cancelAtPeriodEnd: boolean) => {
     if (!company.id) return;
-    const tier = next.plan_id === PLAN_FOUNDING_ID ? 'Growth' : 'Free';
-    try {
-      await saveCompanySubscription(company.id, next, tier);
-    } catch (error) {
-      console.error('Could not save subscription settings', error);
+    const response = await fetch('/api/paymongo', {
+      method: 'POST',
+      headers: await paymongoRequestHeaders(),
+      body: JSON.stringify({ action: cancelAtPeriodEnd ? 'cancel' : 'resume' }),
+    });
+    const data = await readPayMongoJson(response) as { error?: string; subscription?: Subscription; subscriptionTier?: Company['subscriptionTier'] };
+    if (!response.ok || !data.subscription) {
+      throw new Error(data.error || 'Could not update the subscription.');
+    }
+    setSubscription(data.subscription);
+    if (data.subscriptionTier) {
+      setCompany((prev) => ({ ...prev, subscriptionTier: data.subscriptionTier as Company['subscriptionTier'] }));
     }
   };
 
   const cancelSubscriptionAtPeriodEnd = async () => {
-    const next: Subscription = {
-      ...subscription,
-      auto_renew: false,
-      cancel_at_period_end: true,
-      updated_at: new Date().toISOString(),
-    };
-    await persistSubscriptionFlags(next);
+    await persistSubscriptionFlags(true);
   };
 
   const resumeSubscription = async () => {
-    const next: Subscription = {
-      ...subscription,
-      auto_renew: true,
-      cancel_at_period_end: false,
-      updated_at: new Date().toISOString(),
-    };
-    await persistSubscriptionFlags(next);
+    await persistSubscriptionFlags(false);
   };
 
   const updatePlanDetails = (planId: string, updates: Partial<Plan>) => {

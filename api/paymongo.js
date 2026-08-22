@@ -1,5 +1,7 @@
 'use strict';
 
+const { getAdminDb, grantFounding, setCancelFlag } = require('./firebaseAdmin');
+
 const FOUNDING_AMOUNT_CENTAVOS = 89900;
 
 function secretKey() {
@@ -189,6 +191,25 @@ async function runAction(action, body, origin, authHeader) {
   }
 
   const op = String(action || body.action || 'checkout').toLowerCase();
+  const db = getAdminDb();
+  if (!db) {
+    return {
+      status: 503,
+      data: {
+        error: 'FIREBASE_SERVICE_ACCOUNT is not set on Vercel. Add the Firebase service account JSON so billing can be written by the server, then Redeploy.',
+      },
+    };
+  }
+
+  if (op === 'cancel' || op === 'resume') {
+    try {
+      const granted = await setCancelFlag(db, caller, op === 'cancel');
+      return { status: 200, data: { ok: true, ...granted } };
+    } catch (error) {
+      return { status: error.status || 500, data: { error: error.message || 'Could not update subscription.' } };
+    }
+  }
+
   if (op === 'verify') {
     const checkoutSessionId = String(body.checkoutSessionId || '').trim();
     if (!checkoutSessionId.startsWith('cs_')) {
@@ -209,16 +230,29 @@ async function runAction(action, body, origin, authHeader) {
     }
     const excluded = new Set(String(body.excludePaymentIds || '').split(',').map((id) => id.trim()).filter(Boolean));
     const paid = await findPaidInSession(headers, checkoutSessionId, excluded);
-    return {
-      status: 200,
-      data: paid ? { paid: true, ...paid } : { paid: false, error: 'PayMongo has not confirmed this checkout yet.' },
-    };
+    if (!paid) {
+      return { status: 200, data: { paid: false, error: 'PayMongo has not confirmed this checkout yet.' } };
+    }
+    try {
+      const granted = await grantFounding(db, caller, paid);
+      return { status: 200, data: { paid: true, ...paid, ...granted } };
+    } catch (error) {
+      return { status: error.status || 500, data: { paid: true, ...paid, error: error.message || 'Payment was received but Founding could not be written.' } };
+    }
   }
 
+  let companyId = String(body.companyId || '');
+  try {
+    const userSnap = await db.collection('users').doc(caller.uid).get();
+    const linked = userSnap.exists && userSnap.data() && userSnap.data().companyId;
+    if (linked) companyId = String(linked);
+  } catch {
+    // Keep the client-supplied company id if the user profile cannot be read.
+  }
   const result = await createCheckout({
     secretKey: key,
     planId: body.planId || 'plan_founding',
-    companyId: body.companyId || '',
+    companyId,
     userId: caller.uid,
     customerEmail: caller.email || body.customerEmail,
     successUrl: body.successUrl || `${origin}/?billing=success`,
@@ -236,8 +270,18 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (req.method === 'GET') {
+      let billingGrantConfigured = false;
+      try {
+        billingGrantConfigured = Boolean(getAdminDb());
+      } catch {
+        billingGrantConfigured = false;
+      }
       res.statusCode = 200;
-      res.end(JSON.stringify({ ok: true, paymongoConfigured: Boolean(secretKey()) }));
+      res.end(JSON.stringify({
+        ok: true,
+        paymongoConfigured: Boolean(secretKey()),
+        billingGrantConfigured,
+      }));
       return;
     }
     if (req.method !== 'POST') {

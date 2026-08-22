@@ -87,8 +87,30 @@ export async function getCompanyDocument(companyId: string): Promise<CompanyDocu
   return snap.exists() ? (snap.data() as CompanyDocument) : null;
 }
 
-export async function saveCompanyDocument(company: CompanyDocument): Promise<void> {
-  await setDoc(doc(getFirebaseDb(), 'companies', company.id), stripUndefined(company as unknown as Record<string, unknown>));
+export async function saveCompanyDocument(
+  company: CompanyDocument,
+  options?: { writeBilling?: boolean }
+): Promise<void> {
+  const payload = stripUndefined(company as unknown as Record<string, unknown>) as Record<string, unknown>;
+  if (!options?.writeBilling) {
+    delete payload.subscription;
+    delete payload.subscriptionTier;
+  }
+  await setDoc(doc(getFirebaseDb(), 'companies', company.id), payload, { merge: true });
+}
+
+export function listenCompanyBilling(
+  companyId: string,
+  onData: (billing: { subscription?: Subscription; subscriptionTier?: Company['subscriptionTier'] }) => void
+): Unsubscribe {
+  return onSnapshot(doc(getFirebaseDb(), 'companies', companyId), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data() as CompanyDocument;
+    onData({
+      subscription: data.subscription,
+      subscriptionTier: data.subscriptionTier,
+    });
+  });
 }
 
 export async function getInviteByEmail(email: string): Promise<TeamInvite | null> {
@@ -252,7 +274,7 @@ export async function seedCompanyWorkspace(params: {
   };
 
   // Company first so user create can prove createdBy, without letting a new account join an arbitrary companyId.
-  await saveCompanyDocument(company);
+  await saveCompanyDocument(company, { writeBilling: true });
   await saveUserProfile(profile);
   await setDoc(
     doc(getFirebaseDb(), 'companies', companyId, 'roles', params.role.id),
@@ -387,5 +409,5 @@ export async function saveCompanySubscription(
     ...existing,
     subscription,
     subscriptionTier,
-  });
+  }, { writeBilling: true });
 }
