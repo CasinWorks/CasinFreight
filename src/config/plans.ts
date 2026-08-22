@@ -5,13 +5,15 @@ import {
   FOUNDING_INCLUDED_TRUCKS,
   FOUNDING_PER_EXTRA_TRUCK_PHP,
   formatPhp,
+  foundingLockHeadline,
 } from '../lib/subscriptionPrice';
 
-export { calculateSubscriptionPrice, formatPhp } from '../lib/subscriptionPrice';
+export { calculateSubscriptionPrice, formatPhp, foundingLockBody, foundingLockHeadline } from '../lib/subscriptionPrice';
 export {
   ANNUAL_DISCOUNT_RATE,
   FOUNDING_BASE_PHP,
   FOUNDING_INCLUDED_TRUCKS,
+  FOUNDING_LIST_PHP,
   FOUNDING_PER_EXTRA_TRUCK_PHP,
 } from '../lib/subscriptionPrice';
 
@@ -83,7 +85,7 @@ export const SAAS_PLANS: Plan[] = [
   {
     id: PLAN_FOUNDING_ID,
     name: 'Founding',
-    description: 'Unlimited team seats, roles, and trips. First 2 trucks are in the ₱899 base; each extra truck is ₱150/month.',
+    description: `Unlimited team seats, roles, and trips. First 2 trucks are in the ${formatPhp(FOUNDING_BASE_PHP)} founding base; each extra truck is ${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)}/month.`,
     price_php: FOUNDING_PRICE_PHP,
     interval: 'month',
     max_bookings_per_month: null,
@@ -91,6 +93,7 @@ export const SAAS_PLANS: Plan[] = [
     is_active: true,
     features: [
       'Unlimited trip transactions and team seats',
+      foundingLockHeadline(),
       `${formatPhp(FOUNDING_BASE_PHP)}/month base includes up to ${FOUNDING_INCLUDED_TRUCKS} trucks`,
       `${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)}/month per additional truck`,
       `Pay annually and save ${Math.round(ANNUAL_DISCOUNT_RATE * 100)}%`,

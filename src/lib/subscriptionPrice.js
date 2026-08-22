@@ -2,6 +2,8 @@
 export const FOUNDING_BASE_PHP = 899;
 export const FOUNDING_INCLUDED_TRUCKS = 2;
 export const FOUNDING_PER_EXTRA_TRUCK_PHP = 150;
+/** Public list price after the Founding window. New companies will pay this base. */
+export const FOUNDING_LIST_PHP = 1599;
 /** Confirmed: 15% off when the company pays a year up front. */
 export const ANNUAL_DISCOUNT_RATE = 0.15;
 
@@ -40,4 +42,13 @@ export function formatPhp(amount) {
 
 export function parseBillingCycle(value) {
   return String(value || '').toLowerCase() === 'annual' ? 'annual' : 'monthly';
+}
+
+/** Short owner-facing lock copy. Checkout still charges the Founding amount only. */
+export function foundingLockHeadline() {
+  return `Lock ${formatPhp(FOUNDING_BASE_PHP)} now. Later this goes to ${formatPhp(FOUNDING_LIST_PHP)}.`;
+}
+
+export function foundingLockBody() {
+  return `Founding companies keep ${formatPhp(FOUNDING_BASE_PHP)} as long as they stay subscribed. New companies later pay ${formatPhp(FOUNDING_LIST_PHP)}.`;
 }

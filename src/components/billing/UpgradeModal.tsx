@@ -2,7 +2,7 @@ import React from 'react';
 import { Check, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { PLAN_FOUNDING_ID, SAAS_PLANS, formatPhDate } from '../../config/plans';
-import { calculateSubscriptionPrice, formatPhp, type BillingCycle } from '../../lib/subscriptionPrice';
+import { calculateSubscriptionPrice, formatPhp, FOUNDING_LIST_PHP, foundingLockBody, foundingLockHeadline, type BillingCycle } from '../../lib/subscriptionPrice';
 import { closeIfBackdrop } from '../../lib/modal';
 
 export const UpgradeModal: React.FC = () => {
@@ -54,8 +54,14 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is {formatPhp(price.basePhp)}/month for up to {price.includedTrucks} trucks, then {formatPhp(price.perExtraTruckPhp)} per extra truck. PayMongo charges each checkout; CasinFreight keeps Founding until the renewal date.
+              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is {formatPhp(price.basePhp)}/month for up to {price.includedTrucks} trucks, then {formatPhp(price.perExtraTruckPhp)} per extra truck.
             </p>
+            {activePlan.id !== PLAN_FOUNDING_ID && (
+              <div className="mt-2 inline-flex flex-col gap-0.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                <span className="text-[11px] font-extrabold text-amber-950">{foundingLockHeadline()}</span>
+                <span className="text-[10px] text-amber-800">{foundingLockBody()}</span>
+              </div>
+            )}
             {isWaitingForPayMongo && (
               <p className="text-[11px] font-semibold text-blue-700 mt-1.5">
                 Waiting for PayMongo to confirm payment. This workspace will switch to Founding on its own.
@@ -130,13 +136,21 @@ export const UpgradeModal: React.FC = () => {
                           <p className="text-[11px] text-slate-500 mt-0.5">
                             {formatPhp(price.monthlyEquivalent)}/month equivalent for {truckCount} truck{truckCount === 1 ? '' : 's'}
                           </p>
+                          <p className="text-[11px] font-semibold text-amber-800 mt-0.5">
+                            Founding lock {formatPhp(price.basePhp)}
+                            <span className="ml-1.5 font-medium text-slate-400 line-through">{formatPhp(FOUNDING_LIST_PHP)}</span>
+                          </p>
                         </>
                       ) : (
                         <>
-                          <div className="flex items-end gap-1">
+                          <div className="flex items-end gap-2">
                             <span className="text-2xl font-black text-slate-900">{formatPhp(price.monthlyTotal)}</span>
                             <span className="text-xs text-slate-500 mb-1">/month</span>
                           </div>
+                          <p className="text-[11px] font-semibold text-amber-800 mt-0.5">
+                            Founding lock {formatPhp(price.basePhp)}
+                            <span className="ml-1.5 font-medium text-slate-400 line-through">{formatPhp(FOUNDING_LIST_PHP)}</span>
+                          </p>
                           <p className="text-[11px] text-slate-500 mt-0.5">
                             {formatPhp(price.basePhp)}/month base (up to {price.includedTrucks} trucks) + {formatPhp(price.perExtraTruckPhp)} per additional truck
                           </p>

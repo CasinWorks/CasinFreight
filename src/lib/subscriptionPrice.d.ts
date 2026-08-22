@@ -19,6 +19,7 @@ export interface SubscriptionPrice {
 export const FOUNDING_BASE_PHP: number;
 export const FOUNDING_INCLUDED_TRUCKS: number;
 export const FOUNDING_PER_EXTRA_TRUCK_PHP: number;
+export const FOUNDING_LIST_PHP: number;
 export const ANNUAL_DISCOUNT_RATE: number;
 
 export function calculateSubscriptionPrice(
@@ -29,3 +30,7 @@ export function calculateSubscriptionPrice(
 export function formatPhp(amount: number): string;
 
 export function parseBillingCycle(value?: string): BillingCycle;
+
+export function foundingLockHeadline(): string;
+
+export function foundingLockBody(): string;

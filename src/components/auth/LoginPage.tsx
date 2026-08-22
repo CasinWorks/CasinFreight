@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { isFirebaseConfigured } from '../../lib/firebase';
+import { formatPhp, FOUNDING_BASE_PHP, FOUNDING_PER_EXTRA_TRUCK_PHP, foundingLockBody, foundingLockHeadline } from '../../lib/subscriptionPrice';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 import { CasinWorksCredit } from '../brand/CasinWorksCredit';
 
@@ -111,12 +112,12 @@ export const LoginPage: React.FC = () => {
         <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-6 space-y-6 hidden lg:block pr-4">
             <CasinFreightLogo className="h-20 w-20 rounded-2xl shadow-2xl shadow-blue-900/40" />
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-950/80 border border-blue-800/60 text-blue-400 text-xs font-semibold">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-950/80 border border-amber-700/60 text-amber-300 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5" />
               <span>
                 {mode === 'join'
                   ? 'Invited teammate — join the owner’s company'
-                  : 'Start free — 1 truck, 1 account, 10 transactions'}
+                  : foundingLockHeadline()}
               </span>
             </div>
             <h2 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
@@ -127,7 +128,7 @@ export const LoginPage: React.FC = () => {
             <p className="text-sm text-slate-400 leading-relaxed">
               {mode === 'join'
                 ? 'This link is for a new hire. Choose a password here. You are joining the company that invited you — you are not opening a new CasinFreight workspace.'
-                : 'Dispatch, BIR invoicing, ledger, fuel, and Firebase RBAC are included on Free. Founding is ₱899/mo for up to 2 trucks, then ₱150 per extra truck.'}
+                : `Start free: 1 truck, 1 account, 10 trips. Founding is ${formatPhp(FOUNDING_BASE_PHP)}/mo for up to 2 trucks, then ${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)} per extra truck. ${foundingLockBody()}`}
             </p>
             <div className="grid grid-cols-2 gap-3 pt-2">
               {[

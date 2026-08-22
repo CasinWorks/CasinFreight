@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { formatPhDate } from '../../config/plans';
-import { calculateSubscriptionPrice, formatPhp } from '../../lib/subscriptionPrice';
+import { calculateSubscriptionPrice, formatPhp, FOUNDING_BASE_PHP } from '../../lib/subscriptionPrice';
 import { useTutorial } from '../tutorial';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
@@ -112,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {activePlan.name}
           <span className="font-mono font-medium text-[10px] opacity-80">
             {activePlan.id === 'plan_free'
-              ? `${subscriptionUsage.transactionsUsed}/${subscriptionUsage.maxTransactions ?? '∞'} trips`
+              ? `Lock ${formatPhp(FOUNDING_BASE_PHP)} · ${subscriptionUsage.transactionsUsed}/${subscriptionUsage.maxTransactions ?? '∞'} trips`
               : subscription.cancel_at_period_end
                 ? `ends ${formatPhDate(subscription.current_period_end)}`
                 : `renews ${formatPhDate(subscription.current_period_end)} · ${formatPhp(renewalPrice.monthlyTotal)}/mo`}
