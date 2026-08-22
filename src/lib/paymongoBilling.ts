@@ -1,4 +1,5 @@
 import { requireFirebaseUser } from './firebaseCaller';
+import { calculateSubscriptionPrice, formatPhp, parseBillingCycle, type SubscriptionPrice } from './subscriptionPrice';
 
 export interface CreateCheckoutInput {
   secretKey: string;
@@ -9,6 +10,7 @@ export interface CreateCheckoutInput {
   planId: string;
   customerEmail?: string;
   customerName?: string;
+  price: SubscriptionPrice;
 }
 
 export interface CreateCheckoutResult {
@@ -34,6 +36,11 @@ function paymongoAuthHeader(secretKey: string): string {
 export async function createPayMongoCheckoutSession(
   input: CreateCheckoutInput
 ): Promise<CreateCheckoutResult> {
+  const price = input.price;
+  const cycleLabel = price.billingCycle === 'annual' ? 'Annual' : 'Monthly';
+  const extraNote = price.extraTrucks > 0
+    ? ` includes ${price.includedTrucks} trucks + ${price.extraTrucks} extra`
+    : ` includes up to ${price.includedTrucks} trucks`;
   const encodedKey = toBase64(`${input.secretKey}:`);
   const response = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
     method: 'POST',
@@ -51,19 +58,24 @@ export async function createPayMongoCheckoutSession(
           line_items: [
             {
               currency: 'PHP',
-              amount: 89900,
-              name: 'CasinFreight Founding (Monthly)',
+              amount: price.chargeCentavos,
+              name: `CasinFreight Founding (${cycleLabel})`,
               quantity: 1,
-              description: 'Unlimited trucks, team seats, roles, and trip transactions.',
+              description: `${formatPhp(price.chargePhp)} for ${price.truckCount} truck${price.truckCount === 1 ? '' : 's'}${extraNote}.`,
             },
           ],
-          description: `CasinFreight Founding ${input.customerEmail || input.userId} ${Date.now()}`,
+          description: `CasinFreight Founding ${cycleLabel} ${input.customerEmail || input.userId} ${Date.now()}`,
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           metadata: {
             user_id: input.userId,
             company_id: input.companyId,
             plan_id: input.planId,
+            billing_cycle: price.billingCycle,
+            truck_count: String(price.truckCount),
+            extra_trucks: String(price.extraTrucks),
+            amount_php: String(price.chargePhp),
+            amount_centavos: String(price.chargeCentavos),
             checkout_nonce: String(Date.now()),
           },
         },
@@ -113,7 +125,8 @@ type PaymongoPayload = {
 };
 
 function amountIsFounding(amount: number): boolean {
-  return amount === FOUNDING_AMOUNT_CENTAVOS || amount === FOUNDING_PRICE_PHP;
+  if (amount >= 899 && amount < 20000) return true;
+  return amount >= 89900 && amount % 50 === 0;
 }
 
 function descriptionLooksFounding(description?: string): boolean {
@@ -420,6 +433,10 @@ export async function runPayMongoAction(
     customerName: body.customerName,
     successUrl: body.successUrl || `${origin}/?billing=success`,
     cancelUrl: body.cancelUrl || `${origin}/?billing=cancel`,
+    price: calculateSubscriptionPrice(
+      Number(body.truckCount || 0),
+      parseBillingCycle(body.billingCycle)
+    ),
   });
   return { status: 200, data: result };
 }

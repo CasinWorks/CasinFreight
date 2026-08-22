@@ -91,7 +91,8 @@ function foundingSubscription(companyId, userId, previous, payment) {
   const existingEnd = new Date((previous && previous.current_period_end) || now);
   const stillFounding = previous && previous.plan_id === 'plan_founding' && existingEnd.getTime() > now.getTime();
   const periodStart = stillFounding ? new Date(previous.current_period_start || now) : now;
-  const periodEnd = addBillingMonths(stillFounding ? existingEnd : now, 1);
+  const months = Number(payment.periodMonths) === 12 ? 12 : 1;
+  const periodEnd = addBillingMonths(stillFounding ? existingEnd : now, months);
   const consumed = [
     ...((previous && previous.consumed_payment_ids) || []),
     previous && previous.payment_provider_checkout_id,
@@ -111,6 +112,9 @@ function foundingSubscription(companyId, userId, previous, payment) {
     payment_provider_checkout_id: payment.paymentId,
     last_payment_method: payment.method || 'qrph',
     consumed_payment_ids: consumed,
+    billing_cycle: payment.billingCycle === 'annual' ? 'annual' : 'monthly',
+    billed_truck_count: Number(payment.truckCount || 0),
+    last_billed_amount_php: Number(payment.amountPhp || 0),
     created_at: (previous && previous.created_at) || now.toISOString(),
     updated_at: now.toISOString(),
   };

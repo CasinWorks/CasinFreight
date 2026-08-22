@@ -307,9 +307,9 @@ interface FreightContextType {
   setIsUpgradeModalOpen: (open: boolean) => void;
   isBillingProviderReady: boolean;
   isPayMongoTestMode: boolean;
-  createPayMongoCheckout: (planId: string, paymentMethod?: PayMongoPaymentMethod) => Promise<{ checkoutUrl: string; checkoutSessionId: string }>;
+  createPayMongoCheckout: (planId: string, billingCycle?: 'monthly' | 'annual') => Promise<{ checkoutUrl: string; checkoutSessionId: string }>;
   activateFoundingPlan: (paymentMethod: PayMongoPaymentMethod, paymentId: string) => void;
-  subscribeToFoundingPlan: () => Promise<void>;
+  subscribeToFoundingPlan: (billingCycle?: 'monthly' | 'annual') => Promise<void>;
   confirmFoundingPayment: (paymentId?: string) => Promise<void>;
   isWaitingForPayMongo: boolean;
   cancelSubscriptionAtPeriodEnd: () => Promise<void>;
@@ -3214,10 +3214,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsUpgradeModalOpen(false);
   };
 
-  const createPayMongoCheckout = async (planId: string, _paymentMethod?: PayMongoPaymentMethod) => {
+  const createPayMongoCheckout = async (planId: string, billingCycle: 'monthly' | 'annual' = 'monthly') => {
     const successUrl = `${window.location.origin}/?billing=success`;
     const cancelUrl = `${window.location.origin}/?billing=cancel`;
     sessionStorage.setItem(PENDING_FOUNDING_KEY, planId);
+    sessionStorage.setItem(`${PENDING_FOUNDING_KEY}_cycle`, billingCycle);
 
     const endpoint = import.meta.env.VITE_PAYMONGO_CHECKOUT_URL || '/api/paymongo';
     const response = await fetch(endpoint, {
@@ -3227,6 +3228,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         action: 'checkout',
         planId,
         companyId: company.id,
+        billingCycle,
+        truckCount: trucks.length,
         customerName: currentUser.name,
         successUrl,
         cancelUrl,
@@ -3241,10 +3244,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
   };
 
-  const subscribeToFoundingPlan = async () => {
+  const subscribeToFoundingPlan = async (billingCycle: 'monthly' | 'annual' = 'monthly') => {
     const checkoutWindow = window.open('about:blank', `casinfreight-paymongo-${Date.now()}`);
     try {
-      const result = await createPayMongoCheckout(PLAN_FOUNDING_ID);
+      const result = await createPayMongoCheckout(PLAN_FOUNDING_ID, billingCycle);
       setIsWaitingForPayMongo(true);
       if (checkoutWindow && !checkoutWindow.closed) {
         checkoutWindow.location.replace(result.checkoutUrl);
@@ -3266,7 +3269,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
 
   const tryUnlockFounding = async (_paymentId?: string): Promise<boolean> => {
-    if (unlockingFoundingRef.current || subscription.plan_id === PLAN_FOUNDING_ID) return false;
+    if (unlockingFoundingRef.current) return false;
     const checkoutSessionId = sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '';
     if (!checkoutSessionId.startsWith('cs_')) return false;
     unlockingFoundingRef.current = true;
@@ -3314,12 +3317,12 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const confirmFoundingPayment = async (paymentId?: string) => {
     const unlocked = await tryUnlockFounding(paymentId);
     if (!unlocked) {
-      throw new Error('PayMongo has not confirmed a ₱899 Founding payment yet.');
+      throw new Error('PayMongo has not confirmed a Founding payment yet.');
     }
   };
 
   useEffect(() => {
-    if (!isAuthenticated || !company.id || subscription.plan_id === PLAN_FOUNDING_ID) {
+    if (!isAuthenticated || !company.id) {
       setIsWaitingForPayMongo(false);
       return;
     }
@@ -3328,6 +3331,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (params.get('billing') === 'cancel') {
       sessionStorage.removeItem(PENDING_FOUNDING_KEY);
       sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
+      sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_cycle`);
       setIsWaitingForPayMongo(false);
       window.history.replaceState({}, '', window.location.pathname);
       return;
@@ -3336,6 +3340,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const pending = Boolean(sessionStorage.getItem(PENDING_FOUNDING_KEY));
     const checkoutSessionId = sessionStorage.getItem(`${PENDING_FOUNDING_KEY}_session`) || '';
     const billingSuccess = params.get('billing') === 'success';
+    if (!pending && !billingSuccess && !checkoutSessionId.startsWith('cs_')) {
+      return;
+    }
+
     if (pending || billingSuccess) {
       setIsWaitingForPayMongo(true);
     }

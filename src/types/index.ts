@@ -639,6 +639,9 @@ export interface Subscription {
   last_payment_method?: PayMongoPaymentMethod;
   consumed_payment_ids?: string[];
   auto_renew?: boolean;
+  billing_cycle?: 'monthly' | 'annual';
+  billed_truck_count?: number;
+  last_billed_amount_php?: number;
   created_at: string;
   updated_at: string;
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Banknote, Crown, Loader2, RefreshCw, RotateCcw, Search, Shield, Wallet } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, formatPhDate } from '../../config/plans';
+import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, formatPhDate, formatPhp } from '../../config/plans';
 import type { CompanyDocument } from '../../services/firestoreCompany';
 
 function planLabel(planId?: string) {
@@ -60,7 +60,13 @@ export const AdminSubscriptionsView: React.FC = () => {
 
   const foundingRows = rows.filter((row) => row.subscription?.plan_id === PLAN_FOUNDING_ID);
   const foundingCount = foundingRows.length;
-  const mrr = foundingCount * FOUNDING_PRICE_PHP;
+  const mrr = foundingRows.reduce((sum, row) => {
+    const billed = Number(row.subscription?.last_billed_amount_php || 0);
+    if (billed > 0) {
+      return sum + (row.subscription?.billing_cycle === 'annual' ? billed / 12 : billed);
+    }
+    return sum + FOUNDING_PRICE_PHP;
+  }, 0);
   const expiringSoon = foundingRows.filter((row) => {
     const left = daysLeft(row.subscription?.current_period_end);
     return left !== null && left >= 0 && left <= 7;
@@ -100,7 +106,7 @@ export const AdminSubscriptionsView: React.FC = () => {
             </div>
             <h1 className="text-xl font-extrabold text-slate-900 mt-1">Revenue & plans</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Founding is ₱{FOUNDING_PRICE_PHP.toLocaleString('en-PH')}/month. PayMongo charges each checkout; membership lasts until the renewal date, then drops to Free if it is not paid again.
+              Founding is {formatPhp(FOUNDING_PRICE_PHP)}/month for up to 2 trucks, then ₱150 per extra truck. Annual billing is 15% off. PayMongo charges each checkout; membership lasts until the renewal date.
             </p>
           </div>
           <button

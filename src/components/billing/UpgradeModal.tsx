@@ -1,7 +1,8 @@
 import React from 'react';
 import { Check, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { SAAS_PLANS, formatPhDate } from '../../config/plans';
+import { PLAN_FOUNDING_ID, SAAS_PLANS, formatPhDate } from '../../config/plans';
+import { calculateSubscriptionPrice, formatPhp, type BillingCycle } from '../../lib/subscriptionPrice';
 import { closeIfBackdrop } from '../../lib/modal';
 
 export const UpgradeModal: React.FC = () => {
@@ -20,14 +21,20 @@ export const UpgradeModal: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [billingCycle, setBillingCycle] = React.useState<BillingCycle>(
+    subscription.billing_cycle === 'annual' ? 'annual' : 'monthly'
+  );
 
   if (!isUpgradeModalOpen) return null;
+
+  const truckCount = subscriptionUsage.trucksUsed || 0;
+  const price = calculateSubscriptionPrice(truckCount, billingCycle);
 
   const handleSubscribe = async () => {
     setIsSubmitting(true);
     setError(null);
     try {
-      await subscribeToFoundingPlan();
+      await subscribeToFoundingPlan(billingCycle);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start PayMongo checkout.');
     } finally {
@@ -39,7 +46,7 @@ export const UpgradeModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeIfBackdrop(() => setIsUpgradeModalOpen(false), isWaitingForPayMongo)}>
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 max-h-[94vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between bg-slate-50">
           <div>
             <div className="flex items-center gap-2">
@@ -47,7 +54,7 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is ₱899 per month. PayMongo charges each checkout; CasinFreight then keeps Founding until the renewal date.
+              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is {formatPhp(price.basePhp)}/month for up to {price.includedTrucks} trucks, then {formatPhp(price.perExtraTruckPhp)} per extra truck. PayMongo charges each checkout; CasinFreight keeps Founding until the renewal date.
             </p>
             {isWaitingForPayMongo && (
               <p className="text-[11px] font-semibold text-blue-700 mt-1.5">
@@ -67,7 +74,7 @@ export const UpgradeModal: React.FC = () => {
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           {SAAS_PLANS.map((plan) => {
             const isCurrent = activePlan.id === plan.id;
-            const isPaid = plan.price_php > 0;
+            const isPaid = plan.id === PLAN_FOUNDING_ID;
             return (
               <div
                 key={plan.id}
@@ -86,12 +93,63 @@ export const UpgradeModal: React.FC = () => {
                   )}
                 </div>
                 <h3 className="text-lg font-extrabold text-slate-900 mt-3">{plan.name}</h3>
-                <div className="mt-1 flex items-end gap-1">
-                  <span className="text-2xl font-black text-slate-900">
-                    {plan.price_php === 0 ? '₱0' : `₱${plan.price_php.toLocaleString()}`}
-                  </span>
-                  <span className="text-xs text-slate-500 mb-1">/{plan.interval}</span>
-                </div>
+                {isPaid ? (
+                  <>
+                    <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-white border border-slate-200 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setBillingCycle('monthly')}
+                        className={`py-1.5 rounded-lg text-[11px] font-bold ${
+                          billingCycle === 'monthly' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        Monthly
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillingCycle('annual')}
+                        className={`py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 ${
+                          billingCycle === 'annual' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        Annual
+                        <span className={`text-[9px] px-1 py-0.5 rounded-full ${
+                          billingCycle === 'annual' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700'
+                        }`}>
+                          Save {price.annualDiscountPercent}%
+                        </span>
+                      </button>
+                    </div>
+                    <div className="mt-3">
+                      {billingCycle === 'annual' ? (
+                        <>
+                          <div className="flex items-end gap-1">
+                            <span className="text-2xl font-black text-slate-900">{formatPhp(price.annualTotal)}</span>
+                            <span className="text-xs text-slate-500 mb-1">/year</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {formatPhp(price.monthlyEquivalent)}/month equivalent for {truckCount} truck{truckCount === 1 ? '' : 's'}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-end gap-1">
+                            <span className="text-2xl font-black text-slate-900">{formatPhp(price.monthlyTotal)}</span>
+                            <span className="text-xs text-slate-500 mb-1">/month</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {formatPhp(price.basePhp)}/month base (up to {price.includedTrucks} trucks) + {formatPhp(price.perExtraTruckPhp)} per additional truck
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-1 flex items-end gap-1">
+                    <span className="text-2xl font-black text-slate-900">₱0</span>
+                    <span className="text-xs text-slate-500 mb-1">/{plan.interval}</span>
+                  </div>
+                )}
                 <p className="text-xs text-slate-500 mt-2 min-h-[40px]">{plan.description}</p>
                 <ul className="mt-4 space-y-2 flex-1">
                   {plan.features.map((feature) => (
@@ -107,12 +165,14 @@ export const UpgradeModal: React.FC = () => {
                       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900">
                         <div className="font-bold">
                           {subscription.cancel_at_period_end ? 'Ends' : 'Renews'} {formatPhDate(subscription.current_period_end)}
+                          {' — '}
+                          {formatPhp(price.monthlyTotal)}/month for {truckCount} truck{truckCount === 1 ? '' : 's'}
                         </div>
                         <div className="mt-0.5 text-emerald-800">
-                          {subscriptionUsage.daysRemainingInPeriod} day{subscriptionUsage.daysRemainingInPeriod === 1 ? '' : 's'} left in this month.
+                          {subscriptionUsage.daysRemainingInPeriod} day{subscriptionUsage.daysRemainingInPeriod === 1 ? '' : 's'} left in this period.
                           {subscription.cancel_at_period_end
                             ? ' Auto-renew is off. You stay Founding until that date, then return to Free.'
-                            : ' Pay ₱899 again before that date to keep Founding. Turning auto-renew off stops these reminders; the workspace still returns to Free if unpaid.'}
+                            : ` Pay ${formatPhp(price.chargePhp)} again before that date to keep Founding. Extra trucks above ${price.includedTrucks} are ${formatPhp(price.perExtraTruckPhp)}/month each.`}
                         </div>
                       </div>
                     )}
@@ -127,8 +187,8 @@ export const UpgradeModal: React.FC = () => {
                         : isSubmitting
                           ? 'Opening checkout…'
                           : isCurrent
-                            ? `Pay ₱${plan.price_php} to renew this month`
-                            : `Pay ₱${plan.price_php}/mo with PayMongo`}
+                            ? `Pay ${formatPhp(price.chargePhp)} to renew ${billingCycle === 'annual' ? 'this year' : 'this month'}`
+                            : `Pay ${formatPhp(price.chargePhp)}${billingCycle === 'annual' ? '/year' : '/mo'} with PayMongo`}
                       {!waiting && <Zap className="w-3.5 h-3.5" />}
                     </button>
                     {isCurrent && (
@@ -159,7 +219,7 @@ export const UpgradeModal: React.FC = () => {
           })}
         </div>
 
-        {activePlan.price_php > 0 && (
+        {activePlan.id === PLAN_FOUNDING_ID && (
           <div className="px-6 pb-4">
             <button
               type="button"

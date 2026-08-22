@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { formatPhDate } from '../../config/plans';
+import { calculateSubscriptionPrice, formatPhp } from '../../lib/subscriptionPrice';
 import { useTutorial } from '../tutorial';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
@@ -49,6 +50,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
   const showRenewalNudge = activePlan.id !== 'plan_free' && subscriptionUsage.daysRemainingInPeriod <= 7;
+  const renewalPrice = calculateSubscriptionPrice(
+    subscriptionUsage.trucksUsed || 0,
+    subscription.billing_cycle === 'annual' ? 'annual' : 'monthly'
+  );
 
   return (
     <>
@@ -110,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               ? `${subscriptionUsage.transactionsUsed}/${subscriptionUsage.maxTransactions ?? '∞'} trips`
               : subscription.cancel_at_period_end
                 ? `ends ${formatPhDate(subscription.current_period_end)}`
-                : `renews ${formatPhDate(subscription.current_period_end)}`}
+                : `renews ${formatPhDate(subscription.current_period_end)} · ${formatPhp(renewalPrice.monthlyTotal)}/mo`}
           </span>
         </button>
 
@@ -259,8 +264,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="bg-amber-50 border-b border-amber-200 px-3 md:px-6 py-2 text-[11px] text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <span>
           {subscription.cancel_at_period_end
-            ? `Founding ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ₱899 again.`
-            : `Founding renews ${formatPhDate(subscription.current_period_end)}. Pay ₱899 this month to keep unlimited trucks and trips.`}
+            ? `Founding ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ${formatPhp(renewalPrice.chargePhp)} again.`
+            : `Founding renews ${formatPhDate(subscription.current_period_end)} — ${formatPhp(renewalPrice.monthlyTotal)}/month for ${renewalPrice.truckCount} truck${renewalPrice.truckCount === 1 ? '' : 's'}.`}
         </span>
         <button
           type="button"

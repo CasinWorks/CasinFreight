@@ -1,8 +1,23 @@
 import { Plan, Subscription } from '../types';
+import {
+  ANNUAL_DISCOUNT_RATE,
+  FOUNDING_BASE_PHP,
+  FOUNDING_INCLUDED_TRUCKS,
+  FOUNDING_PER_EXTRA_TRUCK_PHP,
+  formatPhp,
+} from '../lib/subscriptionPrice';
+
+export { calculateSubscriptionPrice, formatPhp } from '../lib/subscriptionPrice';
+export {
+  ANNUAL_DISCOUNT_RATE,
+  FOUNDING_BASE_PHP,
+  FOUNDING_INCLUDED_TRUCKS,
+  FOUNDING_PER_EXTRA_TRUCK_PHP,
+} from '../lib/subscriptionPrice';
 
 export const PLAN_FREE_ID = 'plan_free';
 export const PLAN_FOUNDING_ID = 'plan_founding';
-export const FOUNDING_PRICE_PHP = 899;
+export const FOUNDING_PRICE_PHP = FOUNDING_BASE_PHP;
 
 export function addBillingMonths(from: Date, months = 1): Date {
   const next = new Date(from);
@@ -68,18 +83,19 @@ export const SAAS_PLANS: Plan[] = [
   {
     id: PLAN_FOUNDING_ID,
     name: 'Founding',
-    description: 'Unlimited trucks, team seats, roles, and transactions at a locked founding rate.',
+    description: 'Unlimited team seats, roles, and trips. First 2 trucks are in the ₱899 base; each extra truck is ₱150/month.',
     price_php: FOUNDING_PRICE_PHP,
     interval: 'month',
     max_bookings_per_month: null,
     max_storage_mb: null,
     is_active: true,
     features: [
-      'Unlimited trucks and trip transactions',
-      'Unlimited team accounts and custom roles',
+      'Unlimited trip transactions and team seats',
+      `${formatPhp(FOUNDING_BASE_PHP)}/month base includes up to ${FOUNDING_INCLUDED_TRUCKS} trucks`,
+      `${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)}/month per additional truck`,
+      `Pay annually and save ${Math.round(ANNUAL_DISCOUNT_RATE * 100)}%`,
       'Full RBAC, BIR ledger, and dual-control billing',
       'Unlocks after a confirmed PayMongo payment',
-      '₱899 billed every month — access lasts until the renewal date',
     ],
     badge: 'FOUNDING',
     isRecommended: true,

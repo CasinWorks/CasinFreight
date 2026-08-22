@@ -127,7 +127,7 @@ export const LoginPage: React.FC = () => {
             <p className="text-sm text-slate-400 leading-relaxed">
               {mode === 'join'
                 ? 'This link is for a new hire. Choose a password here. You are joining the company that invited you — you are not opening a new CasinFreight workspace.'
-                : 'Dispatch, BIR invoicing, ledger, fuel, and Firebase RBAC are included on Free. Add trucks, team seats, and extra trips on Founding at ₱899/mo.'}
+                : 'Dispatch, BIR invoicing, ledger, fuel, and Firebase RBAC are included on Free. Founding is ₱899/mo for up to 2 trucks, then ₱150 per extra truck.'}
             </p>
             <div className="grid grid-cols-2 gap-3 pt-2">
               {[

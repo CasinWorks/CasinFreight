@@ -2,7 +2,9 @@
 
 const { getAdminDb, grantFounding, setCancelFlag } = require('./firebaseAdmin');
 
-const FOUNDING_AMOUNT_CENTAVOS = 89900;
+async function loadPricing() {
+  return import('../src/lib/subscriptionPrice.js');
+}
 
 function secretKey() {
   return (process.env.PAYMONGO_SECRET_KEY || '').trim().replace(/^['"]|['"]$/g, '');
@@ -80,7 +82,19 @@ async function paymongoGet(path, headers) {
   return { ok: response.ok, payload };
 }
 
+async function countTrucks(db, companyId) {
+  if (!db || !companyId) return 0;
+  const snap = await db.collection('companies').doc(companyId).collection('trucks').get();
+  return snap.size;
+}
+
 async function createCheckout(input) {
+  const { formatPhp } = await loadPricing();
+  const price = input.price;
+  const cycleLabel = price.billingCycle === 'annual' ? 'Annual' : 'Monthly';
+  const extraNote = price.extraTrucks > 0
+    ? ` includes ${price.includedTrucks} trucks + ${price.extraTrucks} extra`
+    : ` includes up to ${price.includedTrucks} trucks`;
   const response = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
     method: 'POST',
     headers: {
@@ -97,19 +111,24 @@ async function createCheckout(input) {
           line_items: [
             {
               currency: 'PHP',
-              amount: FOUNDING_AMOUNT_CENTAVOS,
-              name: 'CasinFreight Founding (Monthly)',
+              amount: price.chargeCentavos,
+              name: `CasinFreight Founding (${cycleLabel})`,
               quantity: 1,
-              description: 'Unlimited trucks, team seats, roles, and trip transactions.',
+              description: `${formatPhp(price.chargePhp)} for ${price.truckCount} truck${price.truckCount === 1 ? '' : 's'}${extraNote}.`,
             },
           ],
-          description: `CasinFreight Founding ${input.customerEmail || input.userId} ${Date.now()}`,
+          description: `CasinFreight Founding ${cycleLabel} ${input.customerEmail || input.userId} ${Date.now()}`,
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           metadata: {
             user_id: input.userId,
             company_id: input.companyId,
             plan_id: input.planId,
+            billing_cycle: price.billingCycle,
+            truck_count: String(price.truckCount),
+            extra_trucks: String(price.extraTrucks),
+            amount_php: String(price.chargePhp),
+            amount_centavos: String(price.chargeCentavos),
             checkout_nonce: String(Date.now()),
           },
         },
@@ -134,16 +153,29 @@ function paymentsFrom(attributes) {
   return payments.filter((item) => item && typeof item === 'object');
 }
 
-function paidFromResource(item) {
+function expectedAmountFromSession(attributes) {
+  const items = attributes && attributes.line_items;
+  if (Array.isArray(items) && items[0] && Number(items[0].amount) > 0) {
+    return Number(items[0].amount);
+  }
+  const metadata = attributes && attributes.metadata;
+  if (metadata && Number(metadata.amount_centavos) > 0) {
+    return Number(metadata.amount_centavos);
+  }
+  return 0;
+}
+
+function paidFromResource(item, expectedCentavos) {
   if (!item || !item.id) return null;
   const attributes = item.attributes || {};
   if (String(attributes.status || '').toLowerCase() !== 'paid') return null;
   const amount = Number(attributes.amount || 0);
-  if (amount !== FOUNDING_AMOUNT_CENTAVOS && amount !== 899) return null;
+  if (expectedCentavos > 0 && amount !== expectedCentavos && amount !== expectedCentavos / 100) return null;
+  if (expectedCentavos <= 0 && amount < 89900 && amount !== 899) return null;
   return {
     paymentId: item.id,
     method: String(attributes.payment_method_used || attributes.source_type || 'qrph'),
-    amount: amount || FOUNDING_AMOUNT_CENTAVOS,
+    amount: amount >= 1000 ? amount : amount * 100,
     description: String(attributes.description || ''),
   };
 }
@@ -153,10 +185,11 @@ async function findPaidInSession(headers, checkoutSessionId, excluded) {
   const resource = asList(session.payload.data)[0];
   if (!resource) return null;
   const attributes = resource.attributes || {};
+  const expectedCentavos = expectedAmountFromSession(attributes);
   const nested = paymentsFrom(attributes);
   for (const item of nested) {
     if (excluded.has(item.id)) continue;
-    const found = paidFromResource(item);
+    const found = paidFromResource(item, expectedCentavos);
     if (found) return found;
   }
   const status = String(attributes.status || '').toLowerCase();
@@ -165,7 +198,12 @@ async function findPaidInSession(headers, checkoutSessionId, excluded) {
   if (status === 'paid' || status === 'succeeded' || intentStatus === 'succeeded') {
     const paymentId = (nested[0] && nested[0].id) || resource.id || checkoutSessionId;
     if (!excluded.has(paymentId)) {
-      return { paymentId, method: 'qrph', amount: FOUNDING_AMOUNT_CENTAVOS, description: String(attributes.description || '') };
+      return {
+        paymentId,
+        method: 'qrph',
+        amount: expectedCentavos || 89900,
+        description: String(attributes.description || ''),
+      };
     }
   }
   return null;
@@ -191,6 +229,7 @@ async function runAction(action, body, origin, authHeader) {
   }
 
   const op = String(action || body.action || 'checkout').toLowerCase();
+  const { calculateSubscriptionPrice, parseBillingCycle } = await loadPricing();
   const db = getAdminDb();
   if (!db) {
     return {
@@ -233,8 +272,19 @@ async function runAction(action, body, origin, authHeader) {
     if (!paid) {
       return { status: 200, data: { paid: false, error: 'PayMongo has not confirmed this checkout yet.' } };
     }
+    const metadata = (resource.attributes && resource.attributes.metadata) || {};
+    const quote = calculateSubscriptionPrice(
+      Number(metadata.truck_count || 0),
+      parseBillingCycle(metadata.billing_cycle)
+    );
     try {
-      const granted = await grantFounding(db, caller, paid);
+      const granted = await grantFounding(db, caller, {
+        ...paid,
+        billingCycle: quote.billingCycle,
+        truckCount: quote.truckCount,
+        amountPhp: quote.chargePhp,
+        periodMonths: quote.periodMonths,
+      });
       return { status: 200, data: { paid: true, ...paid, ...granted } };
     } catch (error) {
       return { status: error.status || 500, data: { paid: true, ...paid, error: error.message || 'Payment was received but Founding could not be written.' } };
@@ -249,6 +299,8 @@ async function runAction(action, body, origin, authHeader) {
   } catch {
     // Keep the client-supplied company id if the user profile cannot be read.
   }
+  const truckCount = await countTrucks(db, companyId);
+  const price = calculateSubscriptionPrice(truckCount, parseBillingCycle(body.billingCycle));
   const result = await createCheckout({
     secretKey: key,
     planId: body.planId || 'plan_founding',
@@ -257,6 +309,7 @@ async function runAction(action, body, origin, authHeader) {
     customerEmail: caller.email || body.customerEmail,
     successUrl: body.successUrl || `${origin}/?billing=success`,
     cancelUrl: body.cancelUrl || `${origin}/?billing=cancel`,
+    price,
   });
   return { status: 200, data: result };
 }
