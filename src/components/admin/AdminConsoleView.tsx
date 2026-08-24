@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Bell, Shield } from 'lucide-react';
+import { Bell, Shield, UserPlus } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { AdminSubscriptionsView } from './AdminSubscriptionsView';
 import { AdminNoticesPanel } from './AdminNoticesPanel';
+import { AdminSalesAgentsPanel } from './AdminSalesAgentsPanel';
 
 export const AdminConsoleView: React.FC = () => {
   const { isPlatformAdmin } = useFreight();
-  const [tab, setTab] = useState<'plans' | 'notices'>(isPlatformAdmin ? 'notices' : 'plans');
+  const [tab, setTab] = useState<'plans' | 'notices' | 'agents'>(isPlatformAdmin ? 'notices' : 'plans');
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -33,10 +34,24 @@ export const AdminConsoleView: React.FC = () => {
               <Shield className="w-3.5 h-3.5" />
               Revenue & plans
             </button>
+            <button
+              type="button"
+              onClick={() => setTab('agents')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${
+                tab === 'agents' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Agents
+            </button>
           </div>
         </div>
       )}
-      {tab === 'notices' && isPlatformAdmin ? <AdminNoticesPanel /> : <AdminSubscriptionsView />}
+      {tab === 'notices' && isPlatformAdmin
+        ? <AdminNoticesPanel />
+        : tab === 'agents' && isPlatformAdmin
+          ? <AdminSalesAgentsPanel />
+          : <AdminSubscriptionsView />}
     </div>
   );
 };

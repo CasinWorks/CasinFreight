@@ -55,6 +55,62 @@ export function foundingLockBody() {
 
 export const MAX_BILLABLE_TRUCKS = 200;
 
+/** Photo / POD storage included in each plan (binary GB). */
+export const FREE_STORAGE_GB = 2;
+export const FOUNDING_STORAGE_GB = 5;
+/** Extra photo storage sold on top of the plan cap. Markup over Firebase stored+download cost. */
+export const STORAGE_EXTRA_GB_PHP = 99;
+export const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+/** Sales agent cut on confirmed PayMongo Founding (first month vs months 2–12). */
+export const SAAS_COMMISSION_FIRST_RATE = 0.25;
+export const SAAS_COMMISSION_RENEWAL_RATE = 0.10;
+export const SAAS_COMMISSION_MONTHS = 12;
+export const PERPETUAL_LICENSE_PHP = 300000;
+export const PERPETUAL_SUPPORT_PHP = 54000;
+export const PERPETUAL_COMMISSION_RATE = 0.10;
+
+export function saasCommissionRate(paymentNumber) {
+  const n = Math.max(1, Math.floor(Number(paymentNumber) || 1));
+  if (n === 1) return SAAS_COMMISSION_FIRST_RATE;
+  if (n <= SAAS_COMMISSION_MONTHS) return SAAS_COMMISSION_RENEWAL_RATE;
+  return 0;
+}
+
+export function saasCommissionPhp(paymentNumber, billedPhp) {
+  const billed = Math.max(0, Number(billedPhp) || 0);
+  return Math.round(billed * saasCommissionRate(paymentNumber));
+}
+
+export function perpetualCommissionPhp(kind, billedPhp) {
+  const billed = Math.max(0, Number(billedPhp) || PERPETUAL_LICENSE_PHP);
+  if (kind === 'support') {
+    return Math.round((Number(billedPhp) || PERPETUAL_SUPPORT_PHP) * PERPETUAL_COMMISSION_RATE);
+  }
+  return Math.round(billed * PERPETUAL_COMMISSION_RATE);
+}
+
+export function storageLimitGb(subscription) {
+  const addon = Math.max(0, Math.floor(Number(subscription && subscription.storage_addon_gb) || 0));
+  const planId = subscription && subscription.plan_id;
+  const base = planId === 'plan_founding' || planId === 'plan_promo' ? FOUNDING_STORAGE_GB : FREE_STORAGE_GB;
+  return base + addon;
+}
+
+export function storageLimitBytes(subscription) {
+  return storageLimitGb(subscription) * BYTES_PER_GB;
+}
+
+export function bytesToGb(bytes) {
+  return Math.round((Number(bytes) || 0) / BYTES_PER_GB * 100) / 100;
+}
+
+export function formatStorageGb(bytes) {
+  const gb = bytesToGb(bytes);
+  if (gb < 0.01 && (Number(bytes) || 0) > 0) return `${Math.ceil((Number(bytes) || 0) / (1024 * 1024))} MB`;
+  return `${gb} GB`;
+}
+
 /** Trucks this company already paid for. Free is 1. Founding with no bill record is the 2 included trucks. Promo uses the admin-set cap. */
 export function paidTruckLimit(subscription) {
   const billed = Math.floor(Number(subscription && subscription.billed_truck_count));

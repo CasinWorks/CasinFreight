@@ -37,6 +37,27 @@ export function foundingLockBody(): string;
 
 export const MAX_BILLABLE_TRUCKS: number;
 
+export const FREE_STORAGE_GB: number;
+export const FOUNDING_STORAGE_GB: number;
+export const STORAGE_EXTRA_GB_PHP: number;
+export const BYTES_PER_GB: number;
+
+export const SAAS_COMMISSION_FIRST_RATE: number;
+export const SAAS_COMMISSION_RENEWAL_RATE: number;
+export const SAAS_COMMISSION_MONTHS: number;
+export const PERPETUAL_LICENSE_PHP: number;
+export const PERPETUAL_SUPPORT_PHP: number;
+export const PERPETUAL_COMMISSION_RATE: number;
+
+export function saasCommissionRate(paymentNumber?: number): number;
+export function saasCommissionPhp(paymentNumber?: number, billedPhp?: number): number;
+export function perpetualCommissionPhp(kind?: string, billedPhp?: number): number;
+
+export function storageLimitGb(subscription?: { plan_id?: string; storage_addon_gb?: number } | null): number;
+export function storageLimitBytes(subscription?: { plan_id?: string; storage_addon_gb?: number } | null): number;
+export function bytesToGb(bytes?: number): number;
+export function formatStorageGb(bytes?: number): string;
+
 export function paidTruckLimit(subscription?: { plan_id?: string; billed_truck_count?: number } | null): number;
 
 export function billableTruckCount(

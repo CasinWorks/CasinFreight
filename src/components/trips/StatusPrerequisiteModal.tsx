@@ -23,7 +23,6 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { isPlaceholderSignatory } from '../../lib/podSignoff';
 import { closeIfBackdrop } from '../../lib/modal';
-import { uploadCompanyFile } from '../../lib/uploads';
 import { Trip, TripStatus, Truck as TruckType, Driver, Client, POD, CustodySignoff } from '../../types';
 import { SignaturePad, SignaturePadHandle } from './SignaturePad';
 
@@ -50,7 +49,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   onConfirmAdvance,
   onOpenDeliveryNote
 }) => {
-  const { currentUser, canManipulateTripStatus, company } = useFreight();
+  const { currentUser, canManipulateTripStatus, uploadWorkspaceFile } = useFreight();
   const roleCheck = canManipulateTripStatus(targetStatus, trip.status);
 
   // Prerequisite form states
@@ -530,11 +529,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                       if (!file) return;
                       setIsUploadingPodPhoto(true);
                       try {
-                        const uploaded = await uploadCompanyFile({
-                          companyId: company.id,
-                          folder: `pods/${trip.id}`,
-                          file,
-                        });
+                        const uploaded = await uploadWorkspaceFile(`pods/${trip.id}`, file);
                         setPodPhotos((prev) => [...prev, uploaded.url]);
                       } catch (error) {
                         window.alert(error instanceof Error ? error.message : 'Could not upload the photo.');

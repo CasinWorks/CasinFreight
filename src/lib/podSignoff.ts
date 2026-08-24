@@ -50,7 +50,26 @@ export function canvasPointFromEvent(
   };
 }
 
+const SIGNATURE_MAX_WIDTH = 900;
+const SIGNATURE_JPEG_QUALITY = 0.62;
+
+/** Downscale the pad and JPEG-encode so trip docs stay small in Firestore. */
+export function exportSignatureDataUrl(canvas: HTMLCanvasElement): string {
+  const scale = Math.min(1, SIGNATURE_MAX_WIDTH / Math.max(1, canvas.width));
+  const width = Math.max(1, Math.round(canvas.width * scale));
+  const height = Math.max(1, Math.round(canvas.height * scale));
+  const out = document.createElement('canvas');
+  out.width = width;
+  out.height = height;
+  const ctx = out.getContext('2d');
+  if (!ctx) return canvas.toDataURL('image/jpeg', SIGNATURE_JPEG_QUALITY);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(canvas, 0, 0, width, height);
+  return out.toDataURL('image/jpeg', SIGNATURE_JPEG_QUALITY);
+}
+
 export function readSignatureDataUrl(canvas: HTMLCanvasElement | null, fallback?: string): string | undefined {
-  if (canvas && canvasHasInk(canvas)) return canvas.toDataURL('image/png');
+  if (canvas && canvasHasInk(canvas)) return exportSignatureDataUrl(canvas);
   return fallback;
 }

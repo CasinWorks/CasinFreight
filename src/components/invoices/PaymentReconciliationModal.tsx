@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
-import { uploadCompanyFile } from '../../lib/uploads';
 import { closeIfBackdrop } from '../../lib/modal';
 import { Invoice, PaymentMethodType, ProofOfPayment } from '../../types';
 
@@ -35,7 +34,7 @@ export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProp
   isOpen,
   onClose,
 }) => {
-  const { clients, trips, reconcileAndLockInvoice, currentUser, company } = useFreight();
+  const { clients, trips, reconcileAndLockInvoice, currentUser, company, uploadWorkspaceFile } = useFreight();
 
   const client = clients.find(c => c.id === invoice.clientId);
   const trip = trips.find(t => t.id === invoice.tripId);
@@ -79,11 +78,7 @@ export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProp
     setErrorMsg('');
     setIsUploadingPop(true);
     try {
-      const uploaded = await uploadCompanyFile({
-        companyId: company.id,
-        folder: `payments/${invoice.id}`,
-        file,
-      });
+      const uploaded = await uploadWorkspaceFile(`payments/${invoice.id}`, file);
       setAttachedFileUrl(uploaded.url);
       setAttachedFileName(uploaded.name);
     } catch (error) {

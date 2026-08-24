@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
+  FolderOpen,
   HardDrive,
   Loader2,
   Plus,
@@ -24,6 +25,13 @@ import {
   type RestorePreview,
   type WorkspaceBackup,
 } from '../../lib/workspaceBackup';
+import {
+  disconnectEvidenceFolder,
+  getDeviceEvidenceStatus,
+  pickEvidenceFolder,
+  syncDeviceEvidence,
+  type DeviceEvidenceStatus,
+} from '../../lib/deviceEvidence';
 import { closeIfBackdrop } from '../../lib/modal';
 
 interface WorkspaceBackupModalProps {
@@ -43,6 +51,9 @@ export const WorkspaceBackupModal: React.FC<WorkspaceBackupModalProps> = ({ isOp
     captureWorkspaceBackup,
     restoreWorkspaceBackup,
     saveWeeklyBackupNow,
+    trips,
+    invoices,
+    fieldEvents,
   } = useFreight();
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -58,6 +69,8 @@ export const WorkspaceBackupModal: React.FC<WorkspaceBackupModalProps> = ({ isOp
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<DeviceEvidenceStatus | null>(null);
+  const [isSyncingEvidence, setIsSyncingEvidence] = useState(false);
 
   const refreshWeekly = useCallback(async () => {
     if (!company.id) return;
@@ -69,10 +82,20 @@ export const WorkspaceBackupModal: React.FC<WorkspaceBackupModalProps> = ({ isOp
     }
   }, [company.id]);
 
+  const refreshEvidence = useCallback(async () => {
+    if (!company.id) return;
+    try {
+      setEvidence(await getDeviceEvidenceStatus({ company, trips, invoices, fieldEvents }));
+    } catch {
+      setEvidence(null);
+    }
+  }, [company, trips, invoices, fieldEvents]);
+
   useEffect(() => {
     if (!isOpen) return;
     void refreshWeekly();
-  }, [isOpen, refreshWeekly]);
+    void refreshEvidence();
+  }, [isOpen, refreshWeekly, refreshEvidence]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -124,6 +147,54 @@ export const WorkspaceBackupModal: React.FC<WorkspaceBackupModalProps> = ({ isOp
     } finally {
       setIsSavingWeekly(false);
     }
+  };
+
+  const runEvidenceSync = async (forceZip: boolean) => {
+    setIsSyncingEvidence(true);
+    setError(null);
+    try {
+      const result = await syncDeviceEvidence({
+        company,
+        trips,
+        invoices,
+        fieldEvents,
+        backup: captureWorkspaceBackup(),
+        userGesture: true,
+        forceZip,
+      });
+      if (result.mode === 'skipped') {
+        setSuccess('Choose a folder first (Chrome or Edge), or download a ZIP.');
+      } else if (result.failed && result.saved === 0) {
+        setError('Could not copy photos to this device. Check that this computer can open CasinFreight photo links.');
+      } else {
+        const where = result.mode === 'folder' ? 'your chosen folder' : 'a ZIP download';
+        setSuccess(
+          `Saved ${result.saved} new POD / payment file${result.saved === 1 ? '' : 's'} to ${where}. Keep that copy 10 years. CasinFreight cloud is unchanged.`
+        );
+      }
+      await refreshEvidence();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save copies to this device.');
+    } finally {
+      setIsSyncingEvidence(false);
+    }
+  };
+
+  const handlePickFolder = async () => {
+    setError(null);
+    try {
+      await pickEvidenceFolder(company.id);
+      await runEvidenceSync(false);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Could not open that folder.');
+    }
+  };
+
+  const handleDisconnectFolder = async () => {
+    await disconnectEvidenceFolder(company.id);
+    await refreshEvidence();
+    setSuccess('This browser will no longer write into that folder by itself.');
   };
 
   const handleFile = async (file: File) => {
@@ -239,7 +310,7 @@ export const WorkspaceBackupModal: React.FC<WorkspaceBackupModalProps> = ({ isOp
                   After a company delete, create the company again, then upload the old CSV. Records are copied into the <strong>current</strong> company; billing on the new company is left as-is.
                 </p>
                 <p className="font-semibold text-slate-900">
-                  Practical rule: the CSV is the real backup. Weekly snapshots on this computer are only a convenience.
+                  Practical rule: the CSV is the books backup. The folder or ZIP on this computer is the 10-year copy of POD photos and payment proofs. Weekly browser snapshots are only a convenience.
                 </p>
               </div>
             )}
@@ -277,8 +348,55 @@ export const WorkspaceBackupModal: React.FC<WorkspaceBackupModalProps> = ({ isOp
             />
           </div>
           <p className="text-slate-500 -mt-2">
-            CSV is lossless (<span className="font-mono">collection, id, json</span>) so nested trip and invoice data survives.
+            CSV is lossless (<span className="font-mono">collection, id, json</span>) so nested trip and invoice data survives. It does not include the photo files themselves.
           </p>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
+            <div className="font-bold text-emerald-950">Keep BIR / POD copies on this computer</div>
+            <p className="text-emerald-900">
+              Books and supporting papers should stay with the company for 10 years. CasinFreight cloud is capped (2 GB free / 5 GB Founding) and is not that archive. Choose a folder on this PC — after that, new POD photos, signatures, and payment proofs copy here by themselves when you sign in. Safari and phones can download a ZIP instead.
+            </p>
+            {evidence && (
+              <p className="text-emerald-800">
+                {evidence.savedCount} file{evidence.savedCount === 1 ? '' : 's'} already copied
+                {evidence.pendingCount ? ` · ${evidence.pendingCount} new` : ''}
+                {evidence.lastSyncAt ? ` · last ${formatWhen(evidence.lastSyncAt)}` : ''}
+                {evidence.folderLinked ? ' · folder linked' : ''}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {evidence?.canUseFolder && (
+                <button
+                  type="button"
+                  onClick={() => void handlePickFolder()}
+                  disabled={isSyncingEvidence || isRestoring}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 text-white font-bold hover:bg-emerald-800 disabled:opacity-40"
+                >
+                  {isSyncingEvidence ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderOpen className="w-3.5 h-3.5" />}
+                  {evidence.folderLinked ? 'Save new files to folder' : 'Choose folder on this PC'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void runEvidenceSync(true)}
+                disabled={isSyncingEvidence || isRestoring}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-900 font-bold hover:bg-white/80 disabled:opacity-40"
+              >
+                {isSyncingEvidence ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                Download copies (ZIP)
+              </button>
+              {evidence?.folderLinked && (
+                <button
+                  type="button"
+                  onClick={() => void handleDisconnectFolder()}
+                  disabled={isSyncingEvidence || isRestoring}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-emerald-800 font-semibold hover:bg-white/70 disabled:opacity-40"
+                >
+                  Stop auto-save
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="rounded-xl border border-slate-200 p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">

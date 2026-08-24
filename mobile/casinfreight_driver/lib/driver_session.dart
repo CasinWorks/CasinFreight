@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -42,6 +43,7 @@ class DriverSession extends ChangeNotifier {
   StreamSubscription<Position>? _positionSub;
   Timer? _gpsWatch;
   String? trackingTripId;
+  DateTime? _lastPingAt;
 
   bool get signedIn => _auth.currentUser != null && profile != null;
   bool get gpsOk => gpsEnabled && !gpsMocked;
@@ -158,17 +160,20 @@ class DriverSession extends ChangeNotifier {
         permission != LocationPermission.deniedForever;
     if (!gpsEnabled) {
       gpsMocked = false;
-      await _pushPing();
+      await _pushPing(force: true);
       notifyListeners();
       return;
     }
     try {
       lastFix = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
       gpsMocked = lastFix?.isMocked ?? false;
     } catch (_) {
       gpsEnabled = false;
+      await _pushPing(force: true);
+      notifyListeners();
+      return;
     }
     await _pushPing();
     notifyListeners();
@@ -180,8 +185,8 @@ class DriverSession extends ChangeNotifier {
     await _positionSub?.cancel();
     _positionSub = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 15,
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 40,
       ),
     ).listen((pos) {
       lastFix = pos;
@@ -200,10 +205,17 @@ class DriverSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _pushPing() async {
+  Future<void> _pushPing({bool force = false}) async {
     final p = profile;
     final tripId = trackingTripId;
     if (p == null || tripId == null) return;
+    final now = DateTime.now();
+    if (!force &&
+        _lastPingAt != null &&
+        now.difference(_lastPingAt!) < const Duration(seconds: 8)) {
+      return;
+    }
+    _lastPingAt = now;
     final pos = lastFix;
     await _companyDoc.collection('liveTracking').doc(tripId).set({
       'id': tripId,
@@ -266,19 +278,64 @@ class DriverSession extends ChangeNotifier {
 
   Future<String> uploadPhoto(String tripId, File file) async {
     final p = profile!;
+    final companySnap = await _companyDoc.get();
+    final companyData = companySnap.data() ?? {};
+    final used = (companyData['storageUsedBytes'] is num)
+        ? (companyData['storageUsedBytes'] as num).toInt()
+        : 0;
+    final size = await file.length();
+    final cap = _storageLimitBytes(companyData);
+    if (used + size > cap) {
+      throw StateError(
+        'Photo storage is full for this plan. Ask the owner to subscribe (5 GB) or buy extra GB.',
+      );
+    }
     final path =
         'companies/${p.companyId}/field-events/$tripId/${DateTime.now().millisecondsSinceEpoch}.jpg';
     final ref = _storage.ref(path);
     await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+    try {
+      await _companyDoc.update({
+        'storageUsedBytes': FieldValue.increment(size),
+      });
+    } catch (_) {
+      // Photo is already stored; quota still blocks later uploads once usage is readable.
+    }
     return ref.getDownloadURL();
+  }
+
+  int _storageLimitBytes(Map<String, dynamic> companyData) {
+    const bytesPerGb = 1024 * 1024 * 1024;
+    final sub = companyData['subscription'];
+    var planId = 'plan_free';
+    var addon = 0;
+    if (sub is Map) {
+      planId = (sub['plan_id'] ?? 'plan_free').toString();
+      final rawAddon = sub['storage_addon_gb'];
+      if (rawAddon is num) addon = rawAddon.toInt();
+      if (addon < 0) addon = 0;
+    }
+    final base = (planId == 'plan_founding' || planId == 'plan_promo') ? 5 : 2;
+    return (base + addon) * bytesPerGb;
   }
 
   Future<XFile?> takePhoto() {
     return ImagePicker().pickImage(
       source: ImageSource.camera,
-      imageQuality: 72,
-      maxWidth: 1600,
+      imageQuality: 62,
+      maxWidth: 1280,
     );
+  }
+
+  Future<Uint8List> _shrinkSignaturePng(Uint8List pngBytes) async {
+    const maxWidth = 900;
+    final codec = await ui.instantiateImageCodec(pngBytes, targetWidth: maxWidth);
+    final frame = await codec.getNextFrame();
+    final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+    frame.image.dispose();
+    if (data == null) return pngBytes;
+    final shrunk = data.buffer.asUint8List();
+    return shrunk.length < pngBytes.length ? shrunk : pngBytes;
   }
 
   Future<void> saveSignature({
@@ -297,7 +354,8 @@ class DriverSession extends ChangeNotifier {
       throw StateError('Sign dispatch first. The driver must accept the cargo before warehouse POD.');
     }
 
-    final dataUrl = 'data:image/png;base64,${base64Encode(pngBytes)}';
+    final compact = await _shrinkSignaturePng(pngBytes);
+    final dataUrl = 'data:image/png;base64,${base64Encode(compact)}';
     await addFieldEvent(
       tripId: tripId,
       kind: kind,

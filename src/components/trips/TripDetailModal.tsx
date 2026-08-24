@@ -36,7 +36,6 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { SignaturePad, SignaturePadHandle } from './SignaturePad';
 import { isPlaceholderSignatory } from '../../lib/podSignoff';
-import { uploadCompanyFile } from '../../lib/uploads';
 import { Trip, TripStatus, AccessorialType, POD, HOLD_EXCEPTION_KINDS, CANCEL_EXCEPTION_KINDS, TripExceptionKind } from '../../types';
 import { matchingTruckBans } from '../../lib/truckBans';
 import { TruckBanAlert } from '../truckbans/TruckBanAlert';
@@ -86,6 +85,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     liveTracking,
     fieldEvents,
     truckBans,
+    uploadWorkspaceFile,
   } = useFreight();
 
   // Modal sub-dialog states
@@ -1470,11 +1470,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                           if (!file) return;
                           setIsUploadingPodPhoto(true);
                           try {
-                            const uploaded = await uploadCompanyFile({
-                              companyId: company.id,
-                              folder: `pods/${trip.id}`,
-                              file,
-                            });
+                            const uploaded = await uploadWorkspaceFile(`pods/${trip.id}`, file);
                             setPodPhotos((prev) => [...prev, uploaded.url]);
                           } catch (error) {
                             window.alert(error instanceof Error ? error.message : 'Could not upload the photo.');

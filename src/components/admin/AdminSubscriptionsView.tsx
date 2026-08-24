@@ -4,6 +4,8 @@ import { useFreight } from '../../context/FreightContext';
 import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, formatPhp } from '../../config/plans';
 import { MAX_BILLABLE_TRUCKS } from '../../lib/subscriptionPrice';
 import type { CompanyDocument } from '../../services/firestoreCompany';
+import { listSalesAgents, setCompanySalesAgent, backfillLatestSaasCommission } from '../../services/firestoreSales';
+import type { SalesAgent } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
 
 function planLabel(planId?: string) {
@@ -44,13 +46,18 @@ export const AdminSubscriptionsView: React.FC = () => {
   const [promoRow, setPromoRow] = useState<CompanyDocument | null>(null);
   const [promoTrucks, setPromoTrucks] = useState('2');
   const [promoDeadline, setPromoDeadline] = useState(defaultPromoDate());
+  const [agents, setAgents] = useState<SalesAgent[]>([]);
 
   const load = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const next = await listPlatformSubscriptions();
+      const [next, nextAgents] = await Promise.all([
+        listPlatformSubscriptions(),
+        isPlatformAdmin ? listSalesAgents() : Promise.resolve([] as SalesAgent[]),
+      ]);
       setRows(next.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+      setAgents(nextAgents);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load subscriptions. Publish the latest firestore.rules if this is a permissions error.');
     } finally {
@@ -68,12 +75,12 @@ export const AdminSubscriptionsView: React.FC = () => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) =>
-      [row.name, row.email, row.id, row.subscription?.plan_id, row.subscription?.status]
+      [row.name, row.email, row.id, row.subscription?.plan_id, row.subscription?.status, agents.find((agent) => agent.id === row.salesAgentId)?.name]
         .join(' ')
         .toLowerCase()
         .includes(q)
     );
-  }, [query, rows]);
+  }, [query, rows, agents]);
 
   const foundingRows = rows.filter((row) => row.subscription?.plan_id === PLAN_FOUNDING_ID);
   const promoRows = rows.filter((row) => row.subscription?.plan_id === PLAN_PROMO_ID);
@@ -109,6 +116,22 @@ export const AdminSubscriptionsView: React.FC = () => {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update the plan.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const changeAgent = async (row: CompanyDocument, salesAgentId: string) => {
+    setBusyId(row.id);
+    setError(null);
+    try {
+      await setCompanySalesAgent(row.id, salesAgentId || null);
+      if (salesAgentId) {
+        await backfillLatestSaasCommission({ ...row, salesAgentId });
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this agent.');
     } finally {
       setBusyId(null);
     }
@@ -242,6 +265,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 font-bold">Company</th>
                   <th className="px-4 py-3 font-bold">Plan</th>
+                  <th className="px-4 py-3 font-bold">Agent</th>
                   <th className="px-4 py-3 font-bold">Renews / ends</th>
                   <th className="px-4 py-3 font-bold">Auto-renew</th>
                   <th className="px-4 py-3 font-bold">Payment</th>
@@ -251,7 +275,7 @@ export const AdminSubscriptionsView: React.FC = () => {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
                       <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
                       Loading subscriptions…
                     </td>
@@ -259,7 +283,7 @@ export const AdminSubscriptionsView: React.FC = () => {
                 )}
                 {!isLoading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-slate-500 text-xs">
+                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500 text-xs">
                       No companies match this search.
                     </td>
                   </tr>
@@ -298,6 +322,25 @@ export const AdminSubscriptionsView: React.FC = () => {
                           <div className="text-[10px] text-violet-700 mt-1">
                             {row.subscription?.billed_truck_count || 1} truck{(row.subscription?.billed_truck_count || 1) === 1 ? '' : 's'}
                           </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {isPlatformAdmin ? (
+                          <select
+                            value={row.salesAgentId || ''}
+                            disabled={busyId === row.id}
+                            onChange={(e) => void changeAgent(row, e.target.value)}
+                            className="max-w-[160px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                          >
+                            <option value="">Unassigned</option>
+                            {agents.map((agent) => (
+                              <option key={agent.id} value={agent.id}>{agent.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-slate-500">
+                            {agents.find((agent) => agent.id === row.salesAgentId)?.name || '—'}
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3 align-top text-xs text-slate-600">

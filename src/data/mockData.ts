@@ -2129,11 +2129,11 @@ export const initialPlans: Plan[] = [
     price_php: 0.00,
     interval: 'month',
     max_bookings_per_month: 20, // 20 monthly bookings cap
-    max_storage_mb: 100,        // 100 MB POD photo storage cap
+    max_storage_mb: 2048,        // 2 GB POD photo storage cap
     is_active: true,
     features: [
       'Up to 20 trip bookings / month',
-      '100 MB POD document & photo storage',
+      '2 GB POD document & photo storage',
       'Single user dispatch access',
       'Basic load calculator & rate lookup',
       'Standard waybill generation',
@@ -2149,11 +2149,11 @@ export const initialPlans: Plan[] = [
     price_php: 499.00,
     interval: 'month',
     max_bookings_per_month: null, // Unlimited
-    max_storage_mb: null,        // Unlimited
+    max_storage_mb: 5120,        // 5 GB included; extra GB billed
     is_active: true,
     features: [
       'Unlimited monthly trip bookings & dispatching',
-      'Unlimited high-res POD photos & receipt storage',
+      '5 GB POD photos & receipt storage; extra ₱99/GB per month',
       'Full General Ledger & BIR 2307 EWT Tax Books',
       'Enterprise P&L & direct cost analytics per plate',
       'Multi-role access (Owner, Dispatcher, Billing, Loading)',

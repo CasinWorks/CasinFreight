@@ -36,6 +36,8 @@ export interface Company {
   currency: string;
   logoUrl?: string;
   registeredDate: string;
+  storageUsedBytes?: number;
+  salesAgentId?: string;
 }
 
 export type TruckType = 
@@ -643,6 +645,7 @@ export interface Subscription {
   billed_truck_count?: number;
   last_billed_amount_php?: number;
   grant_source?: 'paymongo' | 'promo';
+  storage_addon_gb?: number;
   created_at: string;
   updated_at: string;
 }
@@ -692,6 +695,45 @@ export interface SubscriptionUsageStats {
   hasReachedAccountCap: boolean;
   hasReachedRoleCap: boolean;
   hasReachedTransactionCap: boolean;
+}
+
+export type SalesAgentStatus = 'active' | 'inactive';
+export type AgentCommissionKind = 'saas' | 'perpetual' | 'support';
+
+export interface SalesAgent {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  status: SalesAgentStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentCommissionEntry {
+  id: string;
+  agentId: string;
+  companyId: string;
+  companyName: string;
+  kind: AgentCommissionKind;
+  paymentId: string;
+  paymentNumber?: number;
+  billedPhp: number;
+  rate: number;
+  commissionPhp: number;
+  createdAt: string;
+}
+
+export interface AgentPayout {
+  id: string;
+  agentId: string;
+  amountPhp: number;
+  paidAt: string;
+  method?: string;
+  reference?: string;
+  notes?: string;
+  createdAt: string;
 }
 
 export type PlatformNoticeKind = 'maintenance' | 'update';

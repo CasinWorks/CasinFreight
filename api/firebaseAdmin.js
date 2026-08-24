@@ -127,16 +127,64 @@ async function writeSubscription(db, companyId, subscription, tier) {
   );
 }
 
+const SAAS_COMMISSION_FIRST_RATE = 0.25;
+const SAAS_COMMISSION_RENEWAL_RATE = 0.10;
+const SAAS_COMMISSION_MONTHS = 12;
+
+function saasCommissionRate(paymentNumber) {
+  const n = Math.max(1, Math.floor(Number(paymentNumber) || 1));
+  if (n === 1) return SAAS_COMMISSION_FIRST_RATE;
+  if (n <= SAAS_COMMISSION_MONTHS) return SAAS_COMMISSION_RENEWAL_RATE;
+  return 0;
+}
+
+function payMongoPaymentIds(subscription) {
+  const ids = [
+    ...((subscription && subscription.consumed_payment_ids) || []),
+    subscription && subscription.payment_provider_checkout_id,
+  ].filter((id, index, all) => Boolean(id) && String(id).startsWith('pay_') && all.indexOf(id) === index);
+  return ids;
+}
+
+async function accrueSaasCommission(db, company, companyId, payment, subscription) {
+  const agentId = String((company && company.salesAgentId) || '').trim();
+  const billedPhp = Math.max(0, Number(payment && payment.amountPhp) || 0);
+  const paymentId = String((payment && payment.paymentId) || '');
+  if (!agentId || !paymentId || billedPhp <= 0) return;
+  const paymentNumber = Math.max(1, payMongoPaymentIds(subscription).length);
+  const rate = saasCommissionRate(paymentNumber);
+  const commissionPhp = Math.round(billedPhp * rate);
+  if (commissionPhp <= 0) return;
+  const commRef = db.collection('salesAgents').doc(agentId).collection('commissions').doc(`saas-${paymentId}`);
+  const existing = await commRef.get();
+  if (existing.exists) return;
+  await commRef.set({
+    id: `saas-${paymentId}`,
+    agentId,
+    companyId,
+    companyName: company.name || company.email || companyId,
+    kind: 'saas',
+    paymentId,
+    paymentNumber,
+    billedPhp,
+    rate,
+    commissionPhp,
+    createdAt: new Date().toISOString(),
+  });
+}
+
 async function grantFounding(db, caller, payment) {
   const { companyId, company } = await loadOwnedCompany(db, caller);
   const previous = company.subscription || {};
   const already = Array.isArray(previous.consumed_payment_ids)
     && previous.consumed_payment_ids.includes(payment.paymentId);
   if (already && previous.plan_id === 'plan_founding' && !isFoundingExpired(previous)) {
+    await accrueSaasCommission(db, company, companyId, payment, previous);
     return { companyId, subscription: previous, subscriptionTier: 'Growth' };
   }
   const subscription = foundingSubscription(companyId, caller.uid, previous, payment);
   await writeSubscription(db, companyId, subscription, 'Growth');
+  await accrueSaasCommission(db, company, companyId, payment, subscription);
   return { companyId, subscription, subscriptionTier: 'Growth' };
 }
 

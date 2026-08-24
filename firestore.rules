@@ -50,6 +50,22 @@ service cloud.firestore {
       return createdCompany(companyId) || isPlatformAdmin();
     }
 
+    function currentStorageUsed() {
+      return resource.data.keys().hasAny(['storageUsedBytes']) && resource.data.storageUsedBytes is int
+        ? resource.data.storageUsedBytes
+        : 0;
+    }
+
+    // Members may raise usage by at most one 8 MB upload. They cannot zero the meter.
+    function storageUsageNotDecreased() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['storageUsedBytes'])
+        || (
+          request.resource.data.storageUsedBytes is int
+          && request.resource.data.storageUsedBytes >= currentStorageUsed()
+          && request.resource.data.storageUsedBytes - currentStorageUsed() < 8 * 1024 * 1024
+        );
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
@@ -109,7 +125,8 @@ service cloud.firestore {
         || (
           canAccessCompany(companyId)
           && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['subscription', 'subscriptionTier', 'createdBy', 'id'])
+            .hasAny(['subscription', 'subscriptionTier', 'createdBy', 'id', 'salesAgentId'])
+          && storageUsageNotDecreased()
         );
       allow delete: if isCompanyOwner(companyId);
 
@@ -147,6 +164,13 @@ service cloud.firestore {
     match /platformNotices/{noticeId} {
       allow read: if true;
       allow create, update, delete: if isPlatformAdmin();
+    }
+
+    match /salesAgents/{agentId} {
+      allow read, write: if isPlatformAdmin();
+      match /{subcol}/{docId} {
+        allow read, write: if isPlatformAdmin();
+      }
     }
   }
 }

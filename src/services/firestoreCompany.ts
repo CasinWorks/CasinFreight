@@ -4,8 +4,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   onSnapshot,
   setDoc,
+  updateDoc,
   writeBatch,
   type DocumentData,
   type Unsubscribe,
@@ -96,12 +98,20 @@ export async function saveCompanyDocument(
     delete payload.subscription;
     delete payload.subscriptionTier;
   }
+  // Usage is incremented atomically on upload. Never overwrite it from a stale client snapshot.
+  delete payload.storageUsedBytes;
+  // Sales attribution is platform-admin only. Workspace persist must not clear or spoof it.
+  delete payload.salesAgentId;
   await setDoc(doc(getFirebaseDb(), 'companies', company.id), payload, { merge: true });
 }
 
 export function listenCompanyBilling(
   companyId: string,
-  onData: (billing: { subscription?: Subscription; subscriptionTier?: Company['subscriptionTier'] }) => void
+  onData: (billing: {
+    subscription?: Subscription;
+    subscriptionTier?: Company['subscriptionTier'];
+    storageUsedBytes?: number;
+  }) => void
 ): Unsubscribe {
   return onSnapshot(doc(getFirebaseDb(), 'companies', companyId), (snap) => {
     if (!snap.exists()) return;
@@ -109,6 +119,7 @@ export function listenCompanyBilling(
     onData({
       subscription: data.subscription,
       subscriptionTier: data.subscriptionTier,
+      storageUsedBytes: Number(data.storageUsedBytes) || 0,
     });
   });
 }
@@ -161,14 +172,20 @@ export async function replaceCollection<T extends { id: string }>(
   companyId: string,
   name: WorkspaceCollection,
   items: T[],
-  options?: { merge?: boolean }
+  options?: { merge?: boolean; previousIds?: Iterable<string>; incomingIds?: Iterable<string> }
 ): Promise<void> {
   if (!companyId) return;
   const merge = Boolean(options?.merge);
   const db = getFirebaseDb();
   const colRef = collection(db, 'companies', companyId, name);
-  const existing = await getDocs(colRef);
-  const incomingIds = new Set(items.map((item) => item.id));
+  const incomingIds = new Set(
+    options?.incomingIds
+      ? [...options.incomingIds]
+      : items.map((item) => item.id).filter(Boolean)
+  );
+  const previousIds = options?.previousIds
+    ? [...options.previousIds]
+    : (await getDocs(colRef)).docs.map((docSnap) => docSnap.id);
 
   let batch = writeBatch(db);
   let ops = 0;
@@ -181,15 +198,16 @@ export async function replaceCollection<T extends { id: string }>(
     }
   };
 
-  for (const docSnap of existing.docs) {
-    if (!incomingIds.has(docSnap.id)) {
-      batch.delete(docSnap.ref);
+  for (const id of previousIds) {
+    if (!incomingIds.has(id)) {
+      batch.delete(doc(colRef, id));
       ops += 1;
       await commitIfNeeded();
     }
   }
 
   for (const item of items) {
+    if (!item.id) continue;
     const { password: _password, ...rest } = item as T & { password?: string };
     batch.set(
       doc(colRef, item.id),
@@ -256,6 +274,7 @@ export async function seedCompanyWorkspace(params: {
     subscriptionTier: 'Free',
     currency: 'PHP',
     registeredDate: now.slice(0, 10),
+    storageUsedBytes: 0,
     createdBy: params.uid,
     onboardingComplete: false,
     subscription: { ...params.subscription, company_id: companyId, user_id: params.uid },
@@ -410,4 +429,11 @@ export async function saveCompanySubscription(
     subscription,
     subscriptionTier,
   }, { writeBilling: true });
+}
+
+export async function incrementCompanyStorage(companyId: string, bytes: number): Promise<void> {
+  if (!companyId || !bytes) return;
+  await updateDoc(doc(getFirebaseDb(), 'companies', companyId), {
+    storageUsedBytes: increment(bytes),
+  });
 }

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CasinFreight Sales Agent Playbook</title>
+  <style>
+    @page { size: A4; margin: 16mm 16mm 18mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      font-size: 11.5px;
+      line-height: 1.45;
+      margin: 0;
+    }
+    h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #1d4ed8;
+      border-bottom: 2px solid #1d4ed8;
+      padding-bottom: 4px;
+      margin: 18px 0 10px;
+    }
+    h3 { font-size: 12px; margin: 12px 0 6px; }
+    p { margin: 0 0 8px; }
+    .mast {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-bottom: 4px solid #1d4ed8;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+    .brand { font-size: 11px; font-weight: 800; color: #1d4ed8; letter-spacing: 0.12em; text-transform: uppercase; }
+    .meta { text-align: right; color: #64748b; font-size: 10px; }
+    .lede { font-size: 13px; color: #334155; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 10px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #1e3a8a; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    td.num, th.num { text-align: right; white-space: nowrap; }
+    tr.hl td { background: #ecfdf5; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; }
+    .card strong { display: block; margin-bottom: 4px; }
+    .ok { background: #f0fdf4; border-color: #86efac; }
+    .no { background: #fff7ed; border-color: #fdba74; }
+    .stop { background: #fef2f2; border-color: #fca5a5; }
+    ul { margin: 0 0 8px; padding-left: 18px; }
+    li { margin-bottom: 3px; }
+    .script { background: #f8fafc; border-left: 4px solid #1d4ed8; padding: 8px 10px; margin: 0 0 8px; }
+    .foot {
+      margin-top: 16px;
+      font-size: 9.5px;
+      color: #64748b;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 8px;
+    }
+    .page-break { page-break-before: always; }
+    .money {
+      background: #052e16;
+      color: #fff;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 0 0 16px;
+    }
+    .money h2 {
+      color: #86efac;
+      border-bottom: 2px solid #166534;
+      margin: 0 0 8px;
+      font-size: 12px;
+    }
+    .money table { margin: 0; }
+    .money th { background: #14532d; }
+    .money td, .money th { border-color: #166534; color: #fff; }
+    .money tr.hl td { background: #166534; color: #fff; }
+    .money .note { font-size: 10px; color: #bbf7d0; margin: 8px 0 0; }
+    .badge { display: inline-block; background: #1d4ed8; color: #fff; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.04em; }
+  </style>
+</head>
+<body>
+  <div class="mast">
+    <div>
+      <div class="brand">CasinFreight</div>
+      <h1>Sales Agent Playbook &amp; Commission SOP</h1>
+      <p class="lede">Philippine trucking &amp; fleet SaaS. What to sell, who to sell it to, and exactly how much you earn.</p>
+    </div>
+    <div class="meta">
+      Internal — sales agents only<br />
+      Effective August 2026<br />
+      Casin Works
+    </div>
+  </div>
+
+  <div class="money">
+    <h2>Your money (commission — paid after PayMongo confirms paid)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>If you close this</th>
+          <th class="num">You get</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="hl">
+          <td>Founding, 2 trucks (₱899/mo)</td>
+          <td class="num">₱225 month 1, then ₱90/mo × 11 = ₱1,215 in year 1</td>
+        </tr>
+        <tr>
+          <td>Founding, 10 trucks (₱2,099/mo)</td>
+          <td class="num">₱2,835 in year 1 (₱525 then ₱210/mo × 11)</td>
+        </tr>
+        <tr class="hl">
+          <td>₱300,000 perpetual license</td>
+          <td class="num">₱30,000 once (10% — not the 25% SaaS rate)</td>
+        </tr>
+        <tr>
+          <td>Year-2 support (₱54,000/year)</td>
+          <td class="num">₱5,400/year only if you sold that contract and it is paid</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note">25% first month + 10% months 2–12 on SaaS. No commission on Free, promo, or extra photo GB. Full tables in section 5–6.</p>
+  </div>
+
+  <h2>1. What we sell</h2>
+  <p>CasinFreight is the operating system for a PH trucking company: trips, POD photos, BIR invoices (12% VAT / 2% EWT), fleet, fuel, and roles. You close the owner. Dispatch and drivers use it after.</p>
+  <div class="grid">
+    <div class="card ok">
+      <strong>Default product — Founding (SaaS)</strong>
+      They use casinfreight.com. We host. They pay monthly (or yearly). This is what you sell to almost everyone.
+    </div>
+    <div class="card no">
+      <strong>Exception — Perpetual license</strong>
+      ₱300,000 once. Their own Firebase project, unlimited trucks, they pay Google. Only for large fleets who want to own the system. Not cheaper hosting.
+    </div>
+  </div>
+
+  <h2>2. Prices you may quote</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Offer</th>
+        <th>Who it is for</th>
+        <th class="num">Price</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Free</td>
+        <td>Try the product. 1 truck, 1 account, 10 trips, 2 GB photos.</td>
+        <td class="num">₱0</td>
+      </tr>
+      <tr>
+        <td>Founding SaaS</td>
+        <td>Paying customers. Full product. 5 GB photos. First 2 trucks included.</td>
+        <td class="num">₱899 / month</td>
+      </tr>
+      <tr>
+        <td>Extra truck</td>
+        <td>Truck 3 and up, while they stay on Founding.</td>
+        <td class="num">₱150 / truck / month</td>
+      </tr>
+      <tr>
+        <td>Annual Founding</td>
+        <td>Same plan, paid 12 months up front.</td>
+        <td class="num">15% off the yearly total</td>
+      </tr>
+      <tr>
+        <td>Later list price</td>
+        <td>New companies after the Founding window. Founding lock keeps ₱899.</td>
+        <td class="num">₱1,599 / month base</td>
+      </tr>
+      <tr>
+        <td>Extra photo storage</td>
+        <td>After 2 GB (Free) or 5 GB (Founding).</td>
+        <td class="num">₱99 / GB / month</td>
+      </tr>
+      <tr class="hl">
+        <td>Perpetual dedicated instance</td>
+        <td>15+ trucks, or they require their own Google/Firebase project. Unlimited trucks on that copy. Year 1 support included.</td>
+        <td class="num">₱300,000 once</td>
+      </tr>
+      <tr>
+        <td>Perpetual support (year 2+)</td>
+        <td>Updates, rescue, WhatsApp. If unpaid: app still runs, we stop supporting.</td>
+        <td class="num">₱54,000 / year</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Do not invent discounts.</strong> Do not discount ₱899 toward ₱300k. Extra photo GB is not a commission item.</p>
+
+  <h2>3. How you sell (in this order)</h2>
+  <ol>
+    <li><strong>Put them on Free.</strong> One truck, real trips, real POD. Do not pitch ₱300k on the first call.</li>
+    <li><strong>Upgrade to Founding at ₱899</strong> when they need a second truck, more staff, or more than 10 trips. Line: <em>“Lock ₱899 now. Later this goes to ₱1,599.”</em></li>
+    <li><strong>Add trucks at ₱150</strong> as the fleet grows. This is how you earn more without a new close.</li>
+    <li><strong>Offer ₱300k only</strong> if they have 15+ trucks, or they refuse to keep books on shared SaaS and want their own Firebase.</li>
+  </ol>
+
+  <div class="script">
+    <strong>Script — small fleet (1–8 trucks)</strong><br />
+    “For your size, Founding at ₱899 is the cheaper and better fit. Two trucks are included. Extra trucks are ₱150 each. You are not buying a server. You are renting the live system, and that is cheaper on purpose.”
+  </div>
+  <div class="script">
+    <strong>Script — large fleet / ownership buyer</strong><br />
+    “₱300k is not cheaper hosting. Hosting on CasinFreight is cheaper. ₱300k is if you want the system in your own Google account, unlimited trucks, and you stop paying rent per truck. You pay Google yourself. Year 1 support is included. Year 2 is ₱54,000 if you still want us on call.”
+  </div>
+
+  <h2>4. When ₱300k wins vs ₱899 (show this if they argue “SaaS is cheaper”)</h2>
+  <p>Agree with them if they are small. SaaS is cheaper for small fleets. Perpetual includes unlimited trucks on their instance, so it only beats rent when the fleet is large:</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Fleet</th>
+        <th class="num">SaaS per month</th>
+        <th class="num">SaaS per year</th>
+        <th>Years to equal ₱300k</th>
+        <th>Your move</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>2 trucks</td>
+        <td class="num">₱899</td>
+        <td class="num">₱10,788</td>
+        <td>~28 years</td>
+        <td>Sell Founding only</td>
+      </tr>
+      <tr>
+        <td>10 trucks</td>
+        <td class="num">₱2,099</td>
+        <td class="num">₱25,188</td>
+        <td>~12 years</td>
+        <td>Founding, unless they demand their own project</td>
+      </tr>
+      <tr>
+        <td>20 trucks</td>
+        <td class="num">₱3,599</td>
+        <td class="num">₱43,188</td>
+        <td>~7 years</td>
+        <td>Optional perpetual if they ask for ownership</td>
+      </tr>
+      <tr class="hl">
+        <td>50 trucks</td>
+        <td class="num">₱8,099</td>
+        <td class="num">₱97,188</td>
+        <td>~3 years, then ₱54k support vs ₱97k rent</td>
+        <td>This is the ₱300k buyer</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <h2>5. Your money — Founding SaaS (full table)</h2>
+  <p><span class="badge">Pay after PayMongo is paid</span> Not on a verbal yes. Not on checkout opened. One agent per company (first closer). No commission on Free, promo, or extra photo GB.</p>
+  <p><strong>Rate:</strong> 25% of the first paid month, then 10% of months 2–12, then stop. Same percent on extra trucks.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>What they pay</th>
+        <th class="num">Your month 1</th>
+        <th class="num">Your months 2–12 (each)</th>
+        <th class="num">Your year-1 total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="hl">
+        <td>Founding, 2 trucks — ₱899/mo</td>
+        <td class="num">₱225</td>
+        <td class="num">₱90</td>
+        <td class="num">₱1,215</td>
+      </tr>
+      <tr>
+        <td>3 trucks — ₱1,049/mo</td>
+        <td class="num">₱262</td>
+        <td class="num">₱105</td>
+        <td class="num">₱1,417</td>
+      </tr>
+      <tr>
+        <td>5 trucks — ₱1,349/mo</td>
+        <td class="num">₱337</td>
+        <td class="num">₱135</td>
+        <td class="num">₱1,822</td>
+      </tr>
+      <tr>
+        <td>10 trucks — ₱2,099/mo</td>
+        <td class="num">₱525</td>
+        <td class="num">₱210</td>
+        <td class="num">₱2,835</td>
+      </tr>
+      <tr>
+        <td>Each extra truck you add later (₱150)</td>
+        <td class="num">₱38</td>
+        <td class="num">₱15</td>
+        <td class="num">on that truck’s remaining months</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Annual prepay (15% off): commission is 25% of the first month equivalent only if paid monthly. If they pay the year in one PayMongo charge, you get <strong>25% of that one payment, once</strong> (no extra 10% monthly on top of the same pesos). Example: 2 trucks annual ≈ ₱9,170 → you earn <strong>₱2,292 once</strong>.</p>
+  <p>If they later pay the ₱1,599 list base, percents stay the same (do not raise your rate). 2-truck list ₱1,599 → month 1 <strong>₱400</strong>, then <strong>₱160</strong>/mo for the rest of that 12-month clock.</p>
+
+  <h2>6. Your money — ₱300,000 perpetual</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Closed item</th>
+        <th class="num">Your pay</th>
+        <th>When</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="hl">
+        <td>₱300,000 license</td>
+        <td class="num">₱30,000 (10%)</td>
+        <td>Once, after funds clear</td>
+      </tr>
+      <tr>
+        <td>₱54,000/year support (year 2+)</td>
+        <td class="num">₱5,400 / year (10%)</td>
+        <td>Only if you sold that contract and it is paid</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="card stop">
+    <strong>Do not use the SaaS 25% rate on ₱300k.</strong>
+    25% of ₱300k is ₱75,000. That is not the deal. Ceiling if this was a hard enterprise chase: 15% = ₱45,000, written approval from CasinFreight owner only. No monthly residual on the license.
+  </div>
+
+  <h2>7. Objections</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>They say</th>
+        <th>You say</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>“Hosting on your app is cheaper, why ₱300k?”</td>
+        <td>Yes. ₱899 is cheaper for small fleets. ₱300k is ownership: your Firebase, unlimited trucks, stop renting per truck. We do not pretend it is a discount.</td>
+      </tr>
+      <tr>
+        <td>“We’ll wait until ₱1,599.”</td>
+        <td>Founding lock is ₱899 for life while they stay subscribed. Waiting means they pay ₱1,599 as a new company.</td>
+      </tr>
+      <tr>
+        <td>“Can we get it on our own VPS / no Google?”</td>
+        <td>No at ₱300k. That is a rewrite. Owner quotes ₱1.2M+ and months. Dedicated Firebase is the ₱300k product.</td>
+      </tr>
+      <tr>
+        <td>“Include lifetime support in ₱300k.”</td>
+        <td>Year 1 only. After that ₱54,000/year. Unpaid support: they keep the running app, we stop.</td>
+      </tr>
+      <tr>
+        <td>“Just give us Free forever.”</td>
+        <td>Free is 1 truck, 1 login, 10 trips, 2 GB. Real fleet needs Founding.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>8. Hard rules</h2>
+  <ul>
+    <li>You cannot promise Founding without a confirmed PayMongo (or owner-approved promo). Promo is not commissionable.</li>
+    <li>You cannot change trucks, storage, or ₱300k terms in writing without the owner.</li>
+    <li>If two agents talk to the same TIN/company, the first qualified close is paid. Split only if the owner says so in writing.</li>
+    <li>Churn before month 12: you stop earning on months they did not pay. No clawback on months already paid unless the payment is refunded.</li>
+    <li>Do not sell perpetual to a 2-truck operator. That wastes the close and undercuts SaaS.</li>
+  </ul>
+
+  <h2>9. Your first 90 days (target)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Close</th>
+        <th class="num">Year-1 earnings</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>4 × Founding, 2 trucks each (₱899)</td>
+        <td class="num">₱4,860</td>
+      </tr>
+      <tr>
+        <td>Those 4 later add 1 extra truck each</td>
+        <td class="num">+ about ₱600–₱800 depending on remaining months</td>
+      </tr>
+      <tr class="hl">
+        <td>1 × ₱300k license (15+ truck group)</td>
+        <td class="num">₱30,000 once</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>One enterprise license is worth more than a year of small Founding residuals. Still: most of your week is Free → ₱899. That is the machine.</p>
+
+  <p class="foot">
+    CasinFreight / Casin Works · Internal sales SOP · August 2026 · Prices in PHP. GCash/PayMongo fees are company cost, not deducted from your stated commission. Commission is calculated on the amount the customer paid (gross checkout), after the payment is confirmed paid. This document does not change product terms in the app; the owner’s written rate card wins if anything conflicts.
+  </p>
+</body>
+</html>

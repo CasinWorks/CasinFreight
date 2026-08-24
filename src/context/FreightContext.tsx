@@ -14,14 +14,14 @@ import {
   Truck, 
   Driver, 
   Client, 
-  RateCard,
+  RateCard, 
   TruckBan, 
   Trip, 
   TripStatus, 
   TripAccessorial, 
   TripRetractionReasonCategory,
   TripStatusRetractionRequest,
-  POD,
+  POD, 
   FieldEvent,
   LiveTracking, 
   Invoice, 
@@ -50,7 +50,7 @@ import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, 
 import { initialChartOfAccounts } from '../data/mockData';
 import { getFirebaseAuth, isFirebaseConfigured } from '../lib/firebase';
 import { METRO_MANILA_TRUCK_BAN_PRESETS } from '../lib/truckBans';
-import {
+import { 
   CompanyDocument,
   UserProfile,
   createAuditLog,
@@ -64,16 +64,19 @@ import {
   listenCompanyBilling,
   replaceCollection,
   upsertCollection,
+  incrementCompanyStorage,
   saveCompanyDocument,
   saveCompanySubscription,
   saveInvite,
   saveUserProfile,
   seedCompanyWorkspace,
   deleteCompanyWorkspace as deleteCompanyWorkspaceDocs,
+  type WorkspaceCollection,
 } from '../services/firestoreCompany';
 import { deletePlatformNotice as deletePlatformNoticeDoc, listenPlatformNotices, savePlatformNotice as savePlatformNoticeDoc, activeDowntimeNotice } from '../services/firestoreNotices';
 import { saveWeeklyBackup } from '../lib/weeklyBackupStore';
-import {
+import { syncDeviceEvidence } from '../lib/deviceEvidence';
+import { 
   BACKUP_COLLECTIONS,
   BACKUP_FORMAT,
   BACKUP_VERSION,
@@ -84,7 +87,8 @@ import {
   type WorkspaceBackup,
 } from '../lib/workspaceBackup';
 import { PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, SAAS_PLANS, ALL_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, isUnlockedPlanId, makeFreeSubscription, makePromoSubscription, type AdminPlanGrant } from '../config/plans';
-import { paidTruckLimit, FOUNDING_INCLUDED_TRUCKS } from '../lib/subscriptionPrice';
+import { paidTruckLimit, FOUNDING_INCLUDED_TRUCKS, storageLimitBytes, storageLimitGb } from '../lib/subscriptionPrice';
+import { uploadCompanyFile } from '../lib/uploads';
 import { isPlatformAdminEmail } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 import { isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
@@ -118,6 +122,7 @@ export interface FleetFuelAnalytics {
 interface FreightContextType {
   company: Company;
   updateCompany: (updates: Partial<Company>) => void;
+  uploadWorkspaceFile: (folder: string, file: File) => Promise<{ url: string; name: string; bytes: number }>;
   
   users: User[];
   currentUser: User;
@@ -349,6 +354,7 @@ const BLANK_COMPANY: Company = {
   subscriptionTier: 'Free',
   currency: 'PHP',
   registeredDate: new Date().toISOString().slice(0, 10),
+  storageUsedBytes: 0,
 };
 
 function asPayMongoMethod(value?: string): PayMongoPaymentMethod {
@@ -409,6 +415,9 @@ function mapAuthError(error: unknown): string {
 
 export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const persistReadyRef = useRef(false);
+  const persistHashRef = useRef<Record<string, string>>({});
+  const persistIdsRef = useRef<Record<string, string[]>>({});
+  const persistDocHashRef = useRef<Record<string, Record<string, string>>>({});
   const seedingRef = useRef(false);
   const companyCreatedByRef = useRef('');
   const tripsDirtyRef = useRef(false);
@@ -445,6 +454,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const resetWorkspace = () => {
     persistReadyRef.current = false;
+    persistHashRef.current = {};
+    persistIdsRef.current = {};
+    persistDocHashRef.current = {};
     companyCreatedByRef.current = '';
     tripsDirtyRef.current = false;
     workspaceUnsubsRef.current.forEach((unsub) => unsub());
@@ -473,6 +485,59 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setBillingHistory([]);
     setIsOnboardingOpen(false);
     setIsWaitingForPayMongo(false);
+  };
+
+  const snapshotCollection = (name: WorkspaceCollection, items: { id: string }[]) => {
+    persistHashRef.current[name] = JSON.stringify(items);
+    persistIdsRef.current[name] = items.map((item) => item.id).filter(Boolean);
+    persistDocHashRef.current[name] = Object.fromEntries(
+      items
+        .filter((item) => item.id)
+        .map((item) => {
+          const { password: _password, ...rest } = item as { id: string; password?: string };
+          return [item.id, JSON.stringify(rest)];
+        })
+    );
+  };
+
+  const persistWorkspaceCollection = <T extends { id: string }>(
+    name: WorkspaceCollection,
+    items: T[],
+    options?: { merge?: boolean }
+  ) => {
+    if (!persistReadyRef.current || !company.id) return;
+    const hash = JSON.stringify(items);
+    if (persistHashRef.current[name] === hash) return;
+
+    const previousCollectionHash = persistHashRef.current[name] || '';
+    const previousIds = persistIdsRef.current[name] || [];
+    const previousDocHashes = persistDocHashRef.current[name] || {};
+    const nextIds = items.map((item) => item.id).filter(Boolean);
+    const nextDocHashes: Record<string, string> = {};
+    const dirty: T[] = [];
+    items.forEach((item) => {
+      if (!item.id) return;
+      const { password: _password, ...rest } = item as T & { password?: string };
+      const itemHash = JSON.stringify(rest);
+      nextDocHashes[item.id] = itemHash;
+      if (previousDocHashes[item.id] !== itemHash) dirty.push(item);
+    });
+    const deleted = previousIds.filter((id) => !nextDocHashes[id]);
+    persistHashRef.current[name] = hash;
+    persistIdsRef.current[name] = nextIds;
+    persistDocHashRef.current[name] = nextDocHashes;
+    if (dirty.length === 0 && deleted.length === 0) return;
+
+    replaceCollection(company.id, name, dirty, {
+      ...options,
+      previousIds,
+      incomingIds: nextIds,
+    }).catch((error) => {
+      persistHashRef.current[name] = previousCollectionHash;
+      persistIdsRef.current[name] = previousIds;
+      persistDocHashRef.current[name] = previousDocHashes;
+      console.error(error);
+    });
   };
 
   const hydrateCompany = async (companyId: string, uid: string, profile?: UserProfile | null) => {
@@ -522,12 +587,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.error('Could not persist expired Founding period', error);
       }
     }
-    setCompany({
-      ...companyFields,
-      subscriptionTier: isUnlockedPlanId(nextSub.plan_id) ? 'Growth' : 'Free',
-    });
-    setSubscription(nextSub);
-    setRoles(ensureDefaultSystemRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]));
+    const nextRoles = ensureDefaultSystemRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
     const seenTutorial = Boolean(profile?.has_seen_tutorial) || hasSeenTutorialLocally(uid);
     const uniqueMembers = Object.values(
       loadedMembers.reduce<Record<string, User>>((acc, member) => {
@@ -543,6 +603,27 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (seenTutorial) {
       markTutorialSeenLocally(uid);
     }
+
+    snapshotCollection('roles', loadedRoles);
+    snapshotCollection('members', uniqueMembers);
+    snapshotCollection('trucks', loadedTrucks);
+    snapshotCollection('drivers', loadedDrivers);
+    snapshotCollection('clients', loadedClients);
+    snapshotCollection('rateCards', loadedRateCards);
+    snapshotCollection('truckBans', loadedTruckBans);
+    snapshotCollection('trips', loadedTrips);
+    snapshotCollection('invoices', loadedInvoices);
+    snapshotCollection('fuelLogs', loadedFuelLogs);
+    snapshotCollection('journalEntries', loadedJournal);
+    snapshotCollection('notifications', loadedNotifications);
+    snapshotCollection('auditLogs', loadedAudit);
+
+    setCompany({
+      ...companyFields,
+      subscriptionTier: isUnlockedPlanId(nextSub.plan_id) ? 'Growth' : 'Free',
+    });
+    setSubscription(nextSub);
+    setRoles(nextRoles);
     setUsers(uniqueMembers);
     setTrucks(loadedTrucks);
     setDrivers(loadedDrivers);
@@ -577,13 +658,18 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }),
       listenCompanyBilling(company.id, (billing) => {
         if (billing.subscription) setSubscription(billing.subscription);
-        if (billing.subscriptionTier) {
-          setCompany((prev) => (
-            prev.subscriptionTier === billing.subscriptionTier
-              ? prev
-              : { ...prev, subscriptionTier: billing.subscriptionTier as Company['subscriptionTier'] }
-          ));
-        }
+        setCompany((prev) => {
+          const nextTier = billing.subscriptionTier as Company['subscriptionTier'] | undefined;
+          const nextUsed = Number(billing.storageUsedBytes);
+          const usedChanged = Number.isFinite(nextUsed) && prev.storageUsedBytes !== nextUsed;
+          const tierChanged = Boolean(nextTier) && prev.subscriptionTier !== nextTier;
+          if (!usedChanged && !tierChanged) return prev;
+          return {
+            ...prev,
+            ...(tierChanged ? { subscriptionTier: nextTier } : {}),
+            ...(usedChanged ? { storageUsedBytes: nextUsed } : {}),
+          };
+        });
       }),
     ];
     return () => {
@@ -659,65 +745,44 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     if (currentUserId !== companyCreatedByRef.current) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'roles', roles).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('roles', roles), 500);
     return () => clearTimeout(timer);
   }, [roles, company.id, currentUserId]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     if (currentUserId !== companyCreatedByRef.current) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'members', users).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('members', users), 500);
     return () => clearTimeout(timer);
   }, [users, company.id, currentUserId]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'trucks', trucks).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('trucks', trucks), 500);
     return () => clearTimeout(timer);
   }, [trucks, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'drivers', drivers).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('drivers', drivers), 500);
     return () => clearTimeout(timer);
   }, [drivers, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'clients', clients).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('clients', clients), 500);
     return () => clearTimeout(timer);
   }, [clients, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'rateCards', rateCards).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('rateCards', rateCards), 500);
     return () => clearTimeout(timer);
   }, [rateCards, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'truckBans', truckBans).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('truckBans', truckBans), 500);
     return () => clearTimeout(timer);
   }, [truckBans, company.id]);
 
@@ -725,58 +790,39 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!persistReadyRef.current || !company.id) return;
     if (!tripsDirtyRef.current) return;
     const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'trips', trips, { merge: true })
-        .then(() => {
-          tripsDirtyRef.current = false;
-        })
-        .catch(console.error);
+      persistWorkspaceCollection('trips', trips, { merge: true });
+      tripsDirtyRef.current = false;
     }, 500);
     return () => clearTimeout(timer);
   }, [trips, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'invoices', invoices).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('invoices', invoices), 500);
     return () => clearTimeout(timer);
   }, [invoices, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'fuelLogs', fuelLogs).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('fuelLogs', fuelLogs), 500);
     return () => clearTimeout(timer);
   }, [fuelLogs, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'journalEntries', journalEntries).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('journalEntries', journalEntries), 500);
     return () => clearTimeout(timer);
   }, [journalEntries, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'notifications', notifications).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('notifications', notifications), 500);
     return () => clearTimeout(timer);
   }, [notifications, company.id]);
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
-    const timer = setTimeout(() => {
-      if (!persistReadyRef.current) return;
-      replaceCollection(company.id, 'auditLogs', rbacAuditLogs).catch(console.error);
-    }, 500);
+    const timer = setTimeout(() => persistWorkspaceCollection('auditLogs', rbacAuditLogs), 500);
     return () => clearTimeout(timer);
   }, [rbacAuditLogs, company.id]);
 
@@ -818,8 +864,17 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!isAuthenticated || !company.id) return;
     const timer = window.setTimeout(() => {
       if (!persistReadyRef.current) return;
-      saveWeeklyBackup(captureWorkspaceBackup()).catch((err) => console.warn('Could not save weekly local backup', err));
-    }, 1500);
+      const backup = captureWorkspaceBackup();
+      saveWeeklyBackup(backup).catch((err) => console.warn('Could not save weekly local backup', err));
+      syncDeviceEvidence({
+        company,
+        trips,
+        invoices,
+        fieldEvents,
+        backup,
+        userGesture: false,
+      }).catch((err) => console.warn('Could not auto-save BIR copies to this device', err));
+    }, 2500);
     return () => window.clearTimeout(timer);
   }, [isAuthenticated, company.id]);
 
@@ -894,8 +949,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: currentUserId || '',
       name: '',
       email: authEmail,
-      role: currentRole,
-      companyId: company.id,
+    role: currentRole,
+    companyId: company.id,
     }),
     email: foundUser?.email || authEmail || '',
     has_seen_tutorial: Boolean(foundUser?.has_seen_tutorial) || hasSeenTutorialLocally(currentUserId),
@@ -1081,7 +1136,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!company.id) {
       throw new Error('No company workspace is loaded.');
     }
-    const saved = await saveWeeklyBackup(captureWorkspaceBackup(), true);
+    const backup = captureWorkspaceBackup();
+    const saved = await saveWeeklyBackup(backup, true);
     if (!saved) {
       throw new Error('Could not save a local weekly snapshot in this browser.');
     }
@@ -1129,6 +1185,13 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const periodEnd = new Date(subscription.current_period_end || Date.now());
   const daysRemainingInPeriod = Math.max(0, Math.ceil((periodEnd.getTime() - Date.now()) / 86400000));
   const bookingCapPercentage = planLimits.maxTransactions ? Math.min(100, Math.round((trips.length / planLimits.maxTransactions) * 100)) : 0;
+  const storageUsedBytes = Math.max(0, Number(company.storageUsedBytes) || 0);
+  const storageMaxBytes = storageLimitBytes(subscription);
+  const storageUsedMb = Math.round((storageUsedBytes / (1024 * 1024)) * 10) / 10;
+  const storageMaxMb = storageLimitGb(subscription) * 1024;
+  const storageCapPercentage = storageMaxBytes
+    ? Math.min(100, Math.round((storageUsedBytes / storageMaxBytes) * 100))
+    : 0;
 
   const subscriptionUsage: SubscriptionUsageStats = {
     bookingsThisMonth: trips.length,
@@ -1136,10 +1199,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     bookingCapPercentage,
     hasReachedBookingCap: !canAddTransaction,
     isNearingBookingCap: Boolean(planLimits.maxTransactions) && bookingCapPercentage >= 80,
-    storageUsedMb: 0,
-    maxStorageMb: activePlan.max_storage_mb,
-    storageCapPercentage: 0,
-    hasReachedStorageCap: false,
+    storageUsedMb,
+    maxStorageMb: storageMaxMb,
+    storageCapPercentage,
+    hasReachedStorageCap: storageUsedBytes >= storageMaxBytes,
     isFounding: subscription.plan_id === PLAN_FOUNDING_ID,
     isFreePlan: subscription.plan_id === PLAN_FREE_ID,
     isSubscriptionActive: subscription.status === 'active' || subscription.status === 'trialing',
@@ -1216,7 +1279,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } finally {
         seedingRef.current = false;
       }
-      return { success: true };
+    return { success: true };
     } catch (error) {
       return { success: false, error: mapAuthError(error) };
     }
@@ -1440,7 +1503,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (subscription.plan_id === PLAN_FREE_ID) {
       setRoles([OWNER_RBAC_ROLE]);
     } else {
-      setRoles(DEFAULT_RBAC_ROLES);
+    setRoles(DEFAULT_RBAC_ROLES);
     }
     pushAudit(
       'PERMISSIONS_RESET',
@@ -1473,6 +1536,40 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateCompany = (updates: Partial<Company>) => {
     setCompany(prev => ({ ...prev, ...updates }));
+  };
+
+  const uploadWorkspaceFile = async (folder: string, file: File) => {
+    if (!company.id) {
+      throw new Error('Company workspace is missing. Refresh and try again.');
+    }
+    const used = Math.max(0, Number(company.storageUsedBytes) || 0);
+    const max = storageLimitBytes(subscription);
+    let uploaded: { url: string; name: string; bytes: number };
+    try {
+      uploaded = await uploadCompanyFile({
+        companyId: company.id,
+        folder,
+        file,
+        usedBytes: used,
+        maxBytes: max,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.toLowerCase().includes('storage is full')) {
+        setIsUpgradeModalOpen(true);
+      }
+      throw error;
+    }
+    try {
+      await incrementCompanyStorage(company.id, uploaded.bytes);
+    } catch (error) {
+      console.error('Could not record photo storage usage', error);
+    }
+    setCompany((prev) => ({
+      ...prev,
+      storageUsedBytes: Math.max(0, Number(prev.storageUsedBytes) || 0) + uploaded.bytes,
+    }));
+    return uploaded;
   };
 
   const addUser = async (userData: Omit<User, 'id' | 'companyId'>): Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }> => {
@@ -3437,6 +3534,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <FreightContext.Provider value={{
       company,
       updateCompany,
+      uploadWorkspaceFile,
       users,
       currentUser,
       isAuthenticated,

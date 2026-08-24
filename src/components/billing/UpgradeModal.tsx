@@ -1,8 +1,8 @@
 import React from 'react';
-import { Check, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
+import { Check, HardDrive, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, SAAS_PLANS, formatPhDate } from '../../config/plans';
-import { calculateSubscriptionPrice, formatPhp, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, foundingLockBody, foundingLockHeadline, type BillingCycle } from '../../lib/subscriptionPrice';
+import { calculateSubscriptionPrice, formatPhp, formatStorageGb, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, STORAGE_EXTRA_GB_PHP, foundingLockBody, foundingLockHeadline, type BillingCycle } from '../../lib/subscriptionPrice';
 import { closeIfBackdrop } from '../../lib/modal';
 
 const EXTRA_TRUCK_INTENT_KEY = 'casinfreight_extra_truck';
@@ -321,7 +321,7 @@ export const UpgradeModal: React.FC = () => {
           </div>
         )}
 
-        <div className="px-6 pb-5 grid grid-cols-3 gap-3 text-[11px] text-slate-500">
+        <div className="px-6 pb-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] text-slate-500">
           <div className="flex items-center gap-1.5">
             <Truck className="w-3.5 h-3.5" />
             <span>{subscriptionUsage.trucksUsed}/{subscriptionUsage.maxTrucks ?? 1} paid truck slots</span>
@@ -334,7 +334,23 @@ export const UpgradeModal: React.FC = () => {
             <Lock className="w-3.5 h-3.5" />
             <span>{subscriptionUsage.transactionsUsed}/{subscriptionUsage.maxTransactions ?? '∞'} trips</span>
           </div>
+          <div className="flex items-center gap-1.5 col-span-2 sm:col-span-1">
+            <HardDrive className="w-3.5 h-3.5" />
+            <span>
+              {formatStorageGb((subscriptionUsage.storageUsedMb || 0) * 1024 * 1024)}/{subscriptionUsage.maxStorageMb ? `${Math.round((subscriptionUsage.maxStorageMb / 1024) * 10) / 10} GB` : '—'} photos
+            </span>
+          </div>
         </div>
+        {subscriptionUsage.hasReachedStorageCap && (
+          <p className="px-6 pb-3 text-[11px] font-semibold text-amber-800">
+            Photo storage is full. Founding includes 5 GB. Extra space is {formatPhp(STORAGE_EXTRA_GB_PHP)}/GB per month.
+          </p>
+        )}
+        {!subscriptionUsage.hasReachedStorageCap && subscriptionUsage.storageCapPercentage >= 80 && (
+          <p className="px-6 pb-3 text-[11px] text-slate-500">
+            Photo storage is {subscriptionUsage.storageCapPercentage}% full. Extra GB is {formatPhp(STORAGE_EXTRA_GB_PHP)}/month each after the plan cap.
+          </p>
+        )}
         {error && <p className="px-6 pb-5 text-xs text-rose-600">{error}</p>}
       </div>
     </div>
