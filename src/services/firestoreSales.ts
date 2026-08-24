@@ -1,11 +1,13 @@
 import {
   collection,
+  deleteDoc,
   deleteField,
   doc,
   getDoc,
   getDocs,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../lib/firebase';
 import {
@@ -96,6 +98,63 @@ export async function setCompanySalesAgent(companyId: string, salesAgentId: stri
   await updateDoc(doc(getFirebaseDb(), 'companies', companyId), {
     salesAgentId: salesAgentId || deleteField(),
   });
+}
+
+export async function setCompaniesSalesAgent(companyIds: string[], salesAgentId: string | null): Promise<void> {
+  const ids = [...new Set(companyIds.filter(Boolean))];
+  if (ids.length === 0) return;
+  const db = getFirebaseDb();
+  let batch = writeBatch(db);
+  let ops = 0;
+  for (const companyId of ids) {
+    batch.update(doc(db, 'companies', companyId), {
+      salesAgentId: salesAgentId || deleteField(),
+    });
+    ops += 1;
+    if (ops >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      ops = 0;
+    }
+  }
+  if (ops > 0) await batch.commit();
+}
+
+async function deleteQueryDocs(path: ReturnType<typeof collection>): Promise<void> {
+  const snap = await getDocs(path);
+  if (snap.empty) return;
+  const db = getFirebaseDb();
+  let batch = writeBatch(db);
+  let ops = 0;
+  for (const item of snap.docs) {
+    batch.delete(item.ref);
+    ops += 1;
+    if (ops >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      ops = 0;
+    }
+  }
+  if (ops > 0) await batch.commit();
+}
+
+/** Unassigns companies, then removes the agent and their commission/payout ledger. */
+export async function deleteSalesAgent(agentId: string, assignedCompanyIds: string[]): Promise<void> {
+  const id = String(agentId || '').trim();
+  if (!id) return;
+  await setCompaniesSalesAgent(assignedCompanyIds, null);
+  const db = getFirebaseDb();
+  await deleteQueryDocs(collection(db, 'salesAgents', id, 'commissions'));
+  await deleteQueryDocs(collection(db, 'salesAgents', id, 'payouts'));
+  await deleteDoc(doc(db, 'salesAgents', id));
+}
+
+export async function deleteCommission(agentId: string, commissionId: string): Promise<void> {
+  await deleteDoc(doc(getFirebaseDb(), 'salesAgents', agentId, 'commissions', commissionId));
+}
+
+export async function deletePayout(agentId: string, payoutId: string): Promise<void> {
+  await deleteDoc(doc(getFirebaseDb(), 'salesAgents', agentId, 'payouts', payoutId));
 }
 
 export function summarizeLedger(commissions: AgentCommissionEntry[], payouts: AgentPayout[]) {

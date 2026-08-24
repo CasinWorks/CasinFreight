@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Banknote, Loader2, Plus, RefreshCw, UserPlus, Wallet } from 'lucide-react';
+import { Banknote, Loader2, Plus, RefreshCw, Trash2, UserPlus, Wallet } from 'lucide-react';
 import { formatPhp } from '../../config/plans';
 import {
   PERPETUAL_LICENSE_PHP,
@@ -12,6 +12,7 @@ import type { CompanyDocument } from '../../services/firestoreCompany';
 import { listCompanyDocuments } from '../../services/firestoreCompany';
 import {
   backfillLatestSaasCommission,
+  deleteSalesAgent,
   licenseCommissionEntry,
   listAgentCommissions,
   listAgentPayouts,
@@ -20,7 +21,7 @@ import {
   saveCommission,
   savePayout,
   saveSalesAgent,
-  setCompanySalesAgent,
+  setCompaniesSalesAgent,
   summarizeLedger,
 } from '../../services/firestoreSales';
 import type { AgentCommissionEntry, AgentPayout, SalesAgent } from '../../types';
@@ -54,7 +55,8 @@ export const AdminSalesAgentsPanel: React.FC = () => {
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutMethod, setPayoutMethod] = useState('GCash');
   const [payoutRef, setPayoutRef] = useState('');
-  const [assignCompanyId, setAssignCompanyId] = useState('');
+  const [assignCompanyIds, setAssignCompanyIds] = useState<string[]>([]);
+  const [removeCompanyIds, setRemoveCompanyIds] = useState<string[]>([]);
   const [licenseCompanyId, setLicenseCompanyId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -116,7 +118,12 @@ export const AdminSalesAgentsPanel: React.FC = () => {
   }, [selectedId]);
 
   const assigned = companies.filter((row) => row.salesAgentId === selectedId);
-  const unassigned = companies.filter((row) => !row.salesAgentId);
+  const assignable = companies.filter((row) => row.salesAgentId !== selectedId);
+  const agentName = (agentId?: string) => agents.find((agent) => agent.id === agentId)?.name;
+
+  const toggleId = (list: string[], id: string, on: boolean) => (
+    on ? [...new Set([...list, id])] : list.filter((item) => item !== id)
+  );
 
   const saveAgent = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -142,6 +149,8 @@ export const AdminSalesAgentsPanel: React.FC = () => {
       });
       setForm(EMPTY_AGENT);
       setEditingId(null);
+      setAssignCompanyIds([]);
+      setRemoveCompanyIds([]);
       await loadAgents();
       setSelectedId(id);
     } catch (err) {
@@ -152,34 +161,65 @@ export const AdminSalesAgentsPanel: React.FC = () => {
   };
 
   const assign = async () => {
-    if (!selectedId || !assignCompanyId) return;
+    if (!selectedId || assignCompanyIds.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      await setCompanySalesAgent(assignCompanyId, selectedId);
-      const company = companies.find((row) => row.id === assignCompanyId);
-      if (company) {
-        await backfillLatestSaasCommission({ ...company, salesAgentId: selectedId });
+      await setCompaniesSalesAgent(assignCompanyIds, selectedId);
+      for (const companyId of assignCompanyIds) {
+        const company = companies.find((row) => row.id === companyId);
+        if (company) {
+          await backfillLatestSaasCommission({ ...company, salesAgentId: selectedId });
+        }
       }
-      setAssignCompanyId('');
+      setAssignCompanyIds([]);
       await loadCompanies();
       await loadLedger(selectedId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not assign this company.');
+      setError(err instanceof Error ? err.message : 'Could not assign these companies.');
     } finally {
       setBusy(false);
     }
   };
 
-  const unassign = async (companyId: string) => {
-    if (!selectedId) return;
+  const unassign = async (companyIds: string[]) => {
+    if (!selectedId || companyIds.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      await setCompanySalesAgent(companyId, null);
+      await setCompaniesSalesAgent(companyIds, null);
+      setRemoveCompanyIds((prev) => prev.filter((id) => !companyIds.includes(id)));
       await loadCompanies();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not remove this company.');
+      setError(err instanceof Error ? err.message : 'Could not remove these companies.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeAgent = async (agent: SalesAgent) => {
+    const linked = companies.filter((row) => row.salesAgentId === agent.id);
+    const confirmText = linked.length
+      ? `Delete ${agent.name}? ${linked.length} compan${linked.length === 1 ? 'y' : 'ies'} will be unassigned. Commission and payout history for this agent will be removed.`
+      : `Delete ${agent.name}? Commission and payout history for this agent will be removed.`;
+    if (!window.confirm(confirmText)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteSalesAgent(agent.id, linked.map((row) => row.id));
+      if (selectedId === agent.id) {
+        setSelectedId(null);
+        setEditingId(null);
+        setForm(EMPTY_AGENT);
+        setCommissions([]);
+        setPayouts([]);
+        setAssignCompanyIds([]);
+        setRemoveCompanyIds([]);
+      }
+      await loadAgents();
+      await loadCompanies();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this agent.');
     } finally {
       setBusy(false);
     }
@@ -323,6 +363,20 @@ export const AdminSalesAgentsPanel: React.FC = () => {
               {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
               {editingId ? 'Save agent' : 'Add agent'}
             </button>
+            {editingId && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const agent = agents.find((item) => item.id === editingId);
+                  if (agent) void removeAgent(agent);
+                }}
+                className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-xl border border-rose-200 text-rose-700 text-xs font-bold disabled:opacity-60"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete agent
+              </button>
+            )}
           </form>
 
           <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white overflow-hidden">
@@ -341,36 +395,51 @@ export const AdminSalesAgentsPanel: React.FC = () => {
                 {agents.map((agent) => {
                   const count = companies.filter((row) => row.salesAgentId === agent.id).length;
                   return (
-                    <button
+                    <div
                       key={agent.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedId(agent.id);
-                        setEditingId(agent.id);
-                        setForm({
-                          name: agent.name,
-                          email: agent.email,
-                          phone: agent.phone || '',
-                          notes: agent.notes || '',
-                          status: agent.status,
-                        });
-                      }}
-                      className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${selectedId === agent.id ? 'bg-emerald-50' : ''}`}
+                      className={`flex items-center gap-2 px-2 py-1 ${selectedId === agent.id ? 'bg-emerald-50' : ''}`}
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="font-semibold text-slate-900">{agent.name}</div>
-                          <div className="text-[11px] text-slate-500">{agent.email} · {count} compan{count === 1 ? 'y' : 'ies'}</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(agent.id);
+                          setEditingId(agent.id);
+                          setAssignCompanyIds([]);
+                          setRemoveCompanyIds([]);
+                          setForm({
+                            name: agent.name,
+                            email: agent.email,
+                            phone: agent.phone || '',
+                            notes: agent.notes || '',
+                            status: agent.status,
+                          });
+                        }}
+                        className="flex-1 text-left px-2 py-2 rounded-lg hover:bg-slate-50"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-slate-900">{agent.name}</div>
+                            <div className="text-[11px] text-slate-500">{agent.email} · {count} compan{count === 1 ? 'y' : 'ies'}</div>
+                          </div>
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                            agent.status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}>
+                            {agent.status}
+                          </span>
                         </div>
-                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                          agent.status === 'active'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-slate-100 text-slate-500 border-slate-200'
-                        }`}>
-                          {agent.status}
-                        </span>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        title="Delete agent"
+                        onClick={() => void removeAgent(agent)}
+                        className="p-2 rounded-lg text-slate-400 hover:text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -405,41 +474,106 @@ export const AdminSalesAgentsPanel: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Assign a company</div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Assign companies</div>
                 <p className="text-[11px] text-slate-500">
-                  Future PayMongo Founding payments accrue here. If they already paid, the latest payment is credited once.
+                  Select one or more companies. Future PayMongo Founding payments accrue here. If they already paid, the latest payment is credited once.
                 </p>
-                <div className="flex gap-2">
-                  <select
-                    value={assignCompanyId}
-                    onChange={(e) => setAssignCompanyId(e.target.value)}
-                    className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  >
-                    <option value="">Unassigned company…</option>
-                    {unassigned.map((row) => (
-                      <option key={row.id} value={row.id}>{row.name || row.email || row.id}</option>
-                    ))}
-                  </select>
+                {assignable.length === 0 ? (
+                  <div className="text-xs text-slate-500">Every company is already assigned to this agent.</div>
+                ) : (
+                  <div className="max-h-48 overflow-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+                    {assignable.map((row) => {
+                      const current = agentName(row.salesAgentId);
+                      return (
+                        <label key={row.id} className="flex items-start gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={assignCompanyIds.includes(row.id)}
+                            onChange={(e) => setAssignCompanyIds((prev) => toggleId(prev, row.id, e.target.checked))}
+                            className="mt-0.5"
+                          />
+                          <span>
+                            <span className="text-slate-800">{row.name || row.email || row.id}</span>
+                            {current && (
+                              <span className="block text-[10px] text-amber-700">Currently {current}</span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={busy || !assignCompanyId}
-                    onClick={() => void assign()}
-                    className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold disabled:opacity-60"
+                    disabled={busy || assignable.length === 0}
+                    onClick={() => setAssignCompanyIds(assignable.map((row) => row.id))}
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 disabled:opacity-60"
                   >
-                    Assign
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || assignCompanyIds.length === 0}
+                    onClick={() => setAssignCompanyIds([])}
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 disabled:opacity-60"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || assignCompanyIds.length === 0}
+                    onClick={() => void assign()}
+                    className="ml-auto px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold disabled:opacity-60"
+                  >
+                    Assign selected{assignCompanyIds.length ? ` (${assignCompanyIds.length})` : ''}
                   </button>
                 </div>
                 {assigned.length > 0 && (
-                  <ul className="space-y-2">
-                    {assigned.map((row) => (
-                      <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-slate-800">{row.name || row.email}</span>
-                        <button type="button" onClick={() => void unassign(row.id)} className="text-[11px] font-bold text-slate-500 hover:text-rose-700">
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Assigned to this agent</div>
+                      <button
+                        type="button"
+                        disabled={busy || removeCompanyIds.length === 0}
+                        onClick={() => void unassign(removeCompanyIds)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 disabled:opacity-40"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Remove selected ({removeCompanyIds.length})
+                      </button>
+                    </div>
+                    <ul className="space-y-1">
+                      {assigned.map((row) => (
+                        <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
+                          <label className="flex items-center gap-2 min-w-0 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={removeCompanyIds.includes(row.id)}
+                              onChange={(e) => setRemoveCompanyIds((prev) => toggleId(prev, row.id, e.target.checked))}
+                            />
+                            <span className="truncate text-slate-800">{row.name || row.email}</span>
+                          </label>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void unassign([row.id])}
+                            className="shrink-0 text-[11px] font-bold text-slate-500 hover:text-rose-700 disabled:opacity-60"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void unassign(assigned.map((row) => row.id))}
+                      className="text-[11px] font-bold text-slate-500 hover:text-rose-700 disabled:opacity-60"
+                    >
+                      Remove all companies
+                    </button>
+                  </div>
                 )}
               </div>
 
