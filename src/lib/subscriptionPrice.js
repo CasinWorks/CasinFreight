@@ -55,6 +55,10 @@ export function foundingLockBody() {
 
 export const MAX_BILLABLE_TRUCKS = 200;
 
+/** Free trial: 1 month from signup, up to this many trucks. */
+export const FREE_TRIAL_MONTHS = 1;
+export const FREE_INCLUDED_TRUCKS = 5;
+
 /** Photo / POD storage included in each plan (binary GB). */
 export const FREE_STORAGE_GB = 2;
 export const FOUNDING_STORAGE_GB = 5;
@@ -111,7 +115,7 @@ export function formatStorageGb(bytes) {
   return `${gb} GB`;
 }
 
-/** Trucks this company already paid for. Free is 1. Founding with no bill record is the 2 included trucks. Promo uses the admin-set cap. */
+/** Trucks this company already paid for. Free is 5 during the trial. Founding with no bill record is the 2 included trucks. Promo uses the admin-set cap. */
 export function paidTruckLimit(subscription) {
   const billed = Math.floor(Number(subscription && subscription.billed_truck_count));
   if (subscription && subscription.plan_id === 'plan_promo') {
@@ -122,7 +126,7 @@ export function paidTruckLimit(subscription) {
     if (Number.isFinite(billed) && billed > 0) return billed;
     return FOUNDING_INCLUDED_TRUCKS;
   }
-  return 1;
+  return FREE_INCLUDED_TRUCKS;
 }
 
 /** Charge for the larger of actual fleet, already-paid slots, and requested slots. */

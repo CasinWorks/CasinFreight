@@ -37,6 +37,8 @@ export function foundingLockBody(): string;
 
 export const MAX_BILLABLE_TRUCKS: number;
 
+export const FREE_TRIAL_MONTHS: number;
+export const FREE_INCLUDED_TRUCKS: number;
 export const FREE_STORAGE_GB: number;
 export const FOUNDING_STORAGE_GB: number;
 export const STORAGE_EXTRA_GB_PHP: number;

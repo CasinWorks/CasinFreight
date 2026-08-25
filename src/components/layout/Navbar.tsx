@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { formatPhDate } from '../../config/plans';
-import { calculateSubscriptionPrice, formatPhp, FOUNDING_BASE_PHP } from '../../lib/subscriptionPrice';
+import { calculateSubscriptionPrice, formatPhp } from '../../lib/subscriptionPrice';
 import { useTutorial } from '../tutorial';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
@@ -49,7 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { startTutorial } = useTutorial();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
-  const showRenewalNudge = activePlan.id !== 'plan_free' && subscriptionUsage.daysRemainingInPeriod <= 7;
+  const showRenewalNudge = subscriptionUsage.daysRemainingInPeriod <= 7;
   const renewalPrice = calculateSubscriptionPrice(
     subscriptionUsage.trucksUsed || 0,
     subscription.billing_cycle === 'annual' ? 'annual' : 'monthly'
@@ -114,7 +114,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           {activePlan.name}
           <span className="font-mono font-medium text-[10px] opacity-80">
             {activePlan.id === 'plan_free'
-              ? `Lock ${formatPhp(FOUNDING_BASE_PHP)} · ${subscriptionUsage.transactionsUsed}/${subscriptionUsage.maxTransactions ?? '∞'} trips`
+              ? subscriptionUsage.isFreeTrialExpired
+                ? 'trial ended — subscribe'
+                : `${subscriptionUsage.daysRemainingInPeriod}d left · ${subscriptionUsage.trucksUsed}/${subscriptionUsage.maxTrucks ?? 0} trucks`
               : activePlan.id === 'plan_promo'
                 ? `ends ${formatPhDate(subscription.current_period_end)} · ${subscriptionUsage.trucksUsed}/${subscriptionUsage.maxTrucks ?? 0} trucks`
                 : subscription.cancel_at_period_end
@@ -267,7 +269,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     {showRenewalNudge && (
       <div className="bg-amber-50 border-b border-amber-200 px-3 md:px-6 py-2 text-[11px] text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <span>
-          {activePlan.id === 'plan_promo'
+          {activePlan.id === 'plan_free'
+            ? subscriptionUsage.isFreeTrialExpired
+              ? 'Your 1-month Free trial has ended. Subscribe to Founding to keep using this workspace.'
+              : `Free trial ends ${formatPhDate(subscription.current_period_end)}. Then this workspace locks until you subscribe.`
+            : activePlan.id === 'plan_promo'
             ? `Promo access ends ${formatPhDate(subscription.current_period_end)}. Then this workspace returns to Free unless you subscribe.`
             : subscription.cancel_at_period_end
             ? `Founding ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ${formatPhp(renewalPrice.chargePhp)} again.`
@@ -278,7 +284,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => setIsUpgradeModalOpen(true)}
           className="self-start sm:self-auto font-bold text-amber-900 underline underline-offset-2"
         >
-          {activePlan.id === 'plan_promo' ? 'Subscribe' : 'Pay now'}
+          {activePlan.id === 'plan_free' || activePlan.id === 'plan_promo' ? 'Subscribe' : 'Pay now'}
         </button>
       </div>
     )}

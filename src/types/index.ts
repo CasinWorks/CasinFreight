@@ -680,6 +680,7 @@ export interface SubscriptionUsageStats {
   
   isFounding: boolean;
   isFreePlan: boolean;
+  isFreeTrialExpired: boolean;
   isSubscriptionActive: boolean;
   daysRemainingInPeriod: number;
 

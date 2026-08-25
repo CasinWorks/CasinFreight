@@ -1,4 +1,5 @@
 import type { NavTab } from '../layout/Sidebar';
+import { FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../lib/subscriptionPrice';
 
 export type TutorialPlacement = 'top' | 'bottom' | 'left' | 'right';
 
@@ -66,7 +67,7 @@ export const tutorialSteps: TutorialStep[] = [
     requires: 'trucks',
     emptyFallback: {
       title: 'Add your first truck',
-      body: 'Free plans include one truck. Tap Add New Truck to register it.',
+      body: `Free includes up to ${FREE_INCLUDED_TRUCKS} trucks for ${FREE_TRIAL_MONTHS} month. Tap Add New Truck to register one.`,
       target: '[data-tutorial="trucks-page"]',
     },
   },
@@ -120,7 +121,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'plan',
     target: '[data-tutorial="plan-badge"]',
     title: 'Your plan',
-    body: 'Free includes 1 truck, 1 account, and 10 trips. Upgrade here when you need more.',
+    body: `Free is a ${FREE_TRIAL_MONTHS}-month trial: up to ${FREE_INCLUDED_TRUCKS} trucks, 1 account, and 10 trips. Upgrade here when you need more or when the month ends.`,
     placement: 'bottom',
   },
   {

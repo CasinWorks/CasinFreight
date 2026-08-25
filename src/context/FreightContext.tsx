@@ -86,7 +86,7 @@ import {
   type BackupRecord,
   type WorkspaceBackup,
 } from '../lib/workspaceBackup';
-import { PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, SAAS_PLANS, ALL_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, isUnlockedPlanId, makeFreeSubscription, makePromoSubscription, type AdminPlanGrant } from '../config/plans';
+import { PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, SAAS_PLANS, ALL_PLANS, FOUNDING_PRICE_PHP, addBillingMonths, getPlanLimits, hasReachedLimit, isFoundingPeriodExpired, isFreeTrialExpired, isUnlockedPlanId, makeFreeSubscription, makePromoSubscription, type AdminPlanGrant } from '../config/plans';
 import { paidTruckLimit, FOUNDING_INCLUDED_TRUCKS, storageLimitBytes, storageLimitGb } from '../lib/subscriptionPrice';
 import { uploadCompanyFile } from '../lib/uploads';
 import { isPlatformAdminEmail } from '../config/platformAdmin';
@@ -984,6 +984,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     || currentUser.role === 'Owner'
     || currentUser.role.toLowerCase().includes('owner');
 
+  useEffect(() => {
+    if (!isAuthenticated || isPlatformAdmin) return;
+    if (isFreeTrialExpired(subscription)) setIsUpgradeModalOpen(true);
+  }, [isAuthenticated, isPlatformAdmin, subscription.plan_id, subscription.current_period_end, subscription.created_at]);
+
   const listPlatformSubscriptions = async () => {
     if (!isPlatformAdmin) {
       const existing = await getCompanyDocument(company.id);
@@ -1176,10 +1181,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const activePlan = plans.find((p) => p.id === subscription.plan_id) || SAAS_PLANS[0];
   const planLimits = getPlanLimits(subscription.plan_id);
   const truckLimit = paidTruckLimit(subscription);
-  const canAddTruck = !hasReachedLimit(trucks.length, truckLimit);
-  const canAddAccount = !hasReachedLimit(users.length, planLimits.maxAccounts);
-  const canAddRole = !hasReachedLimit(roles.length, planLimits.maxRoles);
-  const canAddTransaction = !hasReachedLimit(trips.length, planLimits.maxTransactions);
+  const trialExpired = isFreeTrialExpired(subscription);
+  const canAddTruck = !trialExpired && !hasReachedLimit(trucks.length, truckLimit);
+  const canAddAccount = !trialExpired && !hasReachedLimit(users.length, planLimits.maxAccounts);
+  const canAddRole = !trialExpired && !hasReachedLimit(roles.length, planLimits.maxRoles);
+  const canAddTransaction = !trialExpired && !hasReachedLimit(trips.length, planLimits.maxTransactions);
   const canCreateBooking = canAddTransaction;
 
   const periodEnd = new Date(subscription.current_period_end || Date.now());
@@ -1205,7 +1211,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     hasReachedStorageCap: storageUsedBytes >= storageMaxBytes,
     isFounding: subscription.plan_id === PLAN_FOUNDING_ID,
     isFreePlan: subscription.plan_id === PLAN_FREE_ID,
-    isSubscriptionActive: subscription.status === 'active' || subscription.status === 'trialing',
+    isFreeTrialExpired: trialExpired,
+    isSubscriptionActive: !trialExpired && (subscription.status === 'active' || subscription.status === 'trialing'),
     daysRemainingInPeriod,
     trucksUsed: trucks.length,
     maxTrucks: truckLimit,

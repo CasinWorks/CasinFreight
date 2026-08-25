@@ -246,6 +246,21 @@ class DriverSession extends ChangeNotifier {
     _lastGpsOk = gpsEnabled && !gpsMocked;
   }
 
+  Future<void> _assertWorkspaceActive() async {
+    final snap = await _companyDoc.get();
+    final sub = snap.data()?['subscription'];
+    if (sub is! Map) return;
+    final planId = (sub['plan_id'] ?? '').toString();
+    if (planId != 'plan_free') return;
+    final endRaw = (sub['current_period_end'] ?? sub['created_at'] ?? '').toString();
+    final end = DateTime.tryParse(endRaw);
+    if (end != null && end.isBefore(DateTime.now())) {
+      throw Exception(
+        'This company\'s 1-month Free trial has ended. Ask the owner to subscribe to Founding.',
+      );
+    }
+  }
+
   Future<void> addFieldEvent({
     required String tripId,
     required String kind,
@@ -391,6 +406,7 @@ class DriverSession extends ChangeNotifier {
       patch['status'] = 'Delivered';
       patch['actualDelivery'] = signedAt;
     }
+    await _assertWorkspaceActive();
     await _companyDoc.collection('trips').doc(tripId).set(patch, SetOptions(merge: true));
     await addFieldEvent(
       tripId: tripId,

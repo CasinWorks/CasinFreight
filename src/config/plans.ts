@@ -4,6 +4,8 @@ import {
   FOUNDING_BASE_PHP,
   FOUNDING_INCLUDED_TRUCKS,
   FOUNDING_PER_EXTRA_TRUCK_PHP,
+  FREE_INCLUDED_TRUCKS,
+  FREE_TRIAL_MONTHS,
   MAX_BILLABLE_TRUCKS,
   formatPhp,
   foundingLockHeadline,
@@ -16,6 +18,8 @@ export {
   FOUNDING_INCLUDED_TRUCKS,
   FOUNDING_LIST_PHP,
   FOUNDING_PER_EXTRA_TRUCK_PHP,
+  FREE_INCLUDED_TRUCKS,
+  FREE_TRIAL_MONTHS,
 } from '../lib/subscriptionPrice';
 
 export const PLAN_FREE_ID = 'plan_free';
@@ -63,6 +67,14 @@ export function isFoundingPeriodExpired(subscription?: Pick<Subscription, 'plan_
   return Number.isFinite(end) && end < Date.now();
 }
 
+export function isFreeTrialExpired(
+  subscription?: Pick<Subscription, 'plan_id' | 'current_period_end' | 'created_at'> | null
+): boolean {
+  if (!subscription || subscription.plan_id !== PLAN_FREE_ID) return false;
+  const end = Date.parse(subscription.current_period_end || subscription.created_at || '');
+  return Number.isFinite(end) && end < Date.now();
+}
+
 export interface PlanLimits {
   maxTrucks: number | null;
   maxAccounts: number | null;
@@ -72,7 +84,7 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
   [PLAN_FREE_ID]: {
-    maxTrucks: 1,
+    maxTrucks: FREE_INCLUDED_TRUCKS,
     maxAccounts: 1,
     maxRoles: 1,
     maxTransactions: 10,
@@ -95,19 +107,19 @@ export const SAAS_PLANS: Plan[] = [
   {
     id: PLAN_FREE_ID,
     name: 'Free',
-    description: 'Full product access for a single-truck operator. Upgrade when you add fleet, staff, or volume.',
+    description: `1-month trial with every module, up to ${FREE_INCLUDED_TRUCKS} trucks. Subscribe to Founding to keep the workspace after the month ends.`,
     price_php: 0,
     interval: 'month',
     max_bookings_per_month: 10,
     max_storage_mb: 2048,
     is_active: true,
     features: [
-      'Access to every module (trips, billing, ledger, RBAC, fuel)',
-      '1 truck',
+      `${FREE_TRIAL_MONTHS}-month trial of every module`,
+      `Up to ${FREE_INCLUDED_TRUCKS} trucks`,
       '1 company account / role',
       '10 transactions (trip bookings)',
       '2 GB photo / POD storage',
-      'Owner permissions on the full workspace',
+      'Subscribe to Founding before the month ends to keep operating',
     ],
     badge: 'FREE',
     isRecommended: false,
@@ -177,8 +189,7 @@ export function makeFreeSubscription(
   previous?: Pick<Subscription, 'consumed_payment_ids' | 'payment_provider_checkout_id'>
 ): Subscription {
   const start = new Date();
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
+  const end = addBillingMonths(start, FREE_TRIAL_MONTHS);
   const consumed = [
     ...(previous?.consumed_payment_ids || []),
     previous?.payment_provider_checkout_id || '',

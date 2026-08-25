@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, HardDrive, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, SAAS_PLANS, formatPhDate } from '../../config/plans';
+import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, SAAS_PLANS, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
 import { calculateSubscriptionPrice, formatPhp, formatStorageGb, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, STORAGE_EXTRA_GB_PHP, foundingLockBody, foundingLockHeadline, type BillingCycle } from '../../lib/subscriptionPrice';
 import { closeIfBackdrop } from '../../lib/modal';
 
@@ -19,6 +19,7 @@ export const UpgradeModal: React.FC = () => {
     resetCurrentPlanToFree,
     cancelSubscriptionAtPeriodEnd,
     resumeSubscription,
+    isPlatformAdmin,
   } = useFreight();
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -27,7 +28,8 @@ export const UpgradeModal: React.FC = () => {
     subscription.billing_cycle === 'annual' ? 'annual' : 'monthly'
   );
   const usedTrucks = subscriptionUsage.trucksUsed || 0;
-  const paidTrucks = subscriptionUsage.maxTrucks ?? 1;
+  const paidTrucks = subscriptionUsage.maxTrucks ?? FREE_INCLUDED_TRUCKS;
+  const trialLocked = Boolean(subscriptionUsage.isFreeTrialExpired) && !isPlatformAdmin;
   const minTrucks = Math.max(usedTrucks, 1);
   const [desiredTrucks, setDesiredTrucks] = React.useState(Math.max(minTrucks, paidTrucks));
 
@@ -63,7 +65,7 @@ export const UpgradeModal: React.FC = () => {
   const waiting = isWaitingForPayMongo || isSubmitting;
 
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeIfBackdrop(() => setIsUpgradeModalOpen(false), isWaitingForPayMongo)}>
+    <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeIfBackdrop(() => setIsUpgradeModalOpen(false), isWaitingForPayMongo || trialLocked)}>
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 max-h-[94vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between bg-slate-50">
           <div>
@@ -72,13 +74,21 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free includes every module — 1 truck, 1 account, and 10 transactions. Founding is {formatPhp(price.basePhp)}/month for up to {price.includedTrucks} trucks, then {formatPhp(price.perExtraTruckPhp)} per extra truck.
+              Free is a {FREE_TRIAL_MONTHS}-month trial: up to {FREE_INCLUDED_TRUCKS} trucks, 1 account, and 10 trips. Founding is {formatPhp(price.basePhp)}/month for up to {price.includedTrucks} trucks, then {formatPhp(price.perExtraTruckPhp)} per extra truck.
             </p>
+            {trialLocked && (
+              <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+                <span className="text-[11px] font-extrabold text-rose-950">Free trial ended</span>
+                <p className="text-[10px] text-rose-800 mt-0.5">
+                  This workspace had {FREE_TRIAL_MONTHS} month on Free (up to {FREE_INCLUDED_TRUCKS} trucks). Subscribe to Founding to keep dispatching, billing, and photos.
+                </p>
+              </div>
+            )}
             {activePlan.id === PLAN_PROMO_ID && (
               <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2">
                 <span className="text-[11px] font-extrabold text-violet-950">Promo access — no charge</span>
                 <p className="text-[10px] text-violet-800 mt-0.5">
-                  Complimentary until {formatPhDate(subscription.current_period_end)}. {paidTrucks} truck slot{paidTrucks === 1 ? '' : 's'}. After that this workspace returns to Free unless you subscribe.
+                Complimentary until {formatPhDate(subscription.current_period_end)}. {paidTrucks} truck slot{paidTrucks === 1 ? '' : 's'}. After that this workspace returns to a 1-month Free trial ({FREE_INCLUDED_TRUCKS} trucks) unless you subscribe.
                 </p>
               </div>
             )}
@@ -104,6 +114,7 @@ export const UpgradeModal: React.FC = () => {
               </p>
             )}
           </div>
+          {!trialLocked && (
           <button
             type="button"
             onClick={() => setIsUpgradeModalOpen(false)}
@@ -111,6 +122,7 @@ export const UpgradeModal: React.FC = () => {
           >
             <X className="w-4 h-4" />
           </button>
+          )}
         </div>
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -302,7 +314,7 @@ export const UpgradeModal: React.FC = () => {
               type="button"
               disabled={isSubmitting}
               onClick={async () => {
-                if (!window.confirm('Reset this workspace to the Free plan? Caps will apply again: 1 truck, 1 account, 10 trips.')) return;
+                if (!window.confirm(`Reset this workspace to the Free plan? Caps will apply again: ${FREE_INCLUDED_TRUCKS} trucks for ${FREE_TRIAL_MONTHS} month, 1 account, 10 trips.`)) return;
                 setIsSubmitting(true);
                 setError(null);
                 try {

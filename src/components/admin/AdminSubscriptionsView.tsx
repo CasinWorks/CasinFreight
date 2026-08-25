@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Banknote, Crown, Gift, Loader2, RefreshCw, RotateCcw, Search, Shield, Wallet, X } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, formatPhp } from '../../config/plans';
+import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, formatPhp, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
 import { MAX_BILLABLE_TRUCKS } from '../../lib/subscriptionPrice';
 import type { CompanyDocument } from '../../services/firestoreCompany';
 import { listSalesAgents, setCompanySalesAgent, backfillLatestSaasCommission } from '../../services/firestoreSales';
@@ -446,7 +446,7 @@ export const AdminSubscriptionsView: React.FC = () => {
               />
             </label>
             <p className="text-[11px] text-slate-500 mt-2">
-              On that date this company returns to Free: 1 truck, 1 account, 10 trips.
+              On that date this company returns to Free: {FREE_INCLUDED_TRUCKS} trucks for {FREE_TRIAL_MONTHS} month, 1 account, 10 trips.
             </p>
             <button
               type="button"
