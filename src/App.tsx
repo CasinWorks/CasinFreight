@@ -8,6 +8,7 @@ import { FreightProvider, useFreight } from './context/FreightContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar, NavTab } from './components/layout/Sidebar';
 import { TripBoard } from './components/trips/TripBoard';
+import { TripExceptionsPage } from './components/trips/TripExceptionsPage';
 import { NewTripModal } from './components/trips/NewTripModal';
 import { TripDetailModal } from './components/trips/TripDetailModal';
 import { InvoicePreviewModal } from './components/invoices/InvoicePreviewModal';
@@ -119,8 +120,13 @@ function MainLayout() {
               }}
               onSelectTrip={handleSelectTrip}
               onOpenInvoice={handleOpenInvoice}
+              onOpenExceptions={() => handleTabChange('exceptions')}
               searchQuery={searchQuery}
             />
+          )}
+
+          {activeTab === 'exceptions' && (
+            <TripExceptionsPage onSelectTrip={handleSelectTrip} />
           )}
 
           {activeTab === 'invoices' && (

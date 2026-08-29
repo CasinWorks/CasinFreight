@@ -47,6 +47,7 @@ interface TripBoardProps {
   onOpenNewTrip: () => void;
   onSelectTrip: (trip: Trip) => void;
   onOpenInvoice: (invoiceId: string) => void;
+  onOpenExceptions?: () => void;
   searchQuery?: string;
 }
 
@@ -58,15 +59,11 @@ const COLUMNS: { id: TripStatus; label: string; countColor: string; headerBorder
   { id: 'Invoiced', label: 'Invoiced', countColor: 'bg-purple-50 text-purple-700 border-purple-200', headerBorder: 'border-l-purple-500', desc: 'Itemized billing transmitted' },
 ];
 
-const EXCEPTION_COLUMNS: { id: TripStatus; label: string; countColor: string; headerBorder: string; desc: string }[] = [
-  { id: 'On Hold', label: 'On Hold', countColor: 'bg-amber-50 text-amber-800 border-amber-200', headerBorder: 'border-l-amber-600', desc: 'Waiting, breakdown, weather, refused' },
-  { id: 'Cancelled', label: 'Cancelled', countColor: 'bg-rose-50 text-rose-700 border-rose-200', headerBorder: 'border-l-rose-500', desc: 'Booking will not run' },
-];
-
 export const TripBoard: React.FC<TripBoardProps> = ({ 
   onOpenNewTrip, 
   onSelectTrip, 
   onOpenInvoice,
+  onOpenExceptions,
   searchQuery: externalSearchQuery = ''
 }) => {
   const { 
@@ -523,6 +520,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
     .reduce((sum, t) => sum + t.baseRatePhp + t.accessorials.reduce((aSum, a) => aSum + a.amountPhp, 0), 0);
   const totalOverweightCount = trips.filter(t => t.isOverweight).length;
   const totalDemurrageCount = trips.filter(t => t.demurrageHours > 0).length;
+  const exceptionCount = trips.filter((t) => t.status === 'On Hold' || t.status === 'Cancelled').length;
 
   return (
     <div data-tutorial="trip-board" className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC] text-slate-900 overflow-hidden">
@@ -539,6 +537,16 @@ export const TripBoard: React.FC<TripBoardProps> = ({
             <p className="text-xs text-slate-500 mt-1">
               Live Luzon linehaul tracking, GVWR payload compliance, demurrage monitoring & POD invoicing.
             </p>
+            {onOpenExceptions && (
+              <button
+                type="button"
+                onClick={onOpenExceptions}
+                className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 hover:text-amber-950"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {exceptionCount > 0 ? `${exceptionCount} exception${exceptionCount === 1 ? '' : 's'} — open page` : 'Holds & cancellations'}
+              </button>
+            )}
           </div>
 
           {/* Action Bar */}
@@ -998,9 +1006,8 @@ export const TripBoard: React.FC<TripBoardProps> = ({
       {/* Main Board Content */}
       <div className={`flex-1 min-h-0 p-3 md:p-4 flex flex-col ${viewMode === 'kanban' ? 'overflow-hidden' : 'overflow-auto'}`}>
         {viewMode === 'kanban' ? (
-          <div className="flex flex-col gap-3 flex-1 min-h-0">
-            <div className="flex-1 min-h-0 overflow-x-auto">
-              <div className="flex gap-3 h-full min-w-[1100px] items-stretch">
+          <div className="flex-1 min-h-0 overflow-x-auto">
+            <div className="flex gap-3 h-full min-w-[1100px] items-stretch">
               {COLUMNS.map((column) => {
                 const columnTrips = filteredTrips.filter(t => t.status === column.id);
                 return (
@@ -1037,50 +1044,6 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                   </div>
                 );
               })}
-              </div>
-            </div>
-
-            <div className="shrink-0">
-              <div className="flex items-center gap-2 mb-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Exceptions</span>
-                <span className="text-[11px] text-slate-400">Always on screen — hold and cancelled leave the pipeline</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[28vh] min-h-[7.5rem]">
-                {EXCEPTION_COLUMNS.map((column) => {
-                  const columnTrips = filteredTrips.filter(t => t.status === column.id);
-                  return (
-                    <div
-                      key={column.id}
-                      className={`bg-white border rounded-xl flex flex-col overflow-hidden min-h-0 ${
-                        column.id === 'On Hold' ? 'border-amber-200' : 'border-rose-200'
-                      }`}
-                    >
-                      <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${column.id === 'On Hold' ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                          <span className="text-xs font-bold tracking-tight text-slate-800">{column.label}</span>
-                          <span className="text-[10px] text-slate-400 hidden sm:inline">{column.desc}</span>
-                        </div>
-                        <span className={`text-[11px] font-mono px-2 py-0.5 rounded font-bold border ${column.countColor}`}>
-                          {columnTrips.length}
-                        </span>
-                      </div>
-                      <div className="p-2 overflow-y-auto space-y-2 flex-1 min-h-0 custom-scrollbar max-h-[22vh]">
-                        {columnTrips.length === 0 ? (
-                          <div className="py-3 px-3 text-center text-slate-400 text-[11px]">
-                            No {column.label.toLowerCase()} trips
-                          </div>
-                        ) : (
-                          columnTrips.map((trip) => (
-                            <TripKanbanCard key={trip.id} {...kanbanCardProps(trip)} compact />
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           </div>
         ) : (

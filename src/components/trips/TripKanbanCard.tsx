@@ -276,35 +276,13 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
           <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-700 shrink-0">
             {driver ? driver.name.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'DR'}
           </div>
-          <p className="text-[11px] text-slate-600 font-medium truncate max-w-[72px]">
+          <p className="text-[11px] text-slate-600 font-medium truncate">
             {driver?.name.split(' ')[0]}
           </p>
         </div>
 
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          {canHold && (
-            <button
-              type="button"
-              onClick={(e) => onHold(e, trip)}
-              disabled={!holdPerm.allowed}
-              title={holdPerm.allowed ? 'Hold this trip' : `Requires ${holdPerm.allowedRoles.join(', ')}`}
-              className="p-1 rounded border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-            >
-              <PauseCircle className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {canCancel && (
-            <button
-              type="button"
-              onClick={(e) => onCancel(e, trip)}
-              disabled={!cancelPerm.allowed}
-              title={cancelPerm.allowed ? 'Cancel this trip' : `Requires ${cancelPerm.allowedRoles.join(', ')}`}
-              className="p-1 rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-            >
-              <Ban className="w-3.5 h-3.5" />
-            </button>
-          )}
-          <span className="font-mono font-bold text-xs text-slate-800 ml-0.5">
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <span className="font-mono font-bold text-xs text-slate-800">
             ₱{trip.baseRatePhp.toLocaleString()}
           </span>
           <button
@@ -348,6 +326,28 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
             </span>
             {trip.status !== 'Cancelled' && <ChevronRight className="w-3 h-3" />}
           </button>
+          {canHold && !compact && (
+            <button
+              type="button"
+              onClick={(e) => onHold(e, trip)}
+              disabled={!holdPerm.allowed}
+              title={holdPerm.allowed ? 'Hold this trip' : `Requires ${holdPerm.allowedRoles.join(', ')}`}
+              className="p-1 rounded border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+            >
+              <PauseCircle className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {canCancel && !compact && (
+            <button
+              type="button"
+              onClick={(e) => onCancel(e, trip)}
+              disabled={!cancelPerm.allowed}
+              title={cancelPerm.allowed ? 'Cancel this trip' : `Requires ${cancelPerm.allowedRoles.join(', ')}`}
+              className="p-1 rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>

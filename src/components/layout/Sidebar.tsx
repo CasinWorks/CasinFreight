@@ -31,6 +31,7 @@ import { WorkspaceBackupModal } from '../onboarding/WorkspaceBackupModal';
 
 export type NavTab =
   | 'board'
+  | 'exceptions'
   | 'calculator'
   | 'invoices'
   | 'ledger'
@@ -121,6 +122,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Trip Board',
       icon: KanbanSquare,
       permission: 'pod_upload',
+    },
+    {
+      id: 'exceptions',
+      label: 'Exceptions',
+      icon: AlertTriangle,
+      permission: 'pod_upload',
+      badge: holdCount + cancelledCount > 0 ? `${holdCount + cancelledCount}` : undefined,
     },
     {
       id: 'invoices',
@@ -357,12 +365,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {opsOpen && (
             <div className="px-2.5 pb-2.5 space-y-1 text-[11px] text-slate-500 border-t border-slate-100 pt-2">
               {flagItems.map((item) => (
-                <div key={item.label} className="flex justify-between gap-2">
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    if (item.label === 'On hold' || item.label === 'Cancelled') goTo('exceptions');
+                  }}
+                  className="w-full flex justify-between gap-2 text-left hover:text-slate-700"
+                >
                   <span>{item.label}</span>
                   <span className={`font-mono font-medium ${item.count > 0 ? 'text-amber-700 font-bold' : 'text-slate-500'}`}>
                     {item.count}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}

@@ -19,6 +19,7 @@ import { isFirebaseConfigured } from '../../lib/firebase';
 import { formatPhp, FOUNDING_BASE_PHP, FOUNDING_PER_EXTRA_TRUCK_PHP, FREE_INCLUDED_TRUCKS, foundingLockBody, foundingLockHeadline } from '../../lib/subscriptionPrice';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 import { CasinWorksCredit } from '../brand/CasinWorksCredit';
+import { FunTruck } from './FunTruck';
 
 const SAVED_EMAIL_KEY = 'casinfreight_saved_email';
 
@@ -149,6 +150,7 @@ export const LoginPage: React.FC = () => {
                 ? 'This link is for a new hire. Choose a password here. You are joining the company that invited you — you are not opening a new CasinFreight workspace.'
                 : `Start free for 1 month: up to ${FREE_INCLUDED_TRUCKS} trucks, 1 account, 10 trips. Founding is ${formatPhp(FOUNDING_BASE_PHP)}/mo for up to 2 trucks, then ${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)} per extra truck. ${foundingLockBody()}`}
             </p>
+            <FunTruck className="max-w-md" durationSec={6.5} />
             <div className="grid grid-cols-2 gap-3 pt-2">
               {[
                 { icon: Scale, title: 'Payload & GVWR', copy: 'Weighbridge checks and overweight alerts.' },
@@ -168,6 +170,7 @@ export const LoginPage: React.FC = () => {
           </div>
 
           <div className="lg:col-span-6 w-full">
+            <FunTruck className="lg:hidden mb-3" durationSec={6.5} />
             <div className="bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl p-6 sm:p-8 backdrop-blur-md space-y-6">
               {mode === 'join' ? (
                 <div>
