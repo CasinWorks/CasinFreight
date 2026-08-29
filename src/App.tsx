@@ -31,6 +31,7 @@ import { AdminConsoleView } from './components/admin/AdminConsoleView';
 import { UpgradeModal } from './components/billing/UpgradeModal';
 import { PlatformNoticeGate, MaintenanceLockScreen } from './components/notices/PlatformNoticeGate';
 import { TutorialProvider, useTutorial } from './components/tutorial';
+import { Analytics } from '@vercel/analytics/react';
 
 function MainLayout() {
   const { canAccess, isOnboardingOpen, setIsOnboardingOpen, canCreateBooking, setIsUpgradeModalOpen, canManageBilling } = useFreight();
@@ -348,6 +349,7 @@ export default function App() {
   return (
     <FreightProvider>
       <AppContent />
+      <Analytics />
     </FreightProvider>
   );
 }
