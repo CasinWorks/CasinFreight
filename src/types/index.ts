@@ -646,6 +646,11 @@ export interface Subscription {
   last_billed_amount_php?: number;
   grant_source?: 'paymongo' | 'promo';
   storage_addon_gb?: number;
+  pricing_tier?: 'founding' | 'founding-rolled' | 'list';
+  included_trucks?: number;
+  base_rate_php?: number;
+  lock_expires_at?: string;
+  founding_signup_at?: string;
   created_at: string;
   updated_at: string;
 }

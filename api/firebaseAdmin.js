@@ -64,11 +64,13 @@ async function loadOwnedCompany(db, caller) {
   return { companyId, company };
 }
 
-function freeSubscription(companyId, userId, previous) {
+async function freeSubscription(companyId, userId, previous) {
+  const { hostedIdentityPatch } = await import('../src/lib/subscriptionPrice.js');
   const now = new Date();
   const consumed = Array.isArray(previous && previous.consumed_payment_ids)
     ? previous.consumed_payment_ids.filter(Boolean)
     : [];
+  const identity = hostedIdentityPatch(previous || {});
   return {
     id: (previous && previous.id) || `sub-${String(userId || companyId).slice(0, 8)}`,
     user_id: userId || (previous && previous.user_id) || '',
@@ -83,24 +85,34 @@ function freeSubscription(companyId, userId, previous) {
     consumed_payment_ids: consumed,
     created_at: (previous && previous.created_at) || now.toISOString(),
     updated_at: now.toISOString(),
+    ...identity,
   };
 }
 
-function foundingSubscription(companyId, userId, previous, payment) {
+async function foundingSubscription(companyId, userId, previous, payment) {
+  const {
+    hostedPricingForCheckout,
+    hostedPricingFields,
+    withHostedRollover,
+  } = await import('../src/lib/subscriptionPrice.js');
   const now = new Date();
-  const existingEnd = new Date((previous && previous.current_period_end) || now);
-  const stillFounding = previous && previous.plan_id === 'plan_founding' && existingEnd.getTime() > now.getTime();
-  const periodStart = stillFounding ? new Date(previous.current_period_start || now) : now;
+  const rolled = withHostedRollover(previous || {}, now);
+  const pricing = hostedPricingForCheckout(rolled, now);
+  const fields = hostedPricingFields(pricing);
+  const existingEnd = new Date((rolled && rolled.current_period_end) || now);
+  const stillPaid = rolled && rolled.plan_id === 'plan_founding' && existingEnd.getTime() > now.getTime();
+  const periodStart = stillPaid ? new Date(rolled.current_period_start || now) : now;
   const months = Number(payment.periodMonths) === 12 ? 12 : 1;
-  const periodEnd = addBillingMonths(stillFounding ? existingEnd : now, months);
+  const periodEnd = addBillingMonths(stillPaid ? existingEnd : now, months);
   const consumed = [
-    ...((previous && previous.consumed_payment_ids) || []),
-    previous && previous.payment_provider_checkout_id,
+    ...((rolled && rolled.consumed_payment_ids) || []),
+    rolled && rolled.payment_provider_checkout_id,
     payment.paymentId,
   ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
+  const included = Number(fields.included_trucks) || 5;
   return {
-    id: (previous && previous.id) || `sub-${String(userId || companyId).slice(0, 8)}`,
-    user_id: userId || (previous && previous.user_id) || '',
+    id: (rolled && rolled.id) || `sub-${String(userId || companyId).slice(0, 8)}`,
+    user_id: userId || (rolled && rolled.user_id) || '',
     company_id: companyId,
     plan_id: 'plan_founding',
     status: 'active',
@@ -113,10 +125,11 @@ function foundingSubscription(companyId, userId, previous, payment) {
     last_payment_method: payment.method || 'qrph',
     consumed_payment_ids: consumed,
     billing_cycle: payment.billingCycle === 'annual' ? 'annual' : 'monthly',
-    billed_truck_count: Math.max(Number(payment.truckCount || 0), 2),
+    billed_truck_count: Math.max(Number(payment.truckCount || 0), included),
     last_billed_amount_php: Number(payment.amountPhp || 0),
-    created_at: (previous && previous.created_at) || now.toISOString(),
+    created_at: (rolled && rolled.created_at) || now.toISOString(),
     updated_at: now.toISOString(),
+    ...fields,
   };
 }
 
@@ -182,7 +195,7 @@ async function grantFounding(db, caller, payment) {
     await accrueSaasCommission(db, company, companyId, payment, previous);
     return { companyId, subscription: previous, subscriptionTier: 'Growth' };
   }
-  const subscription = foundingSubscription(companyId, caller.uid, previous, payment);
+  const subscription = await foundingSubscription(companyId, caller.uid, previous, payment);
   await writeSubscription(db, companyId, subscription, 'Growth');
   await accrueSaasCommission(db, company, companyId, payment, subscription);
   return { companyId, subscription, subscriptionTier: 'Growth' };
@@ -190,9 +203,10 @@ async function grantFounding(db, caller, payment) {
 
 async function setCancelFlag(db, caller, cancelAtPeriodEnd) {
   const { companyId, company } = await loadOwnedCompany(db, caller);
-  let subscription = company.subscription || freeSubscription(companyId, caller.uid, {});
+  const { withHostedRollover } = await import('../src/lib/subscriptionPrice.js');
+  let subscription = withHostedRollover(company.subscription || {}, new Date());
   if (isFoundingExpired(subscription)) {
-    subscription = freeSubscription(companyId, caller.uid, subscription);
+    subscription = await freeSubscription(companyId, caller.uid, subscription);
     await writeSubscription(db, companyId, subscription, 'Free');
     return { companyId, subscription, subscriptionTier: 'Free' };
   }
@@ -207,9 +221,43 @@ async function setCancelFlag(db, caller, cancelAtPeriodEnd) {
   return { companyId, subscription, subscriptionTier: tier };
 }
 
+async function rolloverAllCompanies(db) {
+  const { withHostedRollover } = await import('../src/lib/subscriptionPrice.js');
+  const snap = await db.collection('companies').get();
+  let updated = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data() || {};
+    const previous = data.subscription;
+    if (!previous) continue;
+    let subscription = withHostedRollover(previous, new Date());
+    if (isFoundingExpired(subscription)) {
+      subscription = await freeSubscription(doc.id, previous.user_id || '', subscription);
+    }
+    if (
+      subscription === previous
+      || (
+        subscription.plan_id === previous.plan_id
+        && subscription.pricing_tier === previous.pricing_tier
+        && subscription.included_trucks === previous.included_trucks
+        && subscription.base_rate_php === previous.base_rate_php
+        && subscription.lock_expires_at === previous.lock_expires_at
+        && subscription.founding_signup_at === previous.founding_signup_at
+        && subscription.current_period_end === previous.current_period_end
+      )
+    ) {
+      continue;
+    }
+    const tier = subscription.plan_id === 'plan_founding' ? 'Growth' : 'Free';
+    await writeSubscription(db, doc.id, subscription, tier);
+    updated += 1;
+  }
+  return { scanned: snap.size, updated };
+}
+
 module.exports = {
   getAdminDb,
   isPlatformAdmin,
   grantFounding,
   setCancelFlag,
+  rolloverAllCompanies,
 };

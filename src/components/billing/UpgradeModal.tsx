@@ -1,8 +1,9 @@
 import React from 'react';
 import { Check, HardDrive, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, SAAS_PLANS, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
-import { calculateSubscriptionPrice, formatPhp, formatStorageGb, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, STORAGE_EXTRA_GB_PHP, foundingLockBody, foundingLockHeadline, type BillingCycle } from '../../lib/subscriptionPrice';
+import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, getSaasPlans, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
+import { calculateSubscriptionPrice, formatPhp, formatStorageGb, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, STORAGE_EXTRA_GB_PHP, foundingLockBody, foundingLockHeadline, hostedPricingForCheckout, isFoundingSignupOpen, type BillingCycle } from '../../lib/subscriptionPrice';
+import { FoundingUrgencyBanner } from './FoundingUrgencyBanner';
 import { closeIfBackdrop } from '../../lib/modal';
 
 const EXTRA_TRUCK_INTENT_KEY = 'casinfreight_extra_truck';
@@ -46,9 +47,11 @@ export const UpgradeModal: React.FC = () => {
 
   if (!isUpgradeModalOpen) return null;
 
+  const hosted = hostedPricingForCheckout(subscription);
   const truckCount = desiredTrucks;
-  const price = calculateSubscriptionPrice(truckCount, billingCycle);
+  const price = calculateSubscriptionPrice(truckCount, billingCycle, hosted);
   const overPaidFleet = usedTrucks > paidTrucks;
+  const saasPlans = getSaasPlans(subscription);
 
   const handleSubscribe = async () => {
     setIsSubmitting(true);
@@ -74,13 +77,14 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free is a {FREE_TRIAL_MONTHS}-month trial: up to {FREE_INCLUDED_TRUCKS} trucks, 1 account, and 10 trips. Founding is {formatPhp(price.basePhp)}/month for up to {price.includedTrucks} trucks, then {formatPhp(price.perExtraTruckPhp)} per extra truck.
+              Free is a {FREE_TRIAL_MONTHS}-month trial: up to {FREE_INCLUDED_TRUCKS} trucks, 1 account, and 10 trips. {foundingLockHeadline(hosted)} {foundingLockBody(hosted)}
             </p>
+            {isFoundingSignupOpen() && <FoundingUrgencyBanner className="mt-2" />}
             {trialLocked && (
               <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
                 <span className="text-[11px] font-extrabold text-rose-950">Free trial ended</span>
                 <p className="text-[10px] text-rose-800 mt-0.5">
-                  This workspace had {FREE_TRIAL_MONTHS} month on Free (up to {FREE_INCLUDED_TRUCKS} trucks). Subscribe to Founding to keep dispatching, billing, and photos.
+                  This workspace had {FREE_TRIAL_MONTHS} month on Free (up to {FREE_INCLUDED_TRUCKS} trucks). Subscribe to keep dispatching, billing, and photos.
                 </p>
               </div>
             )}
@@ -94,8 +98,8 @@ export const UpgradeModal: React.FC = () => {
             )}
             {activePlan.id !== PLAN_FOUNDING_ID && activePlan.id !== PLAN_PROMO_ID && (
               <div className="mt-2 inline-flex flex-col gap-0.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                <span className="text-[11px] font-extrabold text-amber-950">{foundingLockHeadline()}</span>
-                <span className="text-[10px] text-amber-800">{foundingLockBody()}</span>
+                <span className="text-[11px] font-extrabold text-amber-950">{foundingLockHeadline(hosted)}</span>
+                <span className="text-[10px] text-amber-800">{foundingLockBody(hosted)}</span>
               </div>
             )}
             {overPaidFleet && (
@@ -110,7 +114,7 @@ export const UpgradeModal: React.FC = () => {
             )}
             {isWaitingForPayMongo && (
               <p className="text-[11px] font-semibold text-blue-700 mt-1.5">
-                Waiting for PayMongo to confirm payment. This workspace will switch to Founding on its own.
+                Waiting for PayMongo to confirm payment. This workspace will switch to the paid plan on its own.
               </p>
             )}
           </div>
@@ -126,7 +130,7 @@ export const UpgradeModal: React.FC = () => {
         </div>
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {SAAS_PLANS.map((plan) => {
+          {saasPlans.map((plan) => {
             const isCurrent = activePlan.id === plan.id;
             const isPaid = plan.id === PLAN_FOUNDING_ID;
             return (
@@ -212,8 +216,10 @@ export const UpgradeModal: React.FC = () => {
                             {formatPhp(price.monthlyEquivalent)}/month equivalent for {truckCount} truck{truckCount === 1 ? '' : 's'}
                           </p>
                           <p className="text-[11px] font-semibold text-amber-800 mt-0.5">
-                            Founding lock {formatPhp(price.basePhp)}
-                            <span className="ml-1.5 font-medium text-slate-400 line-through">{formatPhp(FOUNDING_LIST_PHP)}</span>
+                            {hosted.pricingTier === 'list' ? 'List rate' : hosted.pricingTier === 'founding-rolled' ? 'Founding year-2 rate' : 'Founding lock'} {formatPhp(price.basePhp)}
+                            {hosted.pricingTier === 'founding' && (
+                              <span className="ml-1.5 font-medium text-slate-400 line-through">{formatPhp(FOUNDING_LIST_PHP)}</span>
+                            )}
                           </p>
                         </>
                       ) : (
@@ -223,8 +229,10 @@ export const UpgradeModal: React.FC = () => {
                             <span className="text-xs text-slate-500 mb-1">/month</span>
                           </div>
                           <p className="text-[11px] font-semibold text-amber-800 mt-0.5">
-                            Founding lock {formatPhp(price.basePhp)}
-                            <span className="ml-1.5 font-medium text-slate-400 line-through">{formatPhp(FOUNDING_LIST_PHP)}</span>
+                            {hosted.pricingTier === 'list' ? 'List rate' : hosted.pricingTier === 'founding-rolled' ? 'Founding year-2 rate' : 'Founding lock'} {formatPhp(price.basePhp)}
+                            {hosted.pricingTier === 'founding' && (
+                              <span className="ml-1.5 font-medium text-slate-400 line-through">{formatPhp(FOUNDING_LIST_PHP)}</span>
+                            )}
                           </p>
                           <p className="text-[11px] text-slate-500 mt-0.5">
                             {formatPhp(price.basePhp)}/month base (up to {price.includedTrucks} trucks) + {formatPhp(price.perExtraTruckPhp)} per additional truck
@@ -260,8 +268,8 @@ export const UpgradeModal: React.FC = () => {
                         <div className="mt-0.5 text-emerald-800">
                           {subscriptionUsage.daysRemainingInPeriod} day{subscriptionUsage.daysRemainingInPeriod === 1 ? '' : 's'} left in this period.
                           {subscription.cancel_at_period_end
-                            ? ' Auto-renew is off. You stay Founding until that date, then return to Free.'
-                            : ` Pay ${formatPhp(price.chargePhp)} again before that date to keep Founding. Extra trucks above ${price.includedTrucks} are ${formatPhp(price.perExtraTruckPhp)}/month each.`}
+                            ? ' Auto-renew is off. You stay on this plan until that date, then return to Free.'
+                            : ` Pay ${formatPhp(price.chargePhp)} again before that date to stay subscribed. Extra trucks above ${price.includedTrucks} are ${formatPhp(price.perExtraTruckPhp)}/month each.`}
                         </div>
                       </div>
                     )}
@@ -289,7 +297,7 @@ export const UpgradeModal: React.FC = () => {
                             resumeSubscription();
                             return;
                           }
-                          if (!window.confirm('Turn off auto-renew? You keep Founding until the current period ends, then this workspace returns to Free.')) return;
+                          if (!window.confirm('Turn off auto-renew? You keep this plan until the current period ends, then this workspace returns to Free.')) return;
                           await cancelSubscriptionAtPeriodEnd();
                         }}
                         className="w-full py-2 rounded-xl border border-slate-200 text-slate-600 text-[11px] font-bold hover:bg-slate-50"

@@ -4,8 +4,17 @@
   "functions": {
     "api/paymongo.js": {
       "maxDuration": 30
+    },
+    "api/billing-rollover.js": {
+      "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/billing-rollover",
+      "schedule": "0 16 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/api/paymongo/checkout", "destination": "/api/paymongo" },
     { "source": "/api/paymongo/verify", "destination": "/api/paymongo" },

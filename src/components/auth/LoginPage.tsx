@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { isFirebaseConfigured } from '../../lib/firebase';
-import { formatPhp, FOUNDING_BASE_PHP, FOUNDING_PER_EXTRA_TRUCK_PHP, FREE_INCLUDED_TRUCKS, foundingLockBody, foundingLockHeadline } from '../../lib/subscriptionPrice';
+import { FREE_INCLUDED_TRUCKS, foundingLockBody, foundingLockHeadline, hostedPricingForCheckout, isFoundingSignupOpen } from '../../lib/subscriptionPrice';
+import { FoundingUrgencyBanner } from '../billing/FoundingUrgencyBanner';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 import { CasinWorksCredit } from '../brand/CasinWorksCredit';
 import { FunTruck } from './FunTruck';
@@ -64,6 +65,7 @@ export const LoginPage: React.FC = () => {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const hostedPreview = hostedPricingForCheckout();
 
   const handleForgotPassword = async () => {
     if (!email.trim()) {
@@ -137,18 +139,21 @@ export const LoginPage: React.FC = () => {
               <span>
                 {mode === 'join'
                   ? 'Invited teammate — join the owner’s company'
-                  : foundingLockHeadline()}
+                  : foundingLockHeadline(hostedPreview)}
               </span>
             </div>
+            {mode !== 'join' && isFoundingSignupOpen() && <FoundingUrgencyBanner />}
             <h2 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
               {mode === 'join'
                 ? 'Set your password and join the fleet.'
-                : 'Full fleet ops. One month free, then Founding.'}
+                : isFoundingSignupOpen()
+                  ? 'Full fleet ops. One month free, then Founding.'
+                  : 'Full fleet ops. One month free, then List.'}
             </h2>
             <p className="text-sm text-slate-400 leading-relaxed">
               {mode === 'join'
                 ? 'This link is for a new hire. Choose a password here. You are joining the company that invited you — you are not opening a new CasinFreight workspace.'
-                : `Start free for 1 month: up to ${FREE_INCLUDED_TRUCKS} trucks, 1 account, 10 trips. Founding is ${formatPhp(FOUNDING_BASE_PHP)}/mo for up to 2 trucks, then ${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)} per extra truck. ${foundingLockBody()}`}
+                : `Start free for 1 month: up to ${FREE_INCLUDED_TRUCKS} trucks, 1 account, 10 trips. ${foundingLockHeadline(hostedPreview)} ${foundingLockBody(hostedPreview)}`}
             </p>
             <FunTruck className="max-w-md" durationSec={6.5} />
             <div className="grid grid-cols-2 gap-3 pt-2">

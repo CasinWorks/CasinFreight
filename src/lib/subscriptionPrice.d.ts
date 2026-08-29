@@ -1,5 +1,15 @@
 export type BillingCycle = 'monthly' | 'annual';
 
+export type HostedPricingTier = 'founding' | 'founding-rolled' | 'list';
+
+export interface HostedPricing {
+  pricingTier: HostedPricingTier;
+  basePhp: number;
+  includedTrucks: number;
+  lockExpiresAt?: Date | string | null;
+  foundingSignupAt?: Date | string | null;
+}
+
 export interface SubscriptionPrice {
   truckCount: number;
   extraTrucks: number;
@@ -14,26 +24,61 @@ export interface SubscriptionPrice {
   includedTrucks: number;
   basePhp: number;
   perExtraTruckPhp: number;
+  pricingTier: HostedPricingTier;
+  lockExpiresAt?: Date | string | null;
 }
 
 export const FOUNDING_BASE_PHP: number;
 export const FOUNDING_INCLUDED_TRUCKS: number;
 export const FOUNDING_PER_EXTRA_TRUCK_PHP: number;
+export const FOUNDING_ROLLED_PHP: number;
+export const LIST_BASE_PHP: number;
+export const LIST_INCLUDED_TRUCKS: number;
 export const FOUNDING_LIST_PHP: number;
+export const FOUNDING_ELIGIBILITY_END_ISO: string;
+export const PRICING_TIER_FOUNDING: HostedPricingTier;
+export const PRICING_TIER_FOUNDING_ROLLED: HostedPricingTier;
+export const PRICING_TIER_LIST: HostedPricingTier;
 export const ANNUAL_DISCOUNT_RATE: number;
+
+export function foundingEligibilityEnd(): Date;
+export function isFoundingSignupOpen(at?: Date | string | number): boolean;
+export function addCalendarYears(from: Date, years?: number): Date;
+export function formatFoundingDeadline(): string;
+export function hostedPricingForCheckout(existing?: object | null, at?: Date | string | number): HostedPricing;
+export function withHostedRollover<T extends object>(subscription: T, at?: Date | string | number): T;
+export function hostedIdentityPatch(subscription?: object | null, at?: Date | string | number): {
+  pricing_tier?: HostedPricingTier;
+  included_trucks?: number;
+  base_rate_php?: number;
+  lock_expires_at?: string;
+  founding_signup_at?: string;
+};
+export function hostedPricingFields(pricing: HostedPricing): {
+  pricing_tier: HostedPricingTier;
+  included_trucks: number;
+  base_rate_php: number;
+  lock_expires_at?: string;
+  founding_signup_at?: string;
+};
 
 export function calculateSubscriptionPrice(
   truckCount: number,
-  billingCycle?: BillingCycle | string
+  billingCycle?: BillingCycle | string,
+  pricing?: HostedPricing | object | null
 ): SubscriptionPrice;
 
 export function formatPhp(amount: number): string;
 
 export function parseBillingCycle(value?: string): BillingCycle;
 
-export function foundingLockHeadline(): string;
+export function hostedPlanName(pricing?: HostedPricing | null): string;
 
-export function foundingLockBody(): string;
+export function foundingLockHeadline(pricing?: HostedPricing | null): string;
+
+export function foundingLockBody(pricing?: HostedPricing | null): string;
+
+export function foundingUrgencyCopy(): string;
 
 export const MAX_BILLABLE_TRUCKS: number;
 
@@ -60,7 +105,13 @@ export function storageLimitBytes(subscription?: { plan_id?: string; storage_add
 export function bytesToGb(bytes?: number): number;
 export function formatStorageGb(bytes?: number): string;
 
-export function paidTruckLimit(subscription?: { plan_id?: string; billed_truck_count?: number } | null): number;
+export function paidTruckLimit(subscription?: {
+  plan_id?: string;
+  billed_truck_count?: number;
+  included_trucks?: number;
+  pricing_tier?: HostedPricingTier;
+  founding_signup_at?: string;
+} | null): number;
 
 export function billableTruckCount(
   actualCount?: number,

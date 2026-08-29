@@ -88,6 +88,25 @@ async function countTrucks(db, companyId) {
   return snap.size;
 }
 
+async function loadCompanySubscription(db, uid, fallbackCompanyId) {
+  let companyId = String(fallbackCompanyId || '');
+  try {
+    const userSnap = await db.collection('users').doc(uid).get();
+    const linked = userSnap.exists && userSnap.data() && userSnap.data().companyId;
+    if (linked) companyId = String(linked);
+  } catch {
+    // Keep fallback.
+  }
+  if (!db || !companyId) return { companyId, subscription: {} };
+  try {
+    const companySnap = await db.collection('companies').doc(companyId).get();
+    const data = companySnap.exists ? companySnap.data() || {} : {};
+    return { companyId, subscription: data.subscription || {} };
+  } catch {
+    return { companyId, subscription: {} };
+  }
+}
+
 async function createCheckout(input) {
   const { formatPhp } = await loadPricing();
   const price = input.price;
@@ -112,12 +131,12 @@ async function createCheckout(input) {
             {
               currency: 'PHP',
               amount: price.chargeCentavos,
-              name: `CasinFreight Founding (${cycleLabel})`,
+              name: `CasinFreight ${price.pricingTier === 'list' ? 'List' : 'Founding'} (${cycleLabel})`,
               quantity: 1,
               description: `${formatPhp(price.chargePhp)} for ${price.truckCount} truck${price.truckCount === 1 ? '' : 's'}${extraNote}.`,
             },
           ],
-          description: `CasinFreight Founding ${cycleLabel} ${input.customerEmail || input.userId} ${Date.now()}`,
+          description: `CasinFreight ${price.pricingTier === 'list' ? 'List' : 'Founding'} ${cycleLabel} ${input.customerEmail || input.userId} ${Date.now()}`,
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           metadata: {
@@ -129,6 +148,8 @@ async function createCheckout(input) {
             extra_trucks: String(price.extraTrucks),
             amount_php: String(price.chargePhp),
             amount_centavos: String(price.chargeCentavos),
+            pricing_tier: String(price.pricingTier || ''),
+            included_trucks: String(price.includedTrucks),
             checkout_nonce: String(Date.now()),
           },
         },
@@ -229,7 +250,7 @@ async function runAction(action, body, origin, authHeader) {
   }
 
   const op = String(action || body.action || 'checkout').toLowerCase();
-  const { calculateSubscriptionPrice, parseBillingCycle, billableTruckCount } = await loadPricing();
+  const { calculateSubscriptionPrice, parseBillingCycle, billableTruckCount, hostedPricingForCheckout } = await loadPricing();
   const db = getAdminDb();
   if (!db) {
     return {
@@ -273,9 +294,11 @@ async function runAction(action, body, origin, authHeader) {
       return { status: 200, data: { paid: false, error: 'PayMongo has not confirmed this checkout yet.' } };
     }
     const metadata = (resource.attributes && resource.attributes.metadata) || {};
+    const { subscription: existingSub } = await loadCompanySubscription(db, caller.uid, metadata.company_id);
     const quote = calculateSubscriptionPrice(
       Number(metadata.truck_count || 0),
-      parseBillingCycle(metadata.billing_cycle)
+      parseBillingCycle(metadata.billing_cycle),
+      hostedPricingForCheckout(existingSub)
     );
     try {
       const granted = await grantFounding(db, caller, {
@@ -291,25 +314,15 @@ async function runAction(action, body, origin, authHeader) {
     }
   }
 
-  let companyId = String(body.companyId || '');
-  try {
-    const userSnap = await db.collection('users').doc(caller.uid).get();
-    const linked = userSnap.exists && userSnap.data() && userSnap.data().companyId;
-    if (linked) companyId = String(linked);
-  } catch {
-    // Keep the client-supplied company id if the user profile cannot be read.
-  }
+  const { companyId, subscription: existingSub } = await loadCompanySubscription(db, caller.uid, body.companyId);
   const actualTrucks = await countTrucks(db, companyId);
-  let billedTrucks = 0;
-  try {
-    const companySnap = await db.collection('companies').doc(companyId).get();
-    const sub = companySnap.exists && companySnap.data() && companySnap.data().subscription;
-    billedTrucks = Number(sub && sub.billed_truck_count) || 0;
-  } catch {
-    billedTrucks = 0;
-  }
+  const billedTrucks = Number(existingSub && existingSub.billed_truck_count) || 0;
   const truckCount = billableTruckCount(actualTrucks, billedTrucks, body.truckCount);
-  const price = calculateSubscriptionPrice(truckCount, parseBillingCycle(body.billingCycle));
+  const price = calculateSubscriptionPrice(
+    truckCount,
+    parseBillingCycle(body.billingCycle),
+    hostedPricingForCheckout(existingSub)
+  );
   const result = await createCheckout({
     secretKey: key,
     planId: body.planId || 'plan_founding',

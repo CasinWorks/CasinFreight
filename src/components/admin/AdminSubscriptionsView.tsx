@@ -1,15 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Banknote, Crown, Gift, Loader2, RefreshCw, RotateCcw, Search, Shield, Wallet, X } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, formatPhp, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
+import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
 import { MAX_BILLABLE_TRUCKS } from '../../lib/subscriptionPrice';
 import type { CompanyDocument } from '../../services/firestoreCompany';
 import { listSalesAgents, setCompanySalesAgent, backfillLatestSaasCommission } from '../../services/firestoreSales';
 import type { SalesAgent } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
 
-function planLabel(planId?: string) {
-  if (planId === PLAN_FOUNDING_ID) return 'Founding';
+function planLabel(planId?: string, pricingTier?: string) {
+  if (planId === PLAN_FOUNDING_ID) {
+    if (pricingTier === 'list') return 'List';
+    if (pricingTier === 'founding-rolled') return 'Founding (year 2)';
+    return 'Founding';
+  }
   if (planId === PLAN_PROMO_ID) return 'Promo';
   return 'Free';
 }
@@ -91,7 +95,7 @@ export const AdminSubscriptionsView: React.FC = () => {
     if (billed > 0) {
       return sum + (row.subscription?.billing_cycle === 'annual' ? billed / 12 : billed);
     }
-    return sum + FOUNDING_PRICE_PHP;
+    return sum + (Number(row.subscription?.base_rate_php) || FOUNDING_PRICE_PHP);
   }, 0);
   const expiringSoon = foundingRows.filter((row) => {
     const left = daysLeft(row.subscription?.current_period_end);
@@ -173,7 +177,7 @@ export const AdminSubscriptionsView: React.FC = () => {
             </div>
             <h1 className="text-xl font-extrabold text-slate-900 mt-1">Revenue & plans</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Founding is {formatPhp(FOUNDING_PRICE_PHP)}/month for up to 2 trucks, then ₱150 per extra truck. Use <span className="font-semibold">Give promo</span> to turn a company on for free, with your truck cap and deadline.
+              Founding is ₱899/month for the first year (5 trucks included), then ₱1,599/month with the 5-truck allowance kept. After Dec 31, 2026 new signups pay List: ₱1,599/month for 2 trucks. Extra trucks are ₱150. Use <span className="font-semibold">Give promo</span> to turn a company on for free, with your truck cap and deadline.
             </p>
           </div>
           <button
@@ -316,8 +320,14 @@ export const AdminSubscriptionsView: React.FC = () => {
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
                           {isPromo ? <Gift className="w-3 h-3" /> : isFounding ? <Crown className="w-3 h-3" /> : null}
-                          {planLabel(row.subscription?.plan_id)}
+                          {planLabel(row.subscription?.plan_id, row.subscription?.pricing_tier)}
                         </span>
+                        {isFounding && (
+                          <div className="text-[10px] text-slate-500 mt-1">
+                            {row.subscription?.included_trucks || (row.subscription?.pricing_tier === 'list' ? 2 : 5)} trucks included
+                            {row.subscription?.base_rate_php ? ` · ₱${Math.round(row.subscription.base_rate_php).toLocaleString('en-PH')}/mo` : ''}
+                          </div>
+                        )}
                         {isPromo && (
                           <div className="text-[10px] text-violet-700 mt-1">
                             {row.subscription?.billed_truck_count || 1} truck{(row.subscription?.billed_truck_count || 1) === 1 ? '' : 's'}

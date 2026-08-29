@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { formatPhDate } from '../../config/plans';
-import { calculateSubscriptionPrice, formatPhp } from '../../lib/subscriptionPrice';
+import { calculateSubscriptionPrice, formatPhp, hostedPlanName, hostedPricingForCheckout } from '../../lib/subscriptionPrice';
 import { useTutorial } from '../tutorial';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 
@@ -50,9 +50,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
   const showRenewalNudge = subscriptionUsage.daysRemainingInPeriod <= 7;
+  const hosted = hostedPricingForCheckout(subscription);
+  const paidName = hostedPlanName(hosted);
   const renewalPrice = calculateSubscriptionPrice(
     subscriptionUsage.trucksUsed || 0,
-    subscription.billing_cycle === 'annual' ? 'annual' : 'monthly'
+    subscription.billing_cycle === 'annual' ? 'annual' : 'monthly',
+    subscription
   );
 
   return (
@@ -271,13 +274,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         <span>
           {activePlan.id === 'plan_free'
             ? subscriptionUsage.isFreeTrialExpired
-              ? 'Your 1-month Free trial has ended. Subscribe to Founding to keep using this workspace.'
+              ? `Your 1-month Free trial has ended. Subscribe to ${paidName} to keep using this workspace.`
               : `Free trial ends ${formatPhDate(subscription.current_period_end)}. Then this workspace locks until you subscribe.`
             : activePlan.id === 'plan_promo'
             ? `Promo access ends ${formatPhDate(subscription.current_period_end)}. Then this workspace returns to Free unless you subscribe.`
             : subscription.cancel_at_period_end
-            ? `Founding ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ${formatPhp(renewalPrice.chargePhp)} again.`
-            : `Founding renews ${formatPhDate(subscription.current_period_end)} — ${formatPhp(renewalPrice.monthlyTotal)}/month for ${renewalPrice.truckCount} truck${renewalPrice.truckCount === 1 ? '' : 's'}.`}
+            ? `${paidName} ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ${formatPhp(renewalPrice.chargePhp)} again.`
+            : `${paidName} renews ${formatPhDate(subscription.current_period_end)} — ${formatPhp(renewalPrice.monthlyTotal)}/month for ${renewalPrice.truckCount} truck${renewalPrice.truckCount === 1 ? '' : 's'}.`}
         </span>
         <button
           type="button"

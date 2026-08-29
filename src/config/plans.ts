@@ -4,11 +4,17 @@ import {
   FOUNDING_BASE_PHP,
   FOUNDING_INCLUDED_TRUCKS,
   FOUNDING_PER_EXTRA_TRUCK_PHP,
+  FOUNDING_ROLLED_PHP,
   FREE_INCLUDED_TRUCKS,
   FREE_TRIAL_MONTHS,
+  LIST_BASE_PHP,
+  LIST_INCLUDED_TRUCKS,
   MAX_BILLABLE_TRUCKS,
   formatPhp,
+  foundingLockBody,
   foundingLockHeadline,
+  hostedIdentityPatch,
+  hostedPricingForCheckout,
 } from '../lib/subscriptionPrice';
 
 export { calculateSubscriptionPrice, formatPhp, foundingLockBody, foundingLockHeadline, paidTruckLimit, billableTruckCount } from '../lib/subscriptionPrice';
@@ -107,7 +113,7 @@ export const SAAS_PLANS: Plan[] = [
   {
     id: PLAN_FREE_ID,
     name: 'Free',
-    description: `1-month trial with every module, up to ${FREE_INCLUDED_TRUCKS} trucks. Subscribe to Founding to keep the workspace after the month ends.`,
+    description: `1-month trial with every module, up to ${FREE_INCLUDED_TRUCKS} trucks. Subscribe after the month ends to keep the workspace.`,
     price_php: 0,
     interval: 'month',
     max_bookings_per_month: 10,
@@ -119,7 +125,7 @@ export const SAAS_PLANS: Plan[] = [
       '1 company account / role',
       '10 transactions (trip bookings)',
       '2 GB photo / POD storage',
-      'Subscribe to Founding before the month ends to keep operating',
+      'Subscribe before the month ends to keep operating',
     ],
     badge: 'FREE',
     isRecommended: false,
@@ -127,7 +133,7 @@ export const SAAS_PLANS: Plan[] = [
   {
     id: PLAN_FOUNDING_ID,
     name: 'Founding',
-    description: `Unlimited team seats, roles, and trips. First 2 trucks are in the ${formatPhp(FOUNDING_BASE_PHP)} founding base; each extra truck is ${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)}/month.`,
+    description: `${formatPhp(FOUNDING_BASE_PHP)}/mo for your first year — includes ${FOUNDING_INCLUDED_TRUCKS} trucks. After year 1: ${formatPhp(FOUNDING_ROLLED_PHP)}/mo, and you keep your ${FOUNDING_INCLUDED_TRUCKS}-truck allowance for life. +${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)}/truck beyond ${FOUNDING_INCLUDED_TRUCKS}.`,
     price_php: FOUNDING_PRICE_PHP,
     interval: 'month',
     max_bookings_per_month: null,
@@ -136,8 +142,7 @@ export const SAAS_PLANS: Plan[] = [
     features: [
       'Unlimited trip transactions and team seats',
       foundingLockHeadline(),
-      `${formatPhp(FOUNDING_BASE_PHP)}/month base includes up to ${FOUNDING_INCLUDED_TRUCKS} trucks`,
-      `${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)}/month per additional truck`,
+      foundingLockBody(),
       `Pay annually and save ${Math.round(ANNUAL_DISCOUNT_RATE * 100)}%`,
       'Full RBAC, BIR ledger, and dual-control billing',
       'Unlocks after a confirmed PayMongo payment',
@@ -168,6 +173,35 @@ export const PROMO_PLAN: Plan = {
   isRecommended: false,
 };
 
+export function getSaasPlans(existing?: Subscription | null): Plan[] {
+  const hosted = hostedPricingForCheckout(existing || undefined);
+  const isList = hosted.pricingTier === 'list';
+  const paidName = isList ? 'List' : 'Founding';
+  const free: Plan = {
+    ...SAAS_PLANS[0],
+    description: `1-month trial with every module, up to ${FREE_INCLUDED_TRUCKS} trucks. Subscribe to ${paidName} to keep the workspace after the month ends.`,
+  };
+  const paid: Plan = {
+    ...SAAS_PLANS[1],
+    name: isList ? 'List' : 'Founding',
+    badge: isList ? 'LIST' : 'FOUNDING',
+    price_php: hosted.basePhp,
+    description: isList
+      ? `${formatPhp(LIST_BASE_PHP)}/mo — includes ${LIST_INCLUDED_TRUCKS} trucks. +${formatPhp(FOUNDING_PER_EXTRA_TRUCK_PHP)}/truck beyond ${LIST_INCLUDED_TRUCKS}.`
+      : SAAS_PLANS[1].description,
+    features: [
+      'Unlimited trip transactions and team seats',
+      foundingLockHeadline(hosted),
+      foundingLockBody(hosted),
+      `Pay annually and save ${Math.round(ANNUAL_DISCOUNT_RATE * 100)}%`,
+      'Full RBAC, BIR ledger, and dual-control billing',
+      'Unlocks after a confirmed PayMongo payment',
+      '5 GB photo / POD storage; extra space ₱99/GB per month',
+    ],
+  };
+  return [free, paid];
+}
+
 export const ALL_PLANS: Plan[] = [...SAAS_PLANS, PROMO_PLAN];
 
 export function getPlanLimits(planId?: string): PlanLimits {
@@ -186,7 +220,7 @@ export function hasReachedLimit(used: number, limit: number | null | undefined):
 export function makeFreeSubscription(
   userId: string,
   companyId: string,
-  previous?: Pick<Subscription, 'consumed_payment_ids' | 'payment_provider_checkout_id'>
+  previous?: Partial<Subscription>
 ): Subscription {
   const start = new Date();
   const end = addBillingMonths(start, FREE_TRIAL_MONTHS);
@@ -194,8 +228,9 @@ export function makeFreeSubscription(
     ...(previous?.consumed_payment_ids || []),
     previous?.payment_provider_checkout_id || '',
   ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
+  const identity = previous ? hostedIdentityPatch(previous) : {};
   return {
-    id: `sub-${userId.slice(0, 8) || 'free'}`,
+    id: previous?.id || `sub-${userId.slice(0, 8) || 'free'}`,
     user_id: userId,
     company_id: companyId,
     plan_id: PLAN_FREE_ID,
@@ -205,8 +240,9 @@ export function makeFreeSubscription(
     cancel_at_period_end: false,
     payment_provider: 'paymongo',
     ...(consumed.length ? { consumed_payment_ids: consumed } : {}),
-    created_at: start.toISOString(),
+    created_at: previous?.created_at || start.toISOString(),
     updated_at: start.toISOString(),
+    ...identity,
   };
 }
 

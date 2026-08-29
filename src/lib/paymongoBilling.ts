@@ -1,5 +1,5 @@
 import { requireFirebaseUser } from './firebaseCaller';
-import { calculateSubscriptionPrice, billableTruckCount, formatPhp, parseBillingCycle, type SubscriptionPrice } from './subscriptionPrice';
+import { calculateSubscriptionPrice, billableTruckCount, formatPhp, hostedPlanName, hostedPricingForCheckout, parseBillingCycle, type SubscriptionPrice } from './subscriptionPrice';
 
 export interface CreateCheckoutInput {
   secretKey: string;
@@ -38,6 +38,7 @@ export async function createPayMongoCheckoutSession(
 ): Promise<CreateCheckoutResult> {
   const price = input.price;
   const cycleLabel = price.billingCycle === 'annual' ? 'Annual' : 'Monthly';
+  const planName = hostedPlanName(price);
   const extraNote = price.extraTrucks > 0
     ? ` includes ${price.includedTrucks} trucks + ${price.extraTrucks} extra`
     : ` includes up to ${price.includedTrucks} trucks`;
@@ -59,12 +60,12 @@ export async function createPayMongoCheckoutSession(
             {
               currency: 'PHP',
               amount: price.chargeCentavos,
-              name: `CasinFreight Founding (${cycleLabel})`,
+              name: `CasinFreight ${planName} (${cycleLabel})`,
               quantity: 1,
               description: `${formatPhp(price.chargePhp)} for ${price.truckCount} truck${price.truckCount === 1 ? '' : 's'}${extraNote}.`,
             },
           ],
-          description: `CasinFreight Founding ${cycleLabel} ${input.customerEmail || input.userId} ${Date.now()}`,
+          description: `CasinFreight ${planName} ${cycleLabel} ${input.customerEmail || input.userId} ${Date.now()}`,
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           metadata: {
@@ -76,6 +77,8 @@ export async function createPayMongoCheckoutSession(
             extra_trucks: String(price.extraTrucks),
             amount_php: String(price.chargePhp),
             amount_centavos: String(price.chargeCentavos),
+            pricing_tier: String(price.pricingTier || ''),
+            included_trucks: String(price.includedTrucks),
             checkout_nonce: String(Date.now()),
           },
         },
@@ -434,8 +437,9 @@ export async function runPayMongoAction(
     successUrl: body.successUrl || `${origin}/?billing=success`,
     cancelUrl: body.cancelUrl || `${origin}/?billing=cancel`,
     price: calculateSubscriptionPrice(
-      billableTruckCount(0, 0, body.truckCount),
-      parseBillingCycle(body.billingCycle)
+      billableTruckCount(0, 0, Number(body.truckCount) || 0),
+      parseBillingCycle(body.billingCycle),
+      hostedPricingForCheckout()
     ),
   });
   return { status: 200, data: result };
