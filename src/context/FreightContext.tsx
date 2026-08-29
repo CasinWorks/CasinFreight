@@ -48,7 +48,7 @@ import {
 } from '../types';
 import { DEFAULT_RBAC_ROLES, OWNER_RBAC_ROLE, buildAuditEntry, checkPermission, ensureDefaultSystemRoles, getAllowedRolesForPermission, isTripRetractionApprover } from '../services/rbac';
 import { initialChartOfAccounts } from '../data/mockData';
-import { getFirebaseAuth, isFirebaseConfigured } from '../lib/firebase';
+import { getFirebaseAuth, isFirebaseConfigured, setAuthRememberMe } from '../lib/firebase';
 import { METRO_MANILA_TRUCK_BAN_PRESETS } from '../lib/truckBans';
 import { 
   CompanyDocument,
@@ -129,7 +129,7 @@ interface FreightContextType {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   isFirebaseReady: boolean;
-  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password?: string, options?: { rememberMe?: boolean }) => Promise<{ success: boolean; error?: string }>;
   signup: (payload: { name: string; email: string; password: string; companyName: string }) => Promise<{ success: boolean; error?: string }>;
   joinTeam: (payload: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -1258,11 +1258,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Account switching was a demo control. Live sessions use Firebase Auth.
   };
 
-  const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (
+    email: string,
+    password?: string,
+    options?: { rememberMe?: boolean }
+  ): Promise<{ success: boolean; error?: string }> => {
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
     try {
+      await setAuthRememberMe(options?.rememberMe !== false);
       const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
       const profile = await getUserProfile(cred.user.uid);
       if (profile?.companyId) return { success: true };

@@ -20,6 +20,25 @@ import { formatPhp, FOUNDING_BASE_PHP, FOUNDING_PER_EXTRA_TRUCK_PHP, FREE_INCLUD
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 import { CasinWorksCredit } from '../brand/CasinWorksCredit';
 
+const SAVED_EMAIL_KEY = 'casinfreight_saved_email';
+
+function readSavedEmail() {
+  try {
+    return localStorage.getItem(SAVED_EMAIL_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeSavedEmail(email: string, remember: boolean) {
+  try {
+    if (remember && email.trim()) localStorage.setItem(SAVED_EMAIL_KEY, email.trim());
+    else localStorage.removeItem(SAVED_EMAIL_KEY);
+  } catch {
+    // Private mode can block storage. Sign-in still works.
+  }
+}
+
 export const LoginPage: React.FC = () => {
   const { login, signup, joinTeam, requestPasswordReset } = useFreight();
   const configured = isFirebaseConfigured();
@@ -27,12 +46,14 @@ export const LoginPage: React.FC = () => {
   const params = new URLSearchParams(window.location.search);
   const invitedEmail = (params.get('email') || '').trim();
   const isJoin = params.get('join') === '1';
+  const savedEmail = readSavedEmail();
 
   const [mode, setMode] = useState<'login' | 'signup' | 'join'>(isJoin ? 'join' : 'login');
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [email, setEmail] = useState(invitedEmail);
+  const [email, setEmail] = useState(invitedEmail || savedEmail);
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(
@@ -71,14 +92,16 @@ export const LoginPage: React.FC = () => {
     setErrorMessage(null);
     setIsLoading(true);
     const res = mode === 'login'
-      ? await login(email, password)
+      ? await login(email, password, { rememberMe })
       : mode === 'join'
       ? await joinTeam({ name, email, password })
       : await signup({ name, email, password, companyName });
     setIsLoading(false);
     if (!res.success) {
       setErrorMessage(res.error || 'Authentication failed.');
+      return;
     }
+    if (mode === 'login') writeSavedEmail(email, rememberMe);
   };
 
   const submitLabel = mode === 'login' ? 'Sign in' : mode === 'join' ? 'Join company' : 'Start free';
@@ -101,10 +124,6 @@ export const LoginPage: React.FC = () => {
               Philippine Trucking & Fleet Management Platform
             </span>
           </div>
-        </div>
-        <div className="hidden sm:flex items-center gap-1.5 bg-slate-900/80 px-3 py-1.5 rounded-full border border-slate-800 text-xs">
-          <span className={`w-2 h-2 rounded-full ${configured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-          <span className="text-slate-300 font-medium">{configured ? 'Firebase Auth' : 'Firebase keys required'}</span>
         </div>
       </header>
 
@@ -135,7 +154,7 @@ export const LoginPage: React.FC = () => {
                 { icon: Scale, title: 'Payload & GVWR', copy: 'Weighbridge checks and overweight alerts.' },
                 { icon: FileCheck2, title: 'Digital e-POD', copy: 'Seals, delivery notes, and signatures.' },
                 { icon: Receipt, title: 'BIR Invoicing', copy: '12% VAT and 2% EWT on every trip.' },
-                { icon: ShieldCheck, title: 'Firebase RBAC', copy: 'Live roles and seats per company.' },
+                { icon: ShieldCheck, title: 'Team roles', copy: 'Live roles and seats per company.' },
               ].map((item) => (
                 <div key={item.title} className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1">
                   <div className="flex items-center gap-2 text-blue-400 text-xs font-bold">
@@ -248,6 +267,7 @@ export const LoginPage: React.FC = () => {
                     <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="email"
+                      autoComplete="username"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -264,6 +284,7 @@ export const LoginPage: React.FC = () => {
                     <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -278,7 +299,29 @@ export const LoginPage: React.FC = () => {
                 </label>
 
                 {mode === 'login' && (
-                  <div className="flex items-center justify-between -mt-2">
+                  <div className="flex items-center justify-between -mt-2 gap-3">
+                    <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-300 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="rounded border-slate-600 bg-slate-950 text-blue-600 focus:ring-blue-500"
+                      />
+                      Remember me
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void handleForgotPassword()}
+                      disabled={isResetting}
+                      className="text-[11px] font-bold text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                    >
+                      {isResetting ? 'Sending reset link…' : 'Forgot password?'}
+                    </button>
+                  </div>
+                )}
+
+                {mode === 'login' && (
+                  <div className="-mt-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -289,14 +332,6 @@ export const LoginPage: React.FC = () => {
                       className="text-[11px] font-bold text-slate-400 hover:text-slate-200"
                     >
                       Owner? Create company
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleForgotPassword()}
-                      disabled={isResetting}
-                      className="text-[11px] font-bold text-blue-400 hover:text-blue-300 disabled:opacity-50"
-                    >
-                      {isResetting ? 'Sending reset link…' : 'Forgot password?'}
                     </button>
                   </div>
                 )}

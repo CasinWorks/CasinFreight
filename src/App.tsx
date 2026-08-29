@@ -23,6 +23,7 @@ import { RbacManagementView } from './components/rbac/RbacManagementView';
 import { OrgSetupModal } from './components/onboarding/OrgSetupModal';
 import { NotificationDrawer } from './components/notifications/NotificationDrawer';
 import { LoginPage } from './components/auth/LoginPage';
+import { BootSplash } from './components/auth/BootSplash';
 import { Trip } from './types';
 import { KanbanSquare, PlusCircle, Receipt, Truck, LayoutDashboard, Menu } from 'lucide-react';
 import { AdminConsoleView } from './components/admin/AdminConsoleView';
@@ -308,14 +309,7 @@ function AppContent() {
   const { isAuthenticated, isAuthLoading, isPlatformAdmin, activeDowntime } = useFreight();
 
   if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-slate-400 font-medium">Connecting to Firebase…</p>
-        </div>
-      </div>
-    );
+    return <BootSplash />;
   }
 
   if (isAuthenticated && activeDowntime && !isPlatformAdmin) {

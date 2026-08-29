@@ -1,5 +1,11 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  getAuth,
+  setPersistence,
+  type Auth,
+} from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -34,6 +40,15 @@ export function getFirebaseAuth(): Auth {
     auth = getAuth(getFirebaseApp());
   }
   return auth;
+}
+
+/** Local = stay signed in on this device. Session = sign out when the browser closes. */
+export async function setAuthRememberMe(remember: boolean): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+  await setPersistence(
+    getFirebaseAuth(),
+    remember ? browserLocalPersistence : browserSessionPersistence
+  );
 }
 
 export function getFirebaseDb(): Firestore {
