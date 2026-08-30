@@ -13,6 +13,10 @@ service cloud.firestore {
       return get(userPath()).data;
     }
 
+    function authEmail() {
+      return request.auth.token.email.lower();
+    }
+
     function inCompany(companyId) {
       return signedIn()
         && exists(userPath())
@@ -25,18 +29,34 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/companies/$(companyId)).data.createdBy == request.auth.uid;
     }
 
-    function canAccessCompany(companyId) {
-      return inCompany(companyId) || createdCompany(companyId);
+    // Creator keeps bootstrap access only while their user profile still points here.
+    function stillOwnsCreatedCompany(companyId) {
+      return createdCompany(companyId)
+        && (!exists(userPath()) || userData().companyId == companyId);
     }
 
     function isPlatformAdmin() {
       return signedIn()
         && request.auth.token.email is string
+        && request.auth.token.email_verified == true
         && request.auth.token.email.lower() in ['christianjoshuacasin@gmail.com'];
     }
 
-    function authEmail() {
-      return request.auth.token.email.lower();
+    function canAccessCompany(companyId) {
+      return inCompany(companyId) || stillOwnsCreatedCompany(companyId) || isPlatformAdmin();
+    }
+
+    function isOwnerLike() {
+      return signedIn()
+        && exists(userPath())
+        && userData().role is string
+        && userData().role.lower() == 'owner';
+    }
+
+    function isCompanyOwner(companyId) {
+      return isPlatformAdmin()
+        || (inCompany(companyId) && isOwnerLike())
+        || stillOwnsCreatedCompany(companyId);
     }
 
     function matchingInvite(companyId) {
@@ -46,8 +66,56 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/invites/$(authEmail())).data.companyId == companyId;
     }
 
-    function isCompanyOwner(companyId) {
-      return createdCompany(companyId) || isPlatformAdmin();
+    function inviteRole() {
+      return get(/databases/$(database)/documents/invites/$(authEmail())).data.role;
+    }
+
+    function roleDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)/roles/$(userData().role)).data;
+    }
+
+    function hasPerm(companyId, perm) {
+      return isPlatformAdmin()
+        || isOwnerLike()
+        || (
+          inCompany(companyId)
+          && exists(/databases/$(database)/documents/companies/$(companyId)/roles/$(userData().role))
+          && roleDoc(companyId).keys().hasAny(['permissions'])
+          && roleDoc(companyId).permissions.hasAny([perm])
+        );
+    }
+
+    function tripPath(companyId, tripId) {
+      return /databases/$(database)/documents/companies/$(companyId)/trips/$(tripId);
+    }
+
+    function isAssignedTripDriver(companyId, tripId) {
+      return inCompany(companyId)
+        && exists(tripPath(companyId, tripId))
+        && get(tripPath(companyId, tripId)).data.keys().hasAny(['driverId'])
+        && exists(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId))
+        && (
+          (
+            get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.keys().hasAny(['email'])
+            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.email is string
+            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.email.lower() == authEmail()
+          )
+          || (
+            get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.keys().hasAny(['userId'])
+            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.userId == request.auth.uid
+          )
+        );
+    }
+
+    function canWriteTrip(companyId, tripId) {
+      return hasPerm(companyId, 'trips.edit')
+        || hasPerm(companyId, 'trips.create')
+        || hasPerm(companyId, 'trips.reassign_fleet')
+        || hasPerm(companyId, 'trips.status_pending')
+        || hasPerm(companyId, 'trips.status_loaded')
+        || hasPerm(companyId, 'trips.status_in_transit')
+        || hasPerm(companyId, 'trips.status_invoiced')
+        || isAssignedTripDriver(companyId, tripId);
     }
 
     function currentStorageUsed() {
@@ -56,7 +124,6 @@ service cloud.firestore {
         : 0;
     }
 
-    // Members may raise usage by at most one 8 MB upload. They cannot zero the meter.
     function storageUsageNotDecreased() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['storageUsedBytes'])
         || (
@@ -76,12 +143,14 @@ service cloud.firestore {
         && request.auth.uid == uid
         && request.resource.data.companyId is string
         && (
-          createdCompany(request.resource.data.companyId) ||
-          matchingInvite(request.resource.data.companyId)
+          stillOwnsCreatedCompany(request.resource.data.companyId)
+          || (
+            matchingInvite(request.resource.data.companyId)
+            && request.resource.data.role == inviteRole()
+            && request.resource.data.role.lower() != 'owner'
+          )
         );
 
-      // Members cannot jump companies or self-promote. The company creator can
-      // update teammate profiles, including role, but cannot change companyId.
       allow update: if signedIn() && (
         (
           request.auth.uid == uid
@@ -89,7 +158,7 @@ service cloud.firestore {
           && request.resource.data.role == resource.data.role
         )
         || (
-          createdCompany(resource.data.companyId)
+          isCompanyOwner(resource.data.companyId)
           && request.resource.data.companyId == resource.data.companyId
         )
         || isPlatformAdmin()
@@ -97,7 +166,7 @@ service cloud.firestore {
 
       allow delete: if signedIn() && (
         request.auth.uid == uid ||
-        createdCompany(resource.data.companyId) ||
+        isCompanyOwner(resource.data.companyId) ||
         isPlatformAdmin()
       );
     }
@@ -106,7 +175,10 @@ service cloud.firestore {
       allow read: if signedIn()
         && request.auth.token.email is string
         && request.auth.token.email.lower() == email;
-      allow create, update: if signedIn() && isCompanyOwner(request.resource.data.companyId);
+      allow create, update: if signedIn()
+        && isCompanyOwner(request.resource.data.companyId)
+        && request.resource.data.role is string
+        && request.resource.data.role.lower() != 'owner';
       allow delete: if signedIn() && (
         isCompanyOwner(resource.data.companyId) ||
         (request.auth.token.email is string && request.auth.token.email.lower() == email)
@@ -119,24 +191,30 @@ service cloud.firestore {
         && request.resource.data.id == companyId
         && request.resource.data.subscriptionTier == 'Free'
         && request.resource.data.subscription.plan_id == 'plan_free';
-      allow read: if canAccessCompany(companyId) || isPlatformAdmin();
-      // Billing is server-only (PayMongo verify via Admin SDK). Platform admin can still grant/revoke in the console.
+      allow read: if canAccessCompany(companyId);
       allow update: if isPlatformAdmin()
         || (
           canAccessCompany(companyId)
           && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['subscription', 'subscriptionTier', 'createdBy', 'id', 'salesAgentId'])
           && storageUsageNotDecreased()
+          && (
+            isCompanyOwner(companyId)
+            || hasPerm(companyId, 'settings.manage')
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['storageUsedBytes'])
+          )
         );
       allow delete: if isCompanyOwner(companyId);
 
       match /members/{memberId} {
-        allow read: if canAccessCompany(companyId) || isPlatformAdmin();
+        allow read: if canAccessCompany(companyId);
         allow create: if isCompanyOwner(companyId)
           || (
             inCompany(companyId)
             && request.auth.uid == memberId
             && matchingInvite(companyId)
+            && request.resource.data.role == inviteRole()
+            && request.resource.data.role.lower() != 'owner'
           );
         allow update: if isCompanyOwner(companyId)
           || (
@@ -149,15 +227,90 @@ service cloud.firestore {
       }
 
       match /roles/{roleId} {
-        allow read: if canAccessCompany(companyId) || isPlatformAdmin();
+        allow read: if canAccessCompany(companyId);
         allow write: if isCompanyOwner(companyId);
       }
 
+      match /trips/{tripId} {
+        allow read: if canAccessCompany(companyId);
+        allow create: if hasPerm(companyId, 'trips.create');
+        allow update: if canWriteTrip(companyId, tripId);
+        allow delete: if hasPerm(companyId, 'trips.delete');
+      }
+
+      match /invoices/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow create, update: if hasPerm(companyId, 'invoices.create') || hasPerm(companyId, 'invoices.retract');
+        allow delete: if isCompanyOwner(companyId);
+      }
+
+      match /journalEntries/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow write: if hasPerm(companyId, 'ledger.post_jv');
+      }
+
+      match /fuelLogs/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow create, update: if hasPerm(companyId, 'fuel.log');
+        allow delete: if hasPerm(companyId, 'fuel.delete') || isCompanyOwner(companyId);
+      }
+
+      match /trucks/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow write: if hasPerm(companyId, 'fleet.crud');
+      }
+
+      match /drivers/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow write: if hasPerm(companyId, 'drivers.crud');
+      }
+
+      match /clients/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow write: if hasPerm(companyId, 'ratecards.manage') || hasPerm(companyId, 'settings.manage');
+      }
+
+      match /rateCards/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow write: if hasPerm(companyId, 'ratecards.manage');
+      }
+
+      match /truckBans/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow write: if hasPerm(companyId, 'fleet.crud') || hasPerm(companyId, 'settings.manage');
+      }
+
+      match /fieldEvents/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow create, update: if request.resource.data.tripId is string
+          && (
+            canWriteTrip(companyId, request.resource.data.tripId)
+            || isAssignedTripDriver(companyId, request.resource.data.tripId)
+          );
+        allow delete: if isCompanyOwner(companyId);
+      }
+
+      match /liveTracking/{tripId} {
+        allow read: if canAccessCompany(companyId);
+        allow create, update: if isAssignedTripDriver(companyId, tripId)
+          || hasPerm(companyId, 'trips.edit');
+        allow delete: if isCompanyOwner(companyId);
+      }
+
+      match /notifications/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow write: if inCompany(companyId) || isPlatformAdmin();
+      }
+
+      match /auditLogs/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow create: if isCompanyOwner(companyId) || hasPerm(companyId, 'rbac.manage');
+        allow update, delete: if isCompanyOwner(companyId);
+      }
+
       match /{subcol}/{docId} {
-        allow read: if canAccessCompany(companyId) || isPlatformAdmin();
-        allow write: if canAccessCompany(companyId)
-          && subcol != 'members'
-          && subcol != 'roles';
+        allow read: if canAccessCompany(companyId);
+        allow write: if false;
       }
     }
 

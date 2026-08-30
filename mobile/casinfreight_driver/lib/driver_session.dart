@@ -205,6 +205,18 @@ class DriverSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _assertAssignedTrip(String tripId) async {
+    final rosterId = profile?.rosterId;
+    if (rosterId == null || rosterId.isEmpty) {
+      throw StateError('This login is not on the driver roster.');
+    }
+    final snap = await _companyDoc.collection('trips').doc(tripId).get();
+    final driverId = (snap.data()?['driverId'] ?? '').toString();
+    if (driverId != rosterId) {
+      throw StateError('This trip is not assigned to you.');
+    }
+  }
+
   Future<void> _pushPing({bool force = false}) async {
     final p = profile;
     final tripId = trackingTripId;
@@ -217,6 +229,7 @@ class DriverSession extends ChangeNotifier {
     }
     _lastPingAt = now;
     final pos = lastFix;
+    await _assertAssignedTrip(tripId);
     await _companyDoc.collection('liveTracking').doc(tripId).set({
       'id': tripId,
       'tripId': tripId,
@@ -270,6 +283,7 @@ class DriverSession extends ChangeNotifier {
   }) async {
     final p = profile;
     if (p == null) return;
+    await _assertAssignedTrip(tripId);
     final pos = lastFix;
     final id = 'fe-${DateTime.now().millisecondsSinceEpoch}';
     await _companyDoc.collection('fieldEvents').doc(id).set({
@@ -361,6 +375,7 @@ class DriverSession extends ChangeNotifier {
     Map<String, dynamic>? tripPatch,
     String? note,
   }) async {
+    await _assertAssignedTrip(tripId);
     final current = (await _companyDoc.collection('trips').doc(tripId).get()).data() ?? {};
     final dispatcherSigned = _hasInk(current['dispatcherSignoff']);
     final driverSigned = _hasInk(current['driverSignoff']);
@@ -422,6 +437,7 @@ class DriverSession extends ChangeNotifier {
   }
 
   Future<void> stampGeo(String tripId, String kind, String note) async {
+    await _assertAssignedTrip(tripId);
     await refreshGps();
     if (!gpsOk) {
       throw StateError('Turn on GPS before stamping this location.');

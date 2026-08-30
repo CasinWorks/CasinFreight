@@ -950,7 +950,7 @@ export const RbacManagementView: React.FC = () => {
                   onChange={(e) => setNewUserRole(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold focus:outline-none focus:border-blue-500"
                 >
-                  {roles.map((r) => (
+                  {roles.filter((r) => r.id.toLowerCase() !== 'owner').map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name} {r.isSystem ? '(System)' : '(Custom)'}
                     </option>

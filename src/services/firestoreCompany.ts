@@ -136,6 +136,9 @@ export async function getInviteByEmail(email: string): Promise<TeamInvite | null
 }
 
 export async function saveInvite(invite: TeamInvite): Promise<void> {
+  if (String(invite.role || '').toLowerCase() === 'owner') {
+    throw new Error('Invite a working role such as Dispatcher or Driver. Owner cannot be invited.');
+  }
   await setDoc(doc(getFirebaseDb(), 'invites', emailKey(invite.email)), stripUndefined(invite as unknown as Record<string, unknown>));
 }
 

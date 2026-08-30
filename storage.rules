@@ -9,13 +9,34 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.companyId;
     }
 
+    function userRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isOwner() {
+      return signedIn()
+        && userRole() is string
+        && userRole().lower() == 'owner';
+    }
+
+    function allowedType() {
+      return request.resource.contentType in [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'application/pdf'
+      ];
+    }
+
     match /companies/{companyId}/{allPaths=**} {
       allow read: if signedIn() && userCompanyId() == companyId;
       allow create, update: if signedIn()
         && userCompanyId() == companyId
         && request.resource.size < 8 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*|application/pdf');
-      allow delete: if signedIn() && userCompanyId() == companyId;
+        && allowedType();
+      allow delete: if signedIn() && userCompanyId() == companyId && isOwner();
     }
   }
 }

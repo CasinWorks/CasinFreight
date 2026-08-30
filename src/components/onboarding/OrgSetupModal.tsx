@@ -326,7 +326,7 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
                       onChange={(e) => setInviteRole(e.target.value as UserRole)}
                       className="bg-white border border-slate-200 rounded px-2.5 py-1.5 text-slate-900 font-medium focus:outline-none focus:border-blue-500"
                     >
-                      {roles.map((r) => (
+                      {roles.filter((r) => r.id.toLowerCase() !== 'owner').map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.name} {r.isSystem ? '(System)' : '(Custom)'}
                         </option>

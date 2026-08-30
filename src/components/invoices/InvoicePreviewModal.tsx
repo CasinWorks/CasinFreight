@@ -29,6 +29,7 @@ import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
 import { Invoice, InvoiceStatus, InvoiceLineItem } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
+import { safeHttpsUrl } from '../../lib/safeUrl';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
@@ -687,8 +688,9 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                         Attached POP Document: <strong>{invoice.proofOfPayment.popFileName || 'Deposit_Receipt.pdf'}</strong>
                       </span>
                     </div>
+                    {safeHttpsUrl(invoice.proofOfPayment.popFileUrl) && (
                     <a
-                      href={invoice.proofOfPayment.popFileUrl}
+                      href={safeHttpsUrl(invoice.proofOfPayment.popFileUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[11px] font-bold text-emerald-800 hover:underline flex items-center gap-1"
@@ -696,6 +698,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                       <span>View Receipt Image</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
+                    )}
                   </div>
                 )}
               </div>

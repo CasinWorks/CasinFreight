@@ -32,12 +32,30 @@ function firstHost(value) {
   return String(value || '').split(',')[0].trim();
 }
 
-function requestOrigin(headers) {
-  const origin = firstHost(readHeader(headers, 'origin'));
-  if (origin) return origin;
-  const host = firstHost(readHeader(headers, 'x-forwarded-host') || readHeader(headers, 'host'));
-  const proto = firstHost(readHeader(headers, 'x-forwarded-proto')) || 'https';
-  return host ? `${proto}://${host}` : 'https://casin-freight.vercel.app';
+const BILLING_RETURN_ORIGINS = [
+  'https://casinfreight.com',
+  'https://www.casinfreight.com',
+  'https://casin-freight.vercel.app',
+];
+
+function billingReturnOrigin(headers) {
+  const originHeader = firstHost(readHeader(headers, 'origin'));
+  if (BILLING_RETURN_ORIGINS.includes(originHeader)) return originHeader;
+  return 'https://casinfreight.com';
+}
+
+function assertPayMongoCheckoutUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || ''));
+  } catch {
+    throw new Error('PayMongo did not return a checkout URL.');
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (host !== 'checkout.paymongo.com' && !host.endsWith('.paymongo.com')) {
+    throw new Error('PayMongo did not return a checkout URL.');
+  }
+  return String(url);
 }
 
 async function readBody(req) {
@@ -88,22 +106,17 @@ async function countTrucks(db, companyId) {
   return snap.size;
 }
 
-async function loadCompanySubscription(db, uid, fallbackCompanyId) {
-  let companyId = String(fallbackCompanyId || '');
+async function loadCompanySubscription(db, uid) {
+  if (!db || !uid) return { companyId: '', subscription: {} };
   try {
     const userSnap = await db.collection('users').doc(uid).get();
-    const linked = userSnap.exists && userSnap.data() && userSnap.data().companyId;
-    if (linked) companyId = String(linked);
-  } catch {
-    // Keep fallback.
-  }
-  if (!db || !companyId) return { companyId, subscription: {} };
-  try {
+    const companyId = String((userSnap.exists && userSnap.data() && userSnap.data().companyId) || '');
+    if (!companyId) return { companyId: '', subscription: {} };
     const companySnap = await db.collection('companies').doc(companyId).get();
     const data = companySnap.exists ? companySnap.data() || {} : {};
     return { companyId, subscription: data.subscription || {} };
   } catch {
-    return { companyId, subscription: {} };
+    return { companyId: '', subscription: {} };
   }
 }
 
@@ -165,7 +178,7 @@ async function createCheckout(input) {
   if (!checkoutUrl || !checkoutSessionId) {
     throw new Error('PayMongo did not return a checkout URL.');
   }
-  return { checkoutUrl, checkoutSessionId };
+  return { checkoutUrl: assertPayMongoCheckoutUrl(checkoutUrl), checkoutSessionId };
 }
 
 function paymentsFrom(attributes) {
@@ -187,16 +200,15 @@ function expectedAmountFromSession(attributes) {
 }
 
 function paidFromResource(item, expectedCentavos) {
-  if (!item || !item.id) return null;
+  if (!item || !item.id || !String(item.id).startsWith('pay_')) return null;
   const attributes = item.attributes || {};
   if (String(attributes.status || '').toLowerCase() !== 'paid') return null;
   const amount = Number(attributes.amount || 0);
-  if (expectedCentavos > 0 && amount !== expectedCentavos && amount !== expectedCentavos / 100) return null;
-  if (expectedCentavos <= 0 && amount < 89900 && amount !== 899) return null;
+  if (!(expectedCentavos > 0) || amount !== expectedCentavos) return null;
   return {
     paymentId: item.id,
     method: String(attributes.payment_method_used || attributes.source_type || 'qrph'),
-    amount: amount >= 1000 ? amount : amount * 100,
+    amount,
     description: String(attributes.description || ''),
   };
 }
@@ -212,20 +224,6 @@ async function findPaidInSession(headers, checkoutSessionId, excluded) {
     if (excluded.has(item.id)) continue;
     const found = paidFromResource(item, expectedCentavos);
     if (found) return found;
-  }
-  const status = String(attributes.status || '').toLowerCase();
-  const paymentIntent = attributes.payment_intent;
-  const intentStatus = paymentIntent && paymentIntent.attributes ? String(paymentIntent.attributes.status || '') : '';
-  if (status === 'paid' || status === 'succeeded' || intentStatus === 'succeeded') {
-    const paymentId = (nested[0] && nested[0].id) || resource.id || checkoutSessionId;
-    if (!excluded.has(paymentId)) {
-      return {
-        paymentId,
-        method: 'qrph',
-        amount: expectedCentavos || 89900,
-        description: String(attributes.description || ''),
-      };
-    }
   }
   return null;
 }
@@ -294,7 +292,10 @@ async function runAction(action, body, origin, authHeader) {
       return { status: 200, data: { paid: false, error: 'PayMongo has not confirmed this checkout yet.' } };
     }
     const metadata = (resource.attributes && resource.attributes.metadata) || {};
-    const { subscription: existingSub } = await loadCompanySubscription(db, caller.uid, metadata.company_id);
+    const { subscription: existingSub, companyId: linkedCompany } = await loadCompanySubscription(db, caller.uid);
+    if (!linkedCompany) {
+      return { status: 400, data: { paid: false, error: 'No company is linked to this login.' } };
+    }
     const quote = calculateSubscriptionPrice(
       Number(metadata.truck_count || 0),
       parseBillingCycle(metadata.billing_cycle),
@@ -314,7 +315,10 @@ async function runAction(action, body, origin, authHeader) {
     }
   }
 
-  const { companyId, subscription: existingSub } = await loadCompanySubscription(db, caller.uid, body.companyId);
+  const { companyId, subscription: existingSub } = await loadCompanySubscription(db, caller.uid);
+  if (!companyId) {
+    return { status: 400, data: { error: 'No company is linked to this login.' } };
+  }
   const actualTrucks = await countTrucks(db, companyId);
   const billedTrucks = Number(existingSub && existingSub.billed_truck_count) || 0;
   const truckCount = billableTruckCount(actualTrucks, billedTrucks, body.truckCount);
@@ -329,8 +333,8 @@ async function runAction(action, body, origin, authHeader) {
     companyId,
     userId: caller.uid,
     customerEmail: caller.email || body.customerEmail,
-    successUrl: body.successUrl || `${origin}/?billing=success`,
-    cancelUrl: body.cancelUrl || `${origin}/?billing=cancel`,
+    successUrl: `${origin}/?billing=success`,
+    cancelUrl: `${origin}/?billing=cancel`,
     price,
   });
   return { status: 200, data: result };
@@ -345,18 +349,8 @@ module.exports = async function handler(req, res) {
       return;
     }
     if (req.method === 'GET') {
-      let billingGrantConfigured = false;
-      try {
-        billingGrantConfigured = Boolean(getAdminDb());
-      } catch {
-        billingGrantConfigured = false;
-      }
       res.statusCode = 200;
-      res.end(JSON.stringify({
-        ok: true,
-        paymongoConfigured: Boolean(secretKey()),
-        billingGrantConfigured,
-      }));
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
     if (req.method !== 'POST') {
@@ -369,7 +363,7 @@ module.exports = async function handler(req, res) {
     const result = await runAction(
       action,
       parsed,
-      requestOrigin(req.headers),
+      billingReturnOrigin(req.headers),
       readHeader(req.headers, 'authorization')
     );
     res.statusCode = result.status;

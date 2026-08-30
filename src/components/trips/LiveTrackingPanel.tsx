@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Camera, MapPin, Navigation, PenTool, Radio, ShieldAlert } from 'lucide-react';
 import { FieldEvent, FieldEventKind, LiveTracking } from '../../types';
+import { safeHttpsUrl } from '../../lib/safeUrl';
 
 const KIND_LABEL: Record<FieldEventKind, string> = {
   dispatch_signature: 'Dispatch signature',
@@ -139,9 +140,9 @@ export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({ tripId, tr
                   )}
                 </div>
                 {event.note && <p className="mt-1 text-slate-600">{event.note}</p>}
-                {event.photoUrl && (
-                  <a href={event.photoUrl} target="_blank" rel="noreferrer">
-                    <img src={event.photoUrl} alt={event.kind} className="mt-2 h-24 w-full object-cover rounded border border-slate-200" />
+                {safeHttpsUrl(event.photoUrl) && (
+                  <a href={safeHttpsUrl(event.photoUrl)} target="_blank" rel="noreferrer">
+                    <img src={safeHttpsUrl(event.photoUrl)} alt={event.kind} className="mt-2 h-24 w-full object-cover rounded border border-slate-200" />
                   </a>
                 )}
                 {event.signatureDataUrl && (

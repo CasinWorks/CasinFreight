@@ -1616,6 +1616,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (requireUpgrade(!canAddAccount)) {
       return { success: false, error: 'Free plan includes 1 company account. Subscribe to add team members.' };
     }
+    if (String(userData.role || '').toLowerCase() === 'owner') {
+      return { success: false, error: 'Invite a working role such as Dispatcher or Driver. Owner cannot be invited.' };
+    }
 
     const inviteId = `invite-${Date.now()}`;
     const newUser: User = {
@@ -3405,6 +3408,18 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error(data.error || 'PayMongo checkout is not available. Set PAYMONGO_SECRET_KEY on Vercel, then Redeploy.');
     }
     sessionStorage.setItem(`${PENDING_FOUNDING_KEY}_session`, data.checkoutSessionId);
+    const checkoutHost = (() => {
+      try {
+        return new URL(data.checkoutUrl).hostname.toLowerCase();
+      } catch {
+        return '';
+      }
+    })();
+    if (checkoutHost !== 'checkout.paymongo.com' && !checkoutHost.endsWith('.paymongo.com')) {
+      sessionStorage.removeItem(PENDING_FOUNDING_KEY);
+      sessionStorage.removeItem(`${PENDING_FOUNDING_KEY}_session`);
+      throw new Error('PayMongo did not return a valid checkout URL.');
+    }
     return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
   };
 
