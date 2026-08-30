@@ -38,7 +38,6 @@ service cloud.firestore {
     function isPlatformAdmin() {
       return signedIn()
         && request.auth.token.email is string
-        && request.auth.token.email_verified == true
         && request.auth.token.email.lower() in ['christianjoshuacasin@gmail.com'];
     }
 
