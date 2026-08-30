@@ -7,6 +7,7 @@ import type { CompanyDocument } from '../../services/firestoreCompany';
 import { listSalesAgents, setCompanySalesAgent, backfillLatestSaasCommission } from '../../services/firestoreSales';
 import type { SalesAgent } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 function planLabel(planId?: string, pricingTier?: string) {
   if (planId === PLAN_FOUNDING_ID) {
@@ -179,6 +180,9 @@ export const AdminSubscriptionsView: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">
               Founding is ₱899/month for the first year (5 trucks included), then ₱1,599/month with the 5-truck allowance kept. After Dec 31, 2026 new signups pay List: ₱1,599/month for 2 trucks. Extra trucks are ₱150. Use <span className="font-semibold">Give promo</span> to turn a company on for free, with your truck cap and deadline.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="billing" />
+            </div>
           </div>
           <button
             type="button"

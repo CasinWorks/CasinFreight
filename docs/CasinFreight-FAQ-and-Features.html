@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CasinFreight — Features &amp; FAQ</title>
+  <style>
+    @page { size: A4; margin: 16mm 16mm 18mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      font-size: 11.5px;
+      line-height: 1.45;
+      margin: 0;
+    }
+    h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #1d4ed8;
+      border-bottom: 2px solid #1d4ed8;
+      padding-bottom: 4px;
+      margin: 18px 0 10px;
+    }
+    h3 { font-size: 12px; margin: 12px 0 6px; }
+    p { margin: 0 0 8px; }
+    .mast {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-bottom: 4px solid #1d4ed8;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+    .brand { font-size: 11px; font-weight: 800; color: #1d4ed8; letter-spacing: 0.12em; text-transform: uppercase; }
+    .meta { text-align: right; color: #64748b; font-size: 10px; }
+    .lede { font-size: 13px; color: #334155; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 10px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #1e3a8a; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    td.num { text-align: right; white-space: nowrap; }
+    ul { margin: 0 0 8px; padding-left: 18px; }
+    li { margin-bottom: 3px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; }
+    .card strong { display: block; margin-bottom: 4px; }
+    .qa { margin: 0 0 10px; }
+    .qa strong { display: block; color: #1e3a8a; margin-bottom: 2px; }
+    .foot {
+      margin-top: 16px;
+      font-size: 9.5px;
+      color: #64748b;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 8px;
+    }
+    .page-break { page-break-before: always; }
+    .badge { display: inline-block; background: #1d4ed8; color: #fff; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.04em; }
+    .callout {
+      background: #eff6ff;
+      border: 1px solid #93c5fd;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin: 0 0 12px;
+    }
+  </style>
+</head>
+<body>
+  <header class="mast">
+    <div>
+      <div class="brand">CasinFreight · Philippine trucking SaaS</div>
+      <h1>Features &amp; FAQ</h1>
+      <p class="lede" style="margin:0;">Office web app + driver phone app for Philippine trucking companies.</p>
+    </div>
+    <div class="meta">
+      <div>casinfreight.com</div>
+      <div>August 2026</div>
+      <div>For operators, owners, and dispatchers</div>
+    </div>
+  </header>
+
+  <p class="lede">
+    CasinFreight is fleet software for <strong>your own trucks and your own shippers</strong> — not a public load board.
+    The office runs dispatch, billing, and books on the web. Drivers run GPS, seals, and e-POD on the phone.
+  </p>
+
+  <div class="callout">
+    Start free for 1 month (5 trucks, 1 account, 10 trips). New paid signups through <strong>31 December 2026</strong> can lock Founding at <strong>₱899/month</strong> with 5 trucks included.
+  </div>
+
+  <h2>Who it is for</h2>
+  <div class="grid">
+    <div class="card">
+      <strong>Company types</strong>
+      Philippine trucking and freight operators running linehaul, wingvan, closed van, chassis, and tractor units — typically Luzon / port-to-plant work.
+    </div>
+    <div class="card">
+      <strong>People who log in</strong>
+      Owner, dispatcher, loading staff, billing, fleet manager, and drivers. Helpers / pahinante are on the roster with the truck but do not drive the app.
+    </div>
+  </div>
+
+  <h2>Office web app — features</h2>
+  <table>
+    <thead>
+      <tr><th style="width:28%">Module</th><th>What it does</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Trip Board</td><td>Kanban of loads: Pending → Loaded → In Transit → Delivered → Invoiced, plus On Hold / Cancelled. Search, filter, CSV export.</td></tr>
+      <tr><td>New Load / Load Calculator</td><td>Book a trip with GVWR payload gauge, volume, rate-card rates, fuel surcharge, toll estimate, multi-stop and overweight (RA 8794 cargo kg vs net payload).</td></tr>
+      <tr><td>Exceptions</td><td>Hold or cancel with Philippine ops reasons (gate pass, port congestion, LTO/overweight checkpoint, etc.).</td></tr>
+      <tr><td>Trip file</td><td>Waybill / delivery note, seal, custody signatures, demurrage, accessorials, profitability, live GPS, status rollback (Owner / GM).</td></tr>
+      <tr><td>Invoices &amp; Billing</td><td>Draft → Send → Paid / Void. 12% VAT + EWT. Proof of payment and BIR 2307. Dual-control void/retract.</td></tr>
+      <tr><td>Trucks &amp; Fuel</td><td>Plate, type, GVWR / tare / CBM, status. Assign a driver and a helper per truck. Diesel logs and km/L.</td></tr>
+      <tr><td>Drivers &amp; Helpers</td><td>Licensed drivers (LTO, restrictions, expiry, app email) and helpers / pahinante assigned to the same truck.</td></tr>
+      <tr><td>Truck Bans &amp; Hours</td><td>MMDA-style windows (EDSA, C5, Makati, and your own). “In effect now” badges at booking.</td></tr>
+      <tr><td>Rate Card Matrix</td><td>Origin → destination × truck type: base rate, toll estimate, lead hours.</td></tr>
+      <tr><td>Shippers &amp; Clients</td><td>Client master: TIN, contacts, billing address, payment terms.</td></tr>
+      <tr><td>General Ledger</td><td>Double-entry books, trial balance, P&amp;L, AR and per-truck costs (fuel, RFID/tolls, wages, PMS).</td></tr>
+      <tr><td>Owner Dashboard</td><td>Active loads, overweight/demurrage flags, collections aging, utilization, rankings.</td></tr>
+      <tr><td>Roles &amp; permissions</td><td>Invite teammates, custom roles, permission matrix, audit log.</td></tr>
+      <tr><td>Company &amp; backup</td><td>TIN/address, invites, CSV/weekly backup, optional evidence folder for BIR/claims copies.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Driver phone app — features</h2>
+  <ul>
+    <li>Sign in with the same email the company invited (must also be on the Driver Roster).</li>
+    <li>Sees only assigned open trips (not cancelled or invoiced).</li>
+    <li>Live GPS while the trip is open — office sees pings on the trip file.</li>
+    <li>Pickup and delivery GPS stamp.</li>
+    <li>Camera: seal photo (required), container, cargo.</li>
+    <li>Signatures: driver dispatch after seal; warehouse / consignee POD with receiver name.</li>
+    <li>Blocks mock GPS; alerts the office if GPS is off or spoofed.</li>
+  </ul>
+  <p>The app does not force the phone Location toggle on (that would need MDM). Helpers are not driver-app users.</p>
+
+  <div class="page-break"></div>
+
+  <h2>Philippine ops built in</h2>
+  <ul>
+    <li>TIN on company and clients; invoices labeled for a VAT-registered hauler.</li>
+    <li>12% VAT and configurable EWT (default 2%); reconcile with BIR 2307 and deposit slips.</li>
+    <li>Waybills / delivery notes with seal #, gate pass, plate, driver license, weight/volume, helper name.</li>
+    <li>DPWH RA 8794 overweight flag when cargo exceeds net payload (GVWR − tare).</li>
+    <li>LTO plates and license restriction codes; PH truck types (4W–14W, wingvan, chassis, tractor).</li>
+    <li>Accessorials: fuel surcharge, demurrage, overweight, multi-stop, port wharfage, toll reimbursement, helper crew, overnight parking.</li>
+    <li>Timezone for bans and Founding deadline: Asia/Manila.</li>
+  </ul>
+  <p>Tolls are estimates / reimbursements from your rate card — not a live Easytrip or Autosweep pull.</p>
+
+  <h2>Plans &amp; pricing</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Plan</th>
+        <th>Price</th>
+        <th>Trucks</th>
+        <th>Storage</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Free trial</td>
+        <td class="num">₱0</td>
+        <td class="num">5</td>
+        <td class="num">2 GB</td>
+        <td>1 month. 1 account, 1 role, 10 trips. Then subscribe to keep writing.</td>
+      </tr>
+      <tr>
+        <td>Founding</td>
+        <td class="num">₱899 / mo year 1</td>
+        <td class="num">5 included</td>
+        <td class="num">5 GB</td>
+        <td>New paid signups through 31 Dec 2026. After year 1: ₱1,599/mo, <em>keep 5 trucks</em>.</td>
+      </tr>
+      <tr>
+        <td>List</td>
+        <td class="num">₱1,599 / mo</td>
+        <td class="num">2 included</td>
+        <td class="num">5 GB</td>
+        <td>For companies that miss the Founding cutoff. Same product as Founding.</td>
+      </tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>Extra trucks: <strong>₱150 / truck / month</strong> (up to 200 billable).</li>
+    <li>Extra photo storage: <strong>₱99 / GB / month</strong>.</li>
+    <li>Pay a year up front: <strong>15% off</strong>.</li>
+    <li>Pay with GCash, Maya, card, or QR Ph via PayMongo.</li>
+  </ul>
+
+  <h2>FAQ</h2>
+
+  <div class="qa">
+    <strong>What is CasinFreight in one sentence?</strong>
+    Software for a Philippine trucking company: office dispatch/billing/ledger on the web, driver GPS and e-POD on the phone.
+  </div>
+  <div class="qa">
+    <strong>Is this a marketplace where shippers post loads?</strong>
+    No. It is for one fleet and that fleet’s clients. Shippers do not get a self-serve portal.
+  </div>
+  <div class="qa">
+    <strong>Can we try it before paying?</strong>
+    Yes. Free is a 1-month trial with 5 trucks, 1 login, and 10 trips. After the month, subscribe to keep dispatching.
+  </div>
+  <div class="qa">
+    <strong>How do we add a helper on the truck?</strong>
+    Open Drivers &amp; Helpers → add a crew member as Helper / pahinante. Then edit the truck and assign Driver and Helper. New Load fills both from the truck.
+  </div>
+  <div class="qa">
+    <strong>Does the helper use the phone app?</strong>
+    No. Only the licensed driver invited as role Driver, with matching roster email, uses the driver app.
+  </div>
+  <div class="qa">
+    <strong>How does the driver log in?</strong>
+    Invite them under Company with role Driver, put the same email on the Driver Roster, then they sign in on the CasinFreight Driver app with email and password. There is no Google login.
+  </div>
+  <div class="qa">
+    <strong>Can the office see the truck live?</strong>
+    Yes, while the trip is open and the driver has GPS on. The office trip file shows pings. You can also open the point in Google Maps. There is no separate nationwide map product.
+  </div>
+  <div class="qa">
+    <strong>Do you pull Easytrip / Autosweep automatically?</strong>
+    No. Tolls are rate-card estimates and reimbursements you record. The ledger has a Tolls &amp; RFID account.
+  </div>
+  <div class="qa">
+    <strong>Is overweight per axle or DPWH weighbridge math?</strong>
+    Overweight is cargo kg versus that truck’s net payload (GVWR minus tare), with RA 8794 messaging. It is not an axle-by-axle calculator.
+  </div>
+  <div class="qa">
+    <strong>Does billing handle VAT and EWT?</strong>
+    Yes. 12% VAT and EWT on invoices, plus proof of payment and BIR 2307 reconcile. The general ledger is double-entry.
+  </div>
+  <div class="qa">
+    <strong>How many people can log in on Free?</strong>
+    One account and one role (Owner). Subscribe to invite dispatchers, billing, and drivers.
+  </div>
+  <div class="qa">
+    <strong>What happens after Founding’s first year?</strong>
+    Price becomes ₱1,599/month. You keep the 5-truck allowance. You are not moved to List (List is 2 trucks for new companies after the cutoff).
+  </div>
+  <div class="qa">
+    <strong>How do we pay?</strong>
+    In Revenue &amp; plans, choose trucks and monthly or annual, then PayMongo checkout (GCash, Maya, card, QR Ph).
+  </div>
+  <div class="qa">
+    <strong>Where do we start?</strong>
+    casinfreight.com — create the company, or join with the invite link from the owner.
+  </div>
+
+  <p class="foot">
+    CasinFreight is a product of CasinWorks. Prices and caps as of August 2026. Founding eligibility ends 31 December 2026, Asia/Manila.
+    Web: casinfreight.com
+  </p>
+</body>
+</html>

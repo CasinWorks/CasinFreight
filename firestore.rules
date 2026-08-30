@@ -36,9 +36,83 @@ service cloud.firestore {
     }
 
     function isPlatformAdmin() {
-      return signedIn()
-        && request.auth.token.email is string
-        && request.auth.token.email.lower() in ['christianjoshuacasin@gmail.com'];
+      return signedIn() && (
+        request.auth.token.admin == true
+        || (
+          request.auth.token.email is string
+          && request.auth.token.email.lower() in ['christianjoshuacasin@gmail.com']
+        )
+      );
+    }
+
+    function companyDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)).data;
+    }
+
+    function subData(companyId) {
+      return companyDoc(companyId).subscription;
+    }
+
+    function isFreePlan(companyId) {
+      return !exists(/databases/$(database)/documents/companies/$(companyId))
+        || !companyDoc(companyId).keys().hasAny(['subscription'])
+        || !subData(companyId).keys().hasAny(['plan_id'])
+        || subData(companyId).plan_id == 'plan_free';
+    }
+
+    function billedTrucks(companyId) {
+      return subData(companyId).keys().hasAny(['billed_truck_count'])
+        && subData(companyId).billed_truck_count is number
+        ? int(subData(companyId).billed_truck_count)
+        : 0;
+    }
+
+    function includedTruckCap(companyId) {
+      return subData(companyId).keys().hasAny(['included_trucks'])
+        && subData(companyId).included_trucks is number
+        && int(subData(companyId).included_trucks) > 0
+        ? int(subData(companyId).included_trucks)
+        : (subData(companyId).keys().hasAny(['pricing_tier']) && subData(companyId).pricing_tier == 'list' ? 2 : 5);
+    }
+
+    function paidTruckCap(companyId) {
+      return subData(companyId).keys().hasAny(['plan_id']) && subData(companyId).plan_id == 'plan_promo'
+        ? (billedTrucks(companyId) > 0 ? billedTrucks(companyId) : 1)
+        : (billedTrucks(companyId) > includedTruckCap(companyId) ? billedTrucks(companyId) : includedTruckCap(companyId));
+    }
+
+    function truckCapUnclamped(companyId) {
+      return isFreePlan(companyId) ? 5 : paidTruckCap(companyId);
+    }
+
+    function truckCap(companyId) {
+      return truckCapUnclamped(companyId) > 200
+        ? 200
+        : (truckCapUnclamped(companyId) < 1 ? 1 : truckCapUnclamped(companyId));
+    }
+
+    function isTruckSlot(id, companyId) {
+      return id.matches('^slot-truck-(0|[1-9][0-9]{0,2})$')
+        && int(id.split('-')[2]) < truckCap(companyId);
+    }
+
+    function storageAddonGb(companyId) {
+      return subData(companyId).keys().hasAny(['storage_addon_gb'])
+        && subData(companyId).storage_addon_gb is number
+        && int(subData(companyId).storage_addon_gb) > 0
+        ? int(subData(companyId).storage_addon_gb)
+        : 0;
+    }
+
+    function storageBaseGb(companyId) {
+      return subData(companyId).keys().hasAny(['plan_id'])
+        && (subData(companyId).plan_id == 'plan_founding' || subData(companyId).plan_id == 'plan_promo')
+        ? 5
+        : 2;
+    }
+
+    function storageCapBytes(companyId) {
+      return (storageBaseGb(companyId) + storageAddonGb(companyId)) * 1024 * 1024 * 1024;
     }
 
     function canAccessCompany(companyId) {
@@ -118,17 +192,18 @@ service cloud.firestore {
     }
 
     function currentStorageUsed() {
-      return resource.data.keys().hasAny(['storageUsedBytes']) && resource.data.storageUsedBytes is int
-        ? resource.data.storageUsedBytes
+      return resource.data.keys().hasAny(['storageUsedBytes']) && resource.data.storageUsedBytes is number
+        ? int(resource.data.storageUsedBytes)
         : 0;
     }
 
-    function storageUsageNotDecreased() {
+    function storageUsageWithinPlan(companyId) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['storageUsedBytes'])
         || (
-          request.resource.data.storageUsedBytes is int
-          && request.resource.data.storageUsedBytes >= currentStorageUsed()
-          && request.resource.data.storageUsedBytes - currentStorageUsed() < 8 * 1024 * 1024
+          request.resource.data.storageUsedBytes is number
+          && int(request.resource.data.storageUsedBytes) >= currentStorageUsed()
+          && int(request.resource.data.storageUsedBytes) - currentStorageUsed() < 8 * 1024 * 1024
+          && int(request.resource.data.storageUsedBytes) <= storageCapBytes(companyId)
         );
     }
 
@@ -145,6 +220,7 @@ service cloud.firestore {
           stillOwnsCreatedCompany(request.resource.data.companyId)
           || (
             matchingInvite(request.resource.data.companyId)
+            && !isFreePlan(request.resource.data.companyId)
             && request.resource.data.role == inviteRole()
             && request.resource.data.role.lower() != 'owner'
           )
@@ -176,6 +252,7 @@ service cloud.firestore {
         && request.auth.token.email.lower() == email;
       allow create, update: if signedIn()
         && isCompanyOwner(request.resource.data.companyId)
+        && !isFreePlan(request.resource.data.companyId)
         && request.resource.data.role is string
         && request.resource.data.role.lower() != 'owner';
       allow delete: if signedIn() && (
@@ -196,7 +273,7 @@ service cloud.firestore {
           canAccessCompany(companyId)
           && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['subscription', 'subscriptionTier', 'createdBy', 'id', 'salesAgentId'])
-          && storageUsageNotDecreased()
+          && storageUsageWithinPlan(companyId)
           && (
             isCompanyOwner(companyId)
             || hasPerm(companyId, 'settings.manage')
@@ -212,6 +289,7 @@ service cloud.firestore {
             inCompany(companyId)
             && request.auth.uid == memberId
             && matchingInvite(companyId)
+            && !isFreePlan(companyId)
             && request.resource.data.role == inviteRole()
             && request.resource.data.role.lower() != 'owner'
           );
@@ -227,12 +305,15 @@ service cloud.firestore {
 
       match /roles/{roleId} {
         allow read: if canAccessCompany(companyId);
-        allow write: if isCompanyOwner(companyId);
+        allow create: if isCompanyOwner(companyId)
+          && (isPlatformAdmin() || !isFreePlan(companyId) || roleId == 'Owner');
+        allow update, delete: if isCompanyOwner(companyId);
       }
 
       match /trips/{tripId} {
         allow read: if canAccessCompany(companyId);
-        allow create: if hasPerm(companyId, 'trips.create');
+        allow create: if hasPerm(companyId, 'trips.create')
+          && (isPlatformAdmin() || !isFreePlan(companyId) || tripId.matches('^slot-trip-[0-9]$'));
         allow update: if canWriteTrip(companyId, tripId);
         allow delete: if hasPerm(companyId, 'trips.delete');
       }
@@ -256,7 +337,9 @@ service cloud.firestore {
 
       match /trucks/{docId} {
         allow read: if canAccessCompany(companyId);
-        allow write: if hasPerm(companyId, 'fleet.crud');
+        allow create: if hasPerm(companyId, 'fleet.crud')
+          && (isPlatformAdmin() || isTruckSlot(docId, companyId));
+        allow update, delete: if hasPerm(companyId, 'fleet.crud');
       }
 
       match /drivers/{docId} {

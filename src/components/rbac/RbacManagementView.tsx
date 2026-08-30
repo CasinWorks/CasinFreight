@@ -32,6 +32,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { RbacRole, SYSTEM_PERMISSIONS, PermissionCategory } from '../../types/rbac';
 import { RoleEditorModal } from './RoleEditorModal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 import { closeIfBackdrop } from '../../lib/modal';
 
 const ROLE_COLOR_MAP: Record<RbacRole['color'], { bg: string; border: string; text: string; badge: string; ring: string }> = {
@@ -258,6 +259,9 @@ export const RbacManagementView: React.FC = () => {
                 <p className="text-xs text-slate-500 mt-0.5">
                   Roles and team seats synced to Firestore {firebaseProjectId ? `• ${firebaseProjectId}` : ''}
                 </p>
+                <div className="mt-3 max-w-xl">
+                  <FeatureHowTo feature="rbac" />
+                </div>
               </div>
             </div>
           </div>

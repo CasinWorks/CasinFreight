@@ -1,16 +1,26 @@
-const DEFAULT_PLATFORM_ADMINS = [
-  'christianjoshuacasin@gmail.com',
-];
+import type { User as FirebaseAuthUser } from 'firebase/auth';
 
-export function platformAdminEmails(): string[] {
-  const extra = (import.meta.env.VITE_PLATFORM_ADMIN_EMAILS || '')
-    .split(',')
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-  return [...new Set([...DEFAULT_PLATFORM_ADMINS, ...extra])];
-}
-
-export function isPlatformAdminEmail(email?: string): boolean {
-  if (!email) return false;
-  return platformAdminEmails().includes(email.trim().toLowerCase());
+/** Platform admin is `request.auth.token.admin`, stamped by POST /api/session. Not an email list in the bundle. */
+export async function refreshPlatformAdminClaim(user: FirebaseAuthUser): Promise<boolean> {
+  try {
+    const token = await user.getIdToken();
+    const response = await fetch('/api/session', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { refreshed?: boolean };
+      if (data.refreshed) {
+        await user.getIdToken(true);
+      }
+    }
+  } catch {
+    // Local Vite without Admin SDK still works after prod has stamped the claim once.
+  }
+  const result = await user.getIdTokenResult();
+  return result.claims.admin === true;
 }

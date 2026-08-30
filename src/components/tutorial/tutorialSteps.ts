@@ -46,14 +46,14 @@ export const tutorialSteps: TutorialStep[] = [
   {
     id: 'drivers',
     target: '[data-tutorial="nav-drivers"]',
-    title: 'Drivers',
-    body: 'Add your drivers and see who is assigned to a trip.',
+    title: 'Drivers & helpers',
+    body: 'Add licensed drivers and a helper / pahinante for each truck. Assign both on the truck record.',
     placement: 'right',
     tab: 'drivers',
     requires: 'drivers',
     emptyFallback: {
       title: 'Add your first driver',
-      body: 'The roster is empty until you add someone. Tap Add Driver when you are ready.',
+      body: 'The roster is empty until you add a driver or helper.',
       target: '[data-tutorial="drivers-page"]',
     },
   },

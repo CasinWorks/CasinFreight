@@ -1,8 +1,11 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { createRequire } from 'node:module';
 import path from 'path';
 import {defineConfig, type Plugin} from 'vite';
 import {runPayMongoAction} from './src/lib/paymongoBilling';
+
+const nodeRequire = createRequire(import.meta.url);
 
 function jsonDevApi(
   name: string,
@@ -55,6 +58,10 @@ export default defineConfig(() => {
       jsonDevApi('paymongo-dev-api', '/api/paymongo', (body, origin, authHeader) => {
         const action = body.action || 'checkout';
         return runPayMongoAction(action, body, origin, authHeader);
+      }),
+      jsonDevApi('session-dev-api', '/api/session', async (_body, _origin, authHeader) => {
+        const { stampAdminSession } = nodeRequire('./api/firebaseAdmin.js');
+        return stampAdminSession(authHeader);
       }),
     ],
     resolve: {

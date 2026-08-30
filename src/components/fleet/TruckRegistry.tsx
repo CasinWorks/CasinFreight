@@ -20,10 +20,12 @@ import {
 } from 'lucide-react';
 import { useFreight, getTargetKmPerLiter } from '../../context/FreightContext';
 import { Truck, TruckType, TruckStatus, FuelLog } from '../../types';
+import { helperCrew, licensedDrivers } from '../../lib/crew';
 import { FuelLogModal } from './FuelLogModal';
 import { closeIfBackdrop } from '../../lib/modal';
 import { TruckFuelDetailModal } from './TruckFuelDetailModal';
 import { FuelAnalyticsDashboard } from './FuelAnalyticsDashboard';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 export const TruckRegistry: React.FC = () => {
   const { 
@@ -64,6 +66,7 @@ export const TruckRegistry: React.FC = () => {
   const [maxVolumeCbm, setMaxVolumeCbm] = useState<number>(55);
   const [status, setStatus] = useState<TruckStatus>('Available');
   const [assignedDriverId, setAssignedDriverId] = useState<string>('');
+  const [assignedHelperId, setAssignedHelperId] = useState<string>('');
   const [yearModel, setYearModel] = useState<number>(2022);
   const [fuelType, setFuelType] = useState<'Diesel' | 'Euro 4 Diesel'>('Euro 4 Diesel');
   const [lastOdometerKm, setLastOdometerKm] = useState<number>(95000);
@@ -139,6 +142,7 @@ export const TruckRegistry: React.FC = () => {
     setBrandModel('Isuzu Giga CYZ52');
     setStatus('Available');
     setAssignedDriverId('');
+    setAssignedHelperId('');
     setYearModel(2022);
     setMaintenanceNote('');
     setShowModal(true);
@@ -154,6 +158,7 @@ export const TruckRegistry: React.FC = () => {
     setMaxVolumeCbm(trk.maxVolumeCbm);
     setStatus(trk.status);
     setAssignedDriverId(trk.assignedDriverId || '');
+    setAssignedHelperId(trk.assignedHelperId || '');
     setYearModel(trk.yearModel);
     setFuelType(trk.fuelType);
     setLastOdometerKm(trk.lastOdometerKm);
@@ -196,6 +201,7 @@ export const TruckRegistry: React.FC = () => {
         maxVolumeCbm: Number(maxVolumeCbm),
         status,
         assignedDriverId: assignedDriverId || undefined,
+        assignedHelperId: assignedHelperId || undefined,
         yearModel: Number(yearModel),
         fuelType,
         lastOdometerKm: Number(lastOdometerKm),
@@ -211,6 +217,7 @@ export const TruckRegistry: React.FC = () => {
         maxVolumeCbm: Number(maxVolumeCbm),
         status,
         assignedDriverId: assignedDriverId || undefined,
+        assignedHelperId: assignedHelperId || undefined,
         yearModel: Number(yearModel),
         fuelType,
         lastOdometerKm: Number(lastOdometerKm),
@@ -255,6 +262,9 @@ export const TruckRegistry: React.FC = () => {
                 </span>
               )}
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="trucks" />
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -356,6 +366,7 @@ export const TruckRegistry: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredTrucks.map((trk) => {
               const assignedDriver = drivers.find(d => d.id === trk.assignedDriverId);
+              const assignedHelper = drivers.find(d => d.id === trk.assignedHelperId);
               const fuelSummary = getTruckFuelSummary(trk.id);
               const isOptimal = fuelSummary.efficiencyRating === 'Optimal';
               const isNormal = fuelSummary.efficiencyRating === 'Normal';
@@ -473,10 +484,15 @@ export const TruckRegistry: React.FC = () => {
 
                     {/* Driver & Odometer */}
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                      <div>
-                        Driver: <strong className="text-slate-800">{assignedDriver ? assignedDriver.name.split(' ')[0] : 'Unassigned'}</strong>
+                      <div className="min-w-0">
+                        <div>
+                          Driver: <strong className="text-slate-800">{assignedDriver ? assignedDriver.name.split(' ')[0] : 'Unassigned'}</strong>
+                        </div>
+                        <div className="text-[11px] mt-0.5">
+                          Helper: <strong className="text-slate-800">{assignedHelper ? assignedHelper.name.split(' ')[0] : 'None'}</strong>
+                        </div>
                       </div>
-                      <div className="font-mono text-[11px]">
+                      <div className="font-mono text-[11px] shrink-0">
                         {trk.lastOdometerKm.toLocaleString()} km
                       </div>
                     </div>
@@ -634,17 +650,39 @@ export const TruckRegistry: React.FC = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Assigned Driver</label>
                   <select
                     value={assignedDriverId}
-                    onChange={(e) => setAssignedDriverId(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setAssignedDriverId(next);
+                      if (next && next === assignedHelperId) setAssignedHelperId('');
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
                   >
                     <option value="">-- None (Rotate) --</option>
-                    {drivers.map(d => (
+                    {licensedDrivers(drivers).map(d => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Assigned Helper / Pahinante</label>
+                  <select
+                    value={assignedHelperId}
+                    onChange={(e) => setAssignedHelperId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">-- None --</option>
+                    {helperCrew(drivers).filter((d) => d.id !== assignedDriverId).map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                  {helperCrew(drivers).length === 0 && (
+                    <p className="text-[10px] text-slate-400 mt-1">Add a helper on Drivers &amp; Helpers first, then assign them here.</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
                   <label className="block font-semibold text-slate-700 mb-1">Status</label>
                   <select
                     value={status}
@@ -657,7 +695,6 @@ export const TruckRegistry: React.FC = () => {
                     <option value="Maintenance">Maintenance</option>
                   </select>
                 </div>
-              </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Maintenance / Repair Note</label>

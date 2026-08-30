@@ -27,6 +27,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { JournalEntry, ChartOfAccount, AccountType } from '../../types';
 import { NewJournalEntryModal } from './NewJournalEntryModal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 type LedgerSubTab = 
   | 'general_ledger' 
@@ -96,6 +97,9 @@ export const FreightLedgerView: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">
               Official double-entry books, chart of accounts, automated journal entries, client AR sub-ledgers, and trial balance.
             </p>
+            <div className="mt-3 max-w-xl print:hidden">
+              <FeatureHowTo feature="ledger" />
+            </div>
           </div>
 
           {/* Action Buttons */}

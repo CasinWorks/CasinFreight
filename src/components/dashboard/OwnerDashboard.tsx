@@ -21,6 +21,7 @@ import { TripEfficiencyChart } from './TripEfficiencyChart';
 import { DriverLeaderboard } from './DriverLeaderboard';
 import { OwnerAnalyticsCharts } from './OwnerAnalyticsCharts';
 import { useFreight } from '../../context/FreightContext';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; onSelectInvoice: (invoiceId: string) => void }> = ({
   onSelectTrip,
@@ -108,6 +109,9 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
                 ? 'Figures come from this company’s trips, invoices, and trucks.'
                 : 'No bookings yet. Cards stay at zero until you record trips and invoices.'}
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="dashboard" />
+            </div>
           </div>
 
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 text-xs">

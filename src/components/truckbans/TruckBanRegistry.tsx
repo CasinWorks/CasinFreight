@@ -19,6 +19,7 @@ import {
   formatBanDays,
   formatBanWindows,
 } from '../../lib/truckBans';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 const TRUCK_TYPES: TruckType[] = [
   '4-Wheeler Closed Van',
@@ -157,6 +158,9 @@ export const TruckBanRegistry: React.FC = () => {
             <p className="text-xs text-slate-500 mt-0.5">
               Record LGU / MMDA truck-ban places, the area they cover, and the hours they apply. Dispatch sees a warning when a booking hits that corridor.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="truckbans" />
+            </div>
           </div>
 
           {canEdit && (

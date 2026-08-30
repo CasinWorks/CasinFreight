@@ -21,6 +21,7 @@ import { UserRole, TruckType } from '../../types';
 import { DeleteCompanyModal } from './DeleteCompanyModal';
 import { WorkspaceBackupModal } from './WorkspaceBackupModal';
 import { closeIfBackdrop } from '../../lib/modal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface OrgSetupModalProps {
   isOpen: boolean;
@@ -204,6 +205,7 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
 
         {/* Body based on step */}
         <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs text-slate-800">
+          <FeatureHowTo feature="orgsetup" compact />
           
           {/* STEP 1: Company Profile */}
           {step === 1 && (

@@ -27,6 +27,7 @@ interface DeliveryNoteModalProps {
   trip: Trip;
   truck?: TruckType;
   driver?: Driver;
+  helper?: Driver;
   client?: Client;
   company: Company;
 }
@@ -37,6 +38,7 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
   trip: tripProp,
   truck,
   driver,
+  helper,
   client,
   company
 }) => {
@@ -203,7 +205,7 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
           </div>
 
           {/* Transport Unit & Crew Details */}
-          <div className="bg-blue-50/50 border border-blue-200/80 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-slate-700">
+          <div className="bg-blue-50/50 border border-blue-200/80 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-5 gap-3 text-slate-700">
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase">Assigned Truck</span>
               <div className="font-mono font-bold text-slate-900 text-xs mt-0.5">
@@ -218,6 +220,14 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
                 {driver ? driver.name : 'Fleet Driver'}
               </div>
               <span className="text-[10px] text-slate-500 font-mono">Lic: {driver?.licenseNo || 'PRO-LTO'}</span>
+            </div>
+
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Helper / Pahinante</span>
+              <div className="font-bold text-slate-900 text-xs mt-0.5">
+                {helper ? helper.name : 'None assigned'}
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono">{helper?.phone || '—'}</span>
             </div>
 
             <div>

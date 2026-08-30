@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { AppNotification, NotificationCategory } from '../../types';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface NotificationDrawerProps {
   isOpen: boolean;
@@ -131,6 +132,9 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-slate-500">Live operational dispatch, driver licenses & billing reminders</p>
+              <div className="mt-2">
+                <FeatureHowTo feature="notifications" compact />
+              </div>
             </div>
           </div>
 

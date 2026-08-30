@@ -23,6 +23,8 @@ import { TruckType } from '../../types';
 import { matchingTruckBans } from '../../lib/truckBans';
 import { closeIfBackdrop } from '../../lib/modal';
 import { TruckBanAlert } from '../truckbans/TruckBanAlert';
+import { helperCrew, licensedDrivers } from '../../lib/crew';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface NewTripModalProps {
   isOpen: boolean;
@@ -47,6 +49,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
   // Form State
   const [selectedTruckId, setSelectedTruckId] = useState<string>('');
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+  const [selectedHelperId, setSelectedHelperId] = useState<string>('');
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   
   // Origin & Destination Zones
@@ -96,6 +99,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
         if (trucks[0].assignedDriverId) {
           setSelectedDriverId(trucks[0].assignedDriverId);
         }
+        setSelectedHelperId(trucks[0].assignedHelperId || '');
       }
       if (clients.length > 0 && !selectedClientId) {
         setSelectedClientId(clients[0].id);
@@ -151,6 +155,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     if (trk?.assignedDriverId) {
       setSelectedDriverId(trk.assignedDriverId);
     }
+    setSelectedHelperId(trk?.assignedHelperId || '');
   };
 
   if (!isOpen) return null;
@@ -219,6 +224,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     const createdTrip = addTrip({
       truckId: selectedTruckId,
       driverId: selectedDriverId,
+      helperId: selectedHelperId || undefined,
       clientId: selectedClientId,
       originZone,
       originAddress: originAddress || `${originZone} CFS Facility`,
@@ -283,16 +289,24 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
               </p>
             </div>
           </div>
-          <button
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:block w-64">
+              <FeatureHowTo feature="calculator" compact />
+            </div>
+            <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
+          </div>
         </div>
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} className="overflow-y-auto p-4 md:p-6 space-y-6 text-slate-800 flex-1">
+          <div className="sm:hidden">
+            <FeatureHowTo feature="calculator" compact />
+          </div>
           
           {/* Section 1: Fleet & Load Calculation (Crucial Spec Requirement) */}
           <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4">
@@ -309,7 +323,7 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
             </div>
 
             {/* Truck Selector */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Select Truck from Fleet *
@@ -335,14 +349,36 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
                 </label>
                 <select
                   value={selectedDriverId}
-                  onChange={(e) => setSelectedDriverId(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSelectedDriverId(next);
+                    if (next && next === selectedHelperId) setSelectedHelperId('');
+                  }}
                   required
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
                 >
                   <option value="">-- Choose Driver --</option>
-                  {drivers.map(drv => (
+                  {licensedDrivers(drivers).map(drv => (
                     <option key={drv.id} value={drv.id}>
                       {drv.name} (LTO: {drv.licenseRestrictions}) [{drv.status}]
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Helper / pahinante
+                </label>
+                <select
+                  value={selectedHelperId}
+                  onChange={(e) => setSelectedHelperId(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
+                >
+                  <option value="">-- None --</option>
+                  {helperCrew(drivers).filter((h) => h.id !== selectedDriverId).map(h => (
+                    <option key={h.id} value={h.id}>
+                      {h.name} [{h.status}]
                     </option>
                   ))}
                 </select>

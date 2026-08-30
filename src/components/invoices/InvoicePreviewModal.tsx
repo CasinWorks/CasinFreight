@@ -33,6 +33,7 @@ import { safeHttpsUrl } from '../../lib/safeUrl';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface InvoicePreviewModalProps {
   invoiceId: string | null;
@@ -93,6 +94,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const trip = trips.find(t => t.id === invoice.tripId);
   const truck = trip ? trucks.find(t => t.id === trip.truckId) : undefined;
   const driver = trip ? drivers.find(d => d.id === trip.driverId) : undefined;
+  const helper = trip ? drivers.find(d => d.id === trip.helperId) : undefined;
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
   const vatAmount = (subtotal * vatPercent) / 100;
@@ -290,6 +292,10 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
           </div>
 
+          <div className="px-4 py-2 border-b border-slate-200 bg-white print:hidden">
+            <FeatureHowTo feature="invoices" compact />
+          </div>
+
           {/* Retraction Pending Banner */}
           {isRetractionPending && invoice.activeRetractionRequest && (
             <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 print:hidden">
@@ -477,6 +483,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   <div><strong>Route:</strong> {trip?.originZone} → {trip?.destinationZone}</div>
                   <div><strong>Assigned Truck:</strong> <span className="font-mono font-bold">{truck?.plateNumber}</span> ({truck?.type})</div>
                   <div><strong>Authorized Driver:</strong> {driver?.name} (License: {driver?.licenseNo})</div>
+                  {helper && <div><strong>Helper / Pahinante:</strong> {helper.name}</div>}
                   <div><strong>Cargo Weight:</strong> {((trip?.cargoWeightKg || 0) / 1000).toFixed(2)} MT Palletized Freight</div>
                 </div>
               </div>

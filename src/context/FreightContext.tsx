@@ -87,11 +87,14 @@ import {
   type WorkspaceBackup,
 } from '../lib/workspaceBackup';
 import { PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, SAAS_PLANS, ALL_PLANS, addBillingMonths, getPlanLimits, getSaasPlans, hasReachedLimit, isFoundingPeriodExpired, isFreeTrialExpired, isUnlockedPlanId, makeFreeSubscription, makePromoSubscription, type AdminPlanGrant } from '../config/plans';
+import { MIN_SIGNUP_PASSWORD_LENGTH } from '../config/auth';
 import { paidTruckLimit, FOUNDING_INCLUDED_TRUCKS, FOUNDING_BASE_PHP, storageLimitBytes, storageLimitGb, withHostedRollover, hostedPricingForCheckout, hostedPricingFields, addCalendarYears, calculateSubscriptionPrice } from '../lib/subscriptionPrice';
+import { nextSlotId, TRIP_SLOT_PREFIX, TRUCK_SLOT_PREFIX } from '../lib/planSlots';
 import { uploadCompanyFile } from '../lib/uploads';
-import { isPlatformAdminEmail } from '../config/platformAdmin';
+import { refreshPlatformAdminClaim } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 import { isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
+import { isHelperCrew } from '../lib/crew';
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
   switch (type) {
@@ -401,7 +404,7 @@ function mapAuthError(error: unknown): string {
   if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('invalid-login')) {
     return 'Wrong email or password. If you were invited as a new hire, open the join link from your owner and choose a password there. Do not create a new company.';
   }
-  if (code.includes('weak-password')) return 'Password must be at least 6 characters.';
+  if (code.includes('weak-password')) return `Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`;
   if (code.includes('invalid-email')) return 'Enter a valid work email.';
   if (code.includes('unauthorized-continue-uri') || code.includes('invalid-continue-uri')) {
     return 'Add casin-freight.vercel.app to Firebase Authentication → Settings → Authorized domains.';
@@ -429,6 +432,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [currentRole, setCurrentRole] = useState<UserRole>('Owner');
   const [currentUserId, setCurrentUserId] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -467,6 +471,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRbacAuditLogs([]);
     setCurrentRole('Owner');
     setCurrentUserId('');
+    setIsPlatformAdmin(false);
     setTrucks([]);
     setDrivers([]);
     setClients([]);
@@ -596,7 +601,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.error('Could not persist subscription period or Founding rollover', error);
       }
     }
-    const nextRoles = ensureDefaultSystemRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
+    const nextRoles = nextSub.plan_id === PLAN_FREE_ID
+      ? (loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE])
+      : ensureDefaultSystemRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
     const seenTutorial = Boolean(profile?.has_seen_tutorial) || hasSeenTutorialLocally(uid);
     const uniqueMembers = Object.values(
       loadedMembers.reduce<Record<string, User>>((acc, member) => {
@@ -702,6 +709,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       try {
+        setIsPlatformAdmin(await refreshPlatformAdminClaim(fbUser));
         for (let wait = 0; wait < 40 && seedingRef.current; wait += 1) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
@@ -988,7 +996,6 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }).catch(console.error);
   };
 
-  const isPlatformAdmin = isPlatformAdminEmail(currentUser.email) || isPlatformAdminEmail(authEmail);
   const canManageBilling = isPlatformAdmin
     || currentUser.role === 'Owner'
     || currentUser.role.toLowerCase().includes('owner');
@@ -1349,6 +1356,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
 
+    if (payload.password.length < MIN_SIGNUP_PASSWORD_LENGTH) {
+      return { success: false, error: `Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.` };
+    }
+
     seedingRef.current = true;
     try {
       const email = payload.email.trim();
@@ -1407,6 +1418,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }): Promise<{ success: boolean; error?: string }> => {
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
+    }
+    if (payload.password.length < MIN_SIGNUP_PASSWORD_LENGTH) {
+      return { success: false, error: `Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.` };
     }
 
     seedingRef.current = true;
@@ -1649,27 +1663,70 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck | null => {
     if (requireUpgrade(!canAddTruck)) return null;
+    const truckId = nextSlotId(TRUCK_SLOT_PREFIX, trucks.map((t) => t.id), truckLimit);
+    if (!truckId) return null;
     const netPayloadKg = Math.max(0, truckData.gvwrKg - truckData.tareWeightKg);
+    const helperId = truckData.assignedHelperId && truckData.assignedHelperId !== truckData.assignedDriverId
+      ? truckData.assignedHelperId
+      : undefined;
     const newTruck: Truck = {
       ...truckData,
-      id: `trk-${Date.now().toString().slice(-4)}`,
+      id: truckId,
       companyId: company.id,
       netPayloadKg,
+      assignedHelperId: helperId,
     };
     setTrucks(prev => [newTruck, ...prev]);
+    if (newTruck.assignedDriverId || helperId) {
+      setDrivers((prev) => prev.map((d) => {
+        if (d.id === newTruck.assignedDriverId || d.id === helperId) {
+          return { ...d, assignedTruckId: truckId };
+        }
+        return d;
+      }));
+    }
     return newTruck;
   };
 
   const updateTruck = (id: string, updates: Partial<Truck>) => {
-    setTrucks(prev => prev.map(t => {
+    const current = trucks.find((t) => t.id === id);
+    const nextDriver = 'assignedDriverId' in updates ? (updates.assignedDriverId || undefined) : current?.assignedDriverId;
+    const nextHelperRaw = 'assignedHelperId' in updates ? (updates.assignedHelperId || undefined) : current?.assignedHelperId;
+    const nextHelper = nextHelperRaw && nextHelperRaw !== nextDriver ? nextHelperRaw : undefined;
+    const crewChanged = 'assignedDriverId' in updates || 'assignedHelperId' in updates;
+
+    setTrucks((prev) => prev.map((t) => {
       if (t.id === id) {
         const gvwr = updates.gvwrKg !== undefined ? updates.gvwrKg : t.gvwrKg;
         const tare = updates.tareWeightKg !== undefined ? updates.tareWeightKg : t.tareWeightKg;
         const netPayloadKg = Math.max(0, gvwr - tare);
-        return { ...t, ...updates, netPayloadKg };
+        return {
+          ...t,
+          ...updates,
+          assignedDriverId: crewChanged ? nextDriver : t.assignedDriverId,
+          assignedHelperId: crewChanged ? nextHelper : t.assignedHelperId,
+          netPayloadKg,
+        };
       }
-      return t;
+      if (!crewChanged) return t;
+      return {
+        ...t,
+        assignedDriverId: nextDriver && t.assignedDriverId === nextDriver ? undefined : t.assignedDriverId,
+        assignedHelperId: nextHelper && t.assignedHelperId === nextHelper ? undefined : t.assignedHelperId,
+      };
     }));
+
+    if (crewChanged) {
+      setDrivers((prev) => prev.map((d) => {
+        if (d.id === nextDriver || d.id === nextHelper) {
+          return { ...d, assignedTruckId: id };
+        }
+        if (d.assignedTruckId === id) {
+          return { ...d, assignedTruckId: undefined };
+        }
+        return d;
+      }));
+    }
   };
 
   const deleteTruck = (id: string) => {
@@ -1683,13 +1740,52 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       companyId: company.id,
       totalTripsCompleted: 0,
       rating: 5.0,
+      crewRole: driverData.crewRole === 'helper' ? 'helper' : 'driver',
     };
     setDrivers(prev => [newDriver, ...prev]);
+    if (newDriver.assignedTruckId) {
+      const asHelper = isHelperCrew(newDriver);
+      const truckId = newDriver.assignedTruckId;
+      setTrucks((prev) => prev.map((t) => {
+        if (t.id !== truckId) {
+          return {
+            ...t,
+            assignedDriverId: t.assignedDriverId === newDriver.id ? undefined : t.assignedDriverId,
+            assignedHelperId: t.assignedHelperId === newDriver.id ? undefined : t.assignedHelperId,
+          };
+        }
+        const assignedDriverId = asHelper ? t.assignedDriverId : newDriver.id;
+        const assignedHelperId = asHelper ? newDriver.id : t.assignedHelperId;
+        return {
+          ...t,
+          assignedDriverId,
+          assignedHelperId: assignedHelperId === assignedDriverId ? undefined : assignedHelperId,
+        };
+      }));
+    }
     return newDriver;
   };
 
   const updateDriver = (id: string, updates: Partial<Driver>) => {
-    setDrivers(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    const previous = drivers.find((d) => d.id === id);
+    const nextRole = updates.crewRole !== undefined ? updates.crewRole : previous?.crewRole;
+    const nextTruckId = updates.assignedTruckId !== undefined ? (updates.assignedTruckId || undefined) : previous?.assignedTruckId;
+    const asHelper = nextRole === 'helper';
+    setDrivers((prev) => prev.map((d) => (
+      d.id === id ? { ...d, ...updates, crewRole: asHelper ? 'helper' : 'driver' } : d
+    )));
+    if (updates.assignedTruckId !== undefined || updates.crewRole !== undefined) {
+      setTrucks((prev) => prev.map((t) => {
+        let assignedDriverId = t.assignedDriverId === id ? undefined : t.assignedDriverId;
+        let assignedHelperId = t.assignedHelperId === id ? undefined : t.assignedHelperId;
+        if (nextTruckId && t.id === nextTruckId) {
+          if (asHelper) assignedHelperId = id;
+          else assignedDriverId = id;
+          if (assignedDriverId && assignedHelperId === assignedDriverId) assignedHelperId = undefined;
+        }
+        return { ...t, assignedDriverId, assignedHelperId };
+      }));
+    }
   };
 
   const deleteDriver = (id: string) => {
@@ -1778,7 +1874,6 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const addTrip = (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>): Trip | null => {
     if (requireUpgrade(!canAddTransaction)) return null;
-    tripsDirtyRef.current = true;
     const trk = trucks.find(t => t.id === tripData.truckId);
     const netCap = trk ? trk.netPayloadKg : 10000;
     const isOverweight = tripData.cargoWeightKg > netCap;
@@ -1787,7 +1882,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const randomSeq = Math.floor(1000 + Math.random() * 9000);
     const tripNumber = `CF-${new Date().getFullYear()}-${randomSeq}`;
     const waybillNumber = `WB-PH-${Date.now().toString().slice(-6)}`;
-    const tripId = `trp-${Date.now()}`;
+    const tripId = subscription.plan_id === PLAN_FREE_ID
+      ? nextSlotId(TRIP_SLOT_PREFIX, trips.map((t) => t.id), planLimits.maxTransactions || 10)
+      : `trp-${Date.now()}`;
+    if (!tripId) return null;
+    tripsDirtyRef.current = true;
 
     // Auto-calculate accessorials if overweight or fuel surcharge
     const accessorialsList = [...tripData.accessorials];

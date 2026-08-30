@@ -64,6 +64,7 @@ export interface Truck {
   maxVolumeCbm: number; // Cubic meters capacity
   status: TruckStatus;
   assignedDriverId?: string;
+  assignedHelperId?: string;
   currentTripId?: string;
   lastOdometerKm: number;
   fuelType: 'Diesel' | 'Euro 4 Diesel';
@@ -121,12 +122,15 @@ export interface TruckFuelSummary {
 }
 
 export type DriverStatus = 'Available' | 'On Duty' | 'Off Duty' | 'Leave';
+export type CrewRole = 'driver' | 'helper';
 
 export interface Driver {
   id: string;
   companyId: string;
   name: string;
   phone: string;
+  /** Driver is the default. Helper / pahinante rides with the truck and does not drive. */
+  crewRole?: CrewRole;
   licenseNo: string;
   licenseRestrictions: string; // e.g. "1, 2, 3" or "Heavy Articulated (8)"
   licenseExpiry: string;
@@ -374,6 +378,7 @@ export interface Trip {
   companyId: string;
   truckId: string;
   driverId: string;
+  helperId?: string;
   clientId: string;
   originZone: string;
   originAddress: string;

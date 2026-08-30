@@ -22,6 +22,7 @@ import {
   Check,
   Settings,
   HardDrive,
+  CircleHelp,
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { bansInEffectNow } from '../../lib/truckBans';
@@ -43,6 +44,7 @@ export type NavTab =
   | 'dashboard'
   | 'rbac'
   | 'orgsetup'
+  | 'help'
   | 'admin';
 
 type NavPermission =
@@ -124,6 +126,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       permission: 'pod_upload',
     },
     {
+      id: 'help',
+      label: 'How to',
+      icon: CircleHelp,
+      permission: 'pod_upload',
+    },
+    {
       id: 'exceptions',
       label: 'Exceptions',
       icon: AlertTriangle,
@@ -148,7 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const fleetItems: NavItemDef[] = [
     {
       id: 'drivers',
-      label: 'Driver Roster',
+      label: 'Drivers & Helpers',
       icon: Users,
       permission: 'driver_crud',
     },
@@ -261,7 +269,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const renderItem = (item: NavItemDef) => {
-    const hasAccess = item.id === 'admin' ? canManageBilling : canAccess(item.permission);
+    const hasAccess = item.id === 'admin' ? canManageBilling : item.id === 'help' ? true : canAccess(item.permission);
     const isActive = activeTab === item.id;
     const Icon = item.icon;
 

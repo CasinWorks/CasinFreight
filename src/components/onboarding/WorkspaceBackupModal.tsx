@@ -33,6 +33,7 @@ import {
   type DeviceEvidenceStatus,
 } from '../../lib/deviceEvidence';
 import { closeIfBackdrop } from '../../lib/modal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface WorkspaceBackupModalProps {
   isOpen: boolean;
@@ -248,6 +249,9 @@ export const WorkspaceBackupModal: React.FC<WorkspaceBackupModalProps> = ({ isOp
               <p className="text-xs text-slate-600 mt-1">
                 Restore is a merge by ID, not a wipe. Live records that are not in the file stay in Firestore.
               </p>
+              <div className="mt-2">
+                <FeatureHowTo feature="backup" compact />
+              </div>
             </div>
           </div>
           <button

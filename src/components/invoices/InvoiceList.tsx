@@ -27,6 +27,7 @@ import { useFreight } from '../../context/FreightContext';
 import { Invoice, InvoiceStatus } from '../../types';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface InvoiceListProps {
   onSelectInvoice: (invoiceId: string) => void;
@@ -128,6 +129,9 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             <p className="text-xs text-slate-500 mt-0.5">
               BIR-compliant tax billing, dual-control retraction governance with mandatory operator justification, and payment verification locking.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="invoices" />
+            </div>
           </div>
 
           {/* Quick Metrics Bar */}

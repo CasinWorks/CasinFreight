@@ -19,6 +19,7 @@ interface NavbarProps {
   onOpenNewTrip: () => void;
   onOpenOrgSetup: () => void;
   onOpenNotifications: () => void;
+  onOpenHowTo?: () => void;
   onToggleMobileMenu?: () => void;
   isMobileMenuOpen?: boolean;
   searchQuery?: string;
@@ -29,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewTrip, 
   onOpenOrgSetup,
   onOpenNotifications,
+  onOpenHowTo,
   onToggleMobileMenu,
   isMobileMenuOpen,
   searchQuery, 
@@ -212,6 +214,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
 
                 <div className="py-2">
+                  {onOpenHowTo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        onOpenHowTo();
+                      }}
+                      className="w-full p-2 rounded-lg hover:bg-slate-50 text-left text-xs font-semibold text-slate-700"
+                    >
+                      How to use CasinFreight
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -16,11 +16,13 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { isFirebaseConfigured } from '../../lib/firebase';
+import { MIN_SIGNUP_PASSWORD_LENGTH } from '../../config/auth';
 import { FREE_INCLUDED_TRUCKS, foundingLockBody, foundingLockHeadline, hostedPricingForCheckout, isFoundingSignupOpen } from '../../lib/subscriptionPrice';
 import { FoundingUrgencyBanner } from '../billing/FoundingUrgencyBanner';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 import { CasinWorksCredit } from '../brand/CasinWorksCredit';
 import { FunTruck } from './FunTruck';
+import { FaqPage } from '../help/FaqPage';
 
 const SAVED_EMAIL_KEY = 'casinfreight_saved_email';
 
@@ -65,7 +67,30 @@ export const LoginPage: React.FC = () => {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [showFaq, setShowFaq] = useState(() => window.location.hash.replace('#', '') === 'faq');
   const hostedPreview = hostedPricingForCheckout();
+
+  useEffect(() => {
+    const syncHash = () => setShowFaq(window.location.hash.replace('#', '') === 'faq');
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
+
+  const openFaq = () => {
+    window.location.hash = 'faq';
+    setShowFaq(true);
+  };
+
+  const closeFaq = () => {
+    if (window.location.hash.replace('#', '') === 'faq') {
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+    setShowFaq(false);
+  };
+
+  if (showFaq) {
+    return <FaqPage onBack={closeFaq} />;
+  }
 
   const handleForgotPassword = async () => {
     if (!email.trim()) {
@@ -93,6 +118,10 @@ export const LoginPage: React.FC = () => {
       return;
     }
     setErrorMessage(null);
+    if (mode !== 'login' && password.length < MIN_SIGNUP_PASSWORD_LENGTH) {
+      setErrorMessage(`Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`);
+      return;
+    }
     setIsLoading(true);
     const res = mode === 'login'
       ? await login(email, password, { rememberMe })
@@ -128,6 +157,13 @@ export const LoginPage: React.FC = () => {
             </span>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={openFaq}
+          className="text-xs font-bold text-blue-300 hover:text-white"
+        >
+          FAQ & features
+        </button>
       </header>
 
       <main className="relative z-10 flex-1 flex items-center justify-center p-4 md:p-8">
@@ -296,8 +332,8 @@ export const LoginPage: React.FC = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      minLength={6}
-                      placeholder="At least 6 characters"
+                      minLength={mode === 'login' ? 6 : MIN_SIGNUP_PASSWORD_LENGTH}
+                      placeholder={mode === 'login' ? 'Your password' : `At least ${MIN_SIGNUP_PASSWORD_LENGTH} characters`}
                       className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">
@@ -390,7 +426,10 @@ export const LoginPage: React.FC = () => {
         </div>
       </main>
 
-      <footer className="relative z-10 px-6 py-4 border-t border-slate-800/80 bg-slate-950/60">
+      <footer className="relative z-10 px-6 py-4 border-t border-slate-800/80 bg-slate-950/60 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <button type="button" onClick={openFaq} className="text-[11px] font-bold text-blue-400 hover:text-blue-300">
+          FAQ, features, and pricing
+        </button>
         <CasinWorksCredit className="text-center text-[11px] text-slate-400" />
       </footer>
     </div>

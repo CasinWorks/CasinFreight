@@ -15,8 +15,10 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { Driver, DriverStatus } from '../../types';
+import { CrewRole, Driver, DriverStatus } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
+import { isHelperCrew } from '../../lib/crew';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 export const DriverRegistry: React.FC = () => {
   const { drivers, trucks, addDriver, updateDriver, deleteDriver, approveDriver, canAccess } = useFreight();
@@ -32,9 +34,11 @@ export const DriverRegistry: React.FC = () => {
   const [licenseRestrictions, setLicenseRestrictions] = useState('1, 2, 3 (Heavy Commercial)');
   const [licenseExpiry, setLicenseExpiry] = useState('2028-12-31');
   const [assignedTruckId, setAssignedTruckId] = useState('');
+  const [crewRole, setCrewRole] = useState<CrewRole>('driver');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<DriverStatus>('Available');
   const [emergencyContact, setEmergencyContact] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | CrewRole>('ALL');
 
   const handleOpenAdd = () => {
     setEditingDriverId(null);
@@ -44,6 +48,7 @@ export const DriverRegistry: React.FC = () => {
     setLicenseRestrictions('1, 2, 3 (Heavy Trucks)');
     setLicenseExpiry('2028-12-31');
     setAssignedTruckId('');
+    setCrewRole('driver');
     setEmail('');
     setStatus('Available');
     setEmergencyContact('');
@@ -58,6 +63,7 @@ export const DriverRegistry: React.FC = () => {
     setLicenseRestrictions(drv.licenseRestrictions);
     setLicenseExpiry(drv.licenseExpiry);
     setAssignedTruckId(drv.assignedTruckId || '');
+    setCrewRole(drv.crewRole === 'helper' ? 'helper' : 'driver');
     setEmail(drv.email || '');
     setStatus(drv.status);
     setEmergencyContact(drv.emergencyContact);
@@ -66,40 +72,41 @@ export const DriverRegistry: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !licenseNo.trim()) {
+    if (!name.trim()) {
+      alert('Please fill out the name.');
+      return;
+    }
+    if (crewRole !== 'helper' && !licenseNo.trim()) {
       alert('Please fill out the driver name and license number.');
       return;
     }
 
+    const payload = {
+      name,
+      phone,
+      crewRole,
+      licenseNo: crewRole === 'helper' ? (licenseNo.trim() || '—') : licenseNo,
+      licenseRestrictions: crewRole === 'helper' ? (licenseRestrictions.trim() || 'Helper / pahinante (no driving duty)') : licenseRestrictions,
+      licenseExpiry,
+      assignedTruckId: assignedTruckId || undefined,
+      email: email.trim() || undefined,
+      status,
+      emergencyContact,
+    };
+
     if (editingDriverId) {
-      updateDriver(editingDriverId, {
-        name,
-        phone,
-        licenseNo,
-        licenseRestrictions,
-        licenseExpiry,
-        assignedTruckId: assignedTruckId || undefined,
-        email: email.trim() || undefined,
-        status,
-        emergencyContact,
-      });
+      updateDriver(editingDriverId, payload);
     } else {
-      addDriver({
-        name,
-        phone,
-        licenseNo,
-        licenseRestrictions,
-        licenseExpiry,
-        assignedTruckId: assignedTruckId || undefined,
-        email: email.trim() || undefined,
-        status,
-        emergencyContact,
-      });
+      addDriver(payload);
     }
     setShowModal(false);
   };
 
+  const helperCount = drivers.filter((d) => isHelperCrew(d)).length;
+  const driverCount = drivers.length - helperCount;
   const filteredDrivers = drivers.filter(drv => {
+    if (roleFilter === 'helper' && !isHelperCrew(drv)) return false;
+    if (roleFilter === 'driver' && isHelperCrew(drv)) return false;
     const q = search.toLowerCase();
     return !q || (
       drv.name.toLowerCase().includes(q) ||
@@ -115,14 +122,17 @@ export const DriverRegistry: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">Driver Roster & Licensing</h1>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">Drivers & Helpers</h1>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono border border-slate-200">
-                {drivers.length} drivers
+                {driverCount} drivers · {helperCount} helpers
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Philippine LTO licenses, restriction codes, truck assignments, and driver-app login email.
+              Philippine LTO licenses for drivers, plus helpers / pahinante assigned to each truck.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="drivers" />
+            </div>
           </div>
 
           {canAccess('driver_crud') && (
@@ -131,22 +141,40 @@ export const DriverRegistry: React.FC = () => {
               className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Add Driver</span>
+              <span>Add driver or helper</span>
             </button>
           )}
         </div>
 
         {/* Search */}
-        <div className="mt-4 max-w-sm">
-          <div className="relative">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="relative max-w-sm flex-1 min-w-[200px]">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search driver name, license, contact..."
+              placeholder="Search name, license, contact..."
               className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-blue-500"
             />
+          </div>
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            {([
+              ['ALL', 'All'],
+              ['driver', 'Drivers'],
+              ['helper', 'Helpers'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setRoleFilter(id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                  roleFilter === id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -155,6 +183,7 @@ export const DriverRegistry: React.FC = () => {
       <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredDrivers.map((drv) => {
           const assignedTruck = trucks.find(t => t.id === drv.assignedTruckId);
+          const helper = isHelperCrew(drv);
 
           return (
             <div
@@ -173,6 +202,11 @@ export const DriverRegistry: React.FC = () => {
                       <Phone className="w-3 h-3 text-slate-400" />
                       <span className="font-mono">{drv.phone}</span>
                     </div>
+                    {helper && (
+                      <span className="mt-0.5 inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                        Helper / pahinante
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -199,18 +233,24 @@ export const DriverRegistry: React.FC = () => {
 
               {/* LTO License Specs */}
               <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>LTO License No:</span>
-                  <span className="font-mono font-bold text-slate-900">{drv.licenseNo}</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Restrictions:</span>
-                  <span className="font-medium text-blue-700">{drv.licenseRestrictions}</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-400 text-[10px]">
-                  <span>Expiry Date:</span>
-                  <span className="font-mono text-slate-600">{drv.licenseExpiry}</span>
-                </div>
+                {helper ? (
+                  <div className="text-slate-600">Rides with the assigned truck. Does not drive.</div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>LTO License No:</span>
+                      <span className="font-mono font-bold text-slate-900">{drv.licenseNo}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Restrictions:</span>
+                      <span className="font-medium text-blue-700">{drv.licenseRestrictions}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400 text-[10px]">
+                      <span>Expiry Date:</span>
+                      <span className="font-mono text-slate-600">{drv.licenseExpiry}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Assigned Truck */}
@@ -253,7 +293,7 @@ export const DriverRegistry: React.FC = () => {
                     </button>
                     <button
                       onClick={() => {
-                        if (window.confirm(`Remove driver ${drv.name}?`)) {
+                        if (window.confirm(`Remove ${helper ? 'helper' : 'driver'} ${drv.name}?`)) {
                           deleteDriver(drv.id);
                         }
                       }}
@@ -275,7 +315,9 @@ export const DriverRegistry: React.FC = () => {
           <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-xs text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h2 className="text-base font-bold text-slate-900">
-                {editingDriverId ? 'Edit Driver Details' : 'Add New Driver to Roster'}
+                {editingDriverId
+                  ? (crewRole === 'helper' ? 'Edit helper details' : 'Edit driver details')
+                  : (crewRole === 'helper' ? 'Add helper / pahinante' : 'Add licensed driver')}
               </h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
@@ -284,7 +326,19 @@ export const DriverRegistry: React.FC = () => {
 
             <form onSubmit={handleSave} className="space-y-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Driver Full Name *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Crew role *</label>
+                <select
+                  value={crewRole}
+                  onChange={(e) => setCrewRole(e.target.value as CrewRole)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="driver">Driver (licensed)</option>
+                  <option value="helper">Helper / pahinante</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">{crewRole === 'helper' ? 'Helper full name *' : 'Driver full name *'}</label>
                 <input
                   type="text"
                   value={name}
@@ -295,6 +349,7 @@ export const DriverRegistry: React.FC = () => {
                 />
               </div>
 
+              {crewRole === 'driver' && (
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Driver app login email</label>
                 <input
@@ -306,6 +361,7 @@ export const DriverRegistry: React.FC = () => {
                 />
                 <p className="text-[10px] text-slate-400 mt-1">Invite this person as role Driver, then they sign in on the CasinFreight Driver phone app.</p>
               </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -319,6 +375,7 @@ export const DriverRegistry: React.FC = () => {
                     className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
+                {crewRole === 'driver' && (
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">LTO License No. *</label>
                   <input
@@ -326,12 +383,14 @@ export const DriverRegistry: React.FC = () => {
                     value={licenseNo}
                     onChange={(e) => setLicenseNo(e.target.value)}
                     placeholder="e.g. N02-14-089421"
-                    required
+                    required={crewRole === 'driver'}
                     className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
+                )}
               </div>
 
+              {crewRole === 'driver' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Restriction Codes</label>
@@ -353,6 +412,7 @@ export const DriverRegistry: React.FC = () => {
                   />
                 </div>
               </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -406,7 +466,7 @@ export const DriverRegistry: React.FC = () => {
                   type="submit"
                   className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold"
                 >
-                  {editingDriverId ? 'Update Driver' : 'Save Driver'}
+                  {editingDriverId ? 'Update' : crewRole === 'helper' ? 'Save helper' : 'Save driver'}
                 </button>
               </div>
             </form>

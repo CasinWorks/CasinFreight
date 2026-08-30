@@ -16,6 +16,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { RateCard, TruckType } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 export const RateCardRegistry: React.FC = () => {
   const { rateCards, addRateCard, updateRateCard, deleteRateCard, canAccess } = useFreight();
@@ -114,6 +115,9 @@ export const RateCardRegistry: React.FC = () => {
             <p className="text-xs text-slate-500 mt-0.5">
               Standardized freight lane rates by truck type. Auto-suggested when creating new trips in the load calculator.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="ratecards" />
+            </div>
           </div>
 
           {canAccess('ratecard_crud') && (

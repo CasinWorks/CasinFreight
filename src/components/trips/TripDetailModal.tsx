@@ -49,6 +49,7 @@ import { exceptionKindLabel, resumeTarget } from './TripKanbanCard';
 import { TripProfitabilityView } from './TripProfitabilityView';
 import { FuelLogModal } from '../fleet/FuelLogModal';
 import { closeIfBackdrop } from '../../lib/modal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface TripDetailModalProps {
   tripId: string | null;
@@ -145,6 +146,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
 
   const trk = trucks.find(t => t.id === trip.truckId);
   const drv = drivers.find(d => d.id === trip.driverId);
+  const helper = drivers.find(d => d.id === trip.helperId);
   const clt = clients.find(c => c.id === trip.clientId);
   const existingInvoice = getInvoiceByTripId(trip.id);
   const banHits = matchingTruckBans({
@@ -414,7 +416,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
             <ArrowDown className="w-4 h-4 text-slate-400 my-1" />
             <div className="text-base font-semibold text-slate-900 leading-snug">{trip.destinationZone}</div>
             <p className="text-sm text-slate-500 mt-2">
-              {drv?.name || 'No driver'} · {trk?.plateNumber || 'No truck'}
+              {drv?.name || 'No driver'}{helper ? ` · ${helper.name.split(' ')[0]}` : ''} · {trk?.plateNumber || 'No truck'}
             </p>
           </div>
 
@@ -550,6 +552,10 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
+        </div>
+
+        <div className="px-4 md:px-6 py-2 border-b border-slate-200 bg-white">
+          <FeatureHowTo feature="tripfile" compact />
         </div>
 
         {(trip.status === 'On Hold' || trip.status === 'Cancelled') && (
@@ -987,6 +993,9 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                   <div className="truncate">
                     <div className="font-semibold text-slate-900 truncate">{drv?.name}</div>
                     <div className="text-[10px] text-slate-400 font-mono">{drv?.phone}</div>
+                    {helper && (
+                      <div className="text-[10px] text-slate-500 truncate">Helper: {helper.name}</div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
@@ -1718,6 +1727,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
           trip={trip}
           truck={trk}
           driver={drv}
+          helper={helper}
           client={clt}
           company={company}
         />

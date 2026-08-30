@@ -31,6 +31,7 @@ import { AdminConsoleView } from './components/admin/AdminConsoleView';
 import { UpgradeModal } from './components/billing/UpgradeModal';
 import { PlatformNoticeGate, MaintenanceLockScreen } from './components/notices/PlatformNoticeGate';
 import { TutorialProvider, useTutorial } from './components/tutorial';
+import { HowToPage } from './components/help/HowToPage';
 import { Analytics } from '@vercel/analytics/react';
 
 function MainLayout() {
@@ -98,6 +99,7 @@ function MainLayout() {
         isMobileMenuOpen={isMobileMenuOpen}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        onOpenHowTo={() => handleTabChange('help')}
       />
 
       {/* Main Content Area with Responsive Sidebar */}
@@ -110,6 +112,10 @@ function MainLayout() {
         />
 
         <main data-tutorial="main-workspace" className="flex-1 flex flex-col min-w-0 w-full overflow-hidden bg-[#F8FAFC] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+          {activeTab === 'help' && (
+            <HowToPage />
+          )}
+
           {activeTab === 'board' && (
             <TripBoard
               onOpenNewTrip={() => {

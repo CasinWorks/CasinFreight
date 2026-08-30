@@ -5,6 +5,7 @@ import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, getSaasPlans, formatPhDate, FREE_INCLU
 import { calculateSubscriptionPrice, formatPhp, formatStorageGb, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, STORAGE_EXTRA_GB_PHP, foundingLockBody, foundingLockHeadline, hostedPricingForCheckout, isFoundingSignupOpen, type BillingCycle } from '../../lib/subscriptionPrice';
 import { FoundingUrgencyBanner } from './FoundingUrgencyBanner';
 import { closeIfBackdrop } from '../../lib/modal';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 const EXTRA_TRUCK_INTENT_KEY = 'casinfreight_extra_truck';
 
@@ -79,6 +80,9 @@ export const UpgradeModal: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">
               Free is a {FREE_TRIAL_MONTHS}-month trial: up to {FREE_INCLUDED_TRUCKS} trucks, 1 account, and 10 trips. {foundingLockHeadline(hosted)} {foundingLockBody(hosted)}
             </p>
+            <div className="mt-2">
+              <FeatureHowTo feature="billing" compact />
+            </div>
             {isFoundingSignupOpen() && <FoundingUrgencyBanner className="mt-2" />}
             {trialLocked && (
               <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">

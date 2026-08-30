@@ -15,6 +15,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { closeIfBackdrop } from '../../lib/modal';
 import { Client } from '../../types';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 const EMPTY_FORM = {
   name: '',
@@ -101,6 +102,9 @@ export const ClientRegistry: React.FC = () => {
             <p className="text-xs text-slate-500 mt-0.5">
               Billing names, TIN, payment terms, and contacts used when you book a trip and issue invoices.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="clients" />
+            </div>
           </div>
 
           {canManage && (

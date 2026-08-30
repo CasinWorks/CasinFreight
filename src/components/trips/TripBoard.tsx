@@ -42,6 +42,7 @@ import { StatusPrerequisiteModal } from './StatusPrerequisiteModal';
 import { TripExceptionModal } from './TripExceptionModal';
 import { TripStatusRetractionModal } from './TripStatusRetractionModal';
 import { resumeTarget, TripKanbanCard } from './TripKanbanCard';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface TripBoardProps {
   onOpenNewTrip: () => void;
@@ -132,6 +133,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
     return trips.filter((trip) => {
       const trk = trucks.find(t => t.id === trip.truckId);
       const drv = drivers.find(d => d.id === trip.driverId);
+      const helper = drivers.find(d => d.id === trip.helperId);
       const clt = clients.find(c => c.id === trip.clientId);
 
       // Search matching across destination, customer name, truck ID/plate number, waybill, trip #, cargo, etc.
@@ -147,6 +149,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
         (trk?.plateNumber && trk.plateNumber.toLowerCase().includes(effectiveSearch)) ||
         (trk?.type && trk.type.toLowerCase().includes(effectiveSearch)) ||
         (drv?.name && drv.name.toLowerCase().includes(effectiveSearch)) ||
+        (helper?.name && helper.name.toLowerCase().includes(effectiveSearch)) ||
         (clt?.name && clt.name.toLowerCase().includes(effectiveSearch)) ||
         (clt?.industry && clt.industry.toLowerCase().includes(effectiveSearch))
       );
@@ -336,6 +339,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
     trip,
     truck: trucks.find(t => t.id === trip.truckId),
     driver: drivers.find(d => d.id === trip.driverId),
+    helper: drivers.find(d => d.id === trip.helperId),
     client: clients.find(c => c.id === trip.clientId),
     effectiveSearch,
     selectedTruckId,
@@ -401,6 +405,8 @@ export const TripBoard: React.FC<TripBoardProps> = ({
         'Assigned Driver Name',
         'Driver Phone Contact',
         'Driver License No',
+        'Assigned Helper Name',
+        'Helper Phone Contact',
         'Cargo Description',
         'Cargo Weight (kg)',
         'Cargo Weight (Metric Tons)',
@@ -432,6 +438,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
       const rows = dataToExport.map(trip => {
         const trk = trucks.find(t => t.id === trip.truckId);
         const drv = drivers.find(d => d.id === trip.driverId);
+        const helper = drivers.find(d => d.id === trip.helperId);
         const clt = clients.find(c => c.id === trip.clientId);
         const accessorialsSum = trip.accessorials ? trip.accessorials.reduce((sum, a) => sum + a.amountPhp, 0) : 0;
         const grossTotal = (trip.baseRatePhp || 0) + accessorialsSum;
@@ -459,6 +466,8 @@ export const TripBoard: React.FC<TripBoardProps> = ({
           escapeCSV(drv?.name || 'Unassigned'),
           escapeCSV(drv?.phone || 'N/A'),
           escapeCSV(drv?.licenseNo || 'N/A'),
+          escapeCSV(helper?.name || 'None'),
+          escapeCSV(helper?.phone || 'N/A'),
           escapeCSV(trip.cargoDescription),
           escapeCSV(trip.cargoWeightKg),
           escapeCSV((trip.cargoWeightKg / 1000).toFixed(2)),
@@ -537,6 +546,9 @@ export const TripBoard: React.FC<TripBoardProps> = ({
             <p className="text-xs text-slate-500 mt-1">
               Live Luzon linehaul tracking, GVWR payload compliance, demurrage monitoring & POD invoicing.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="board" />
+            </div>
             {onOpenExceptions && (
               <button
                 type="button"
@@ -1084,6 +1096,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                     filteredTrips.map((trip) => {
                       const trk = trucks.find(t => t.id === trip.truckId);
                       const drv = drivers.find(d => d.id === trip.driverId);
+                      const helper = drivers.find(d => d.id === trip.helperId);
                       const clt = clients.find(c => c.id === trip.clientId);
                       const totalAcc = trip.accessorials.filter(a => a.approved).reduce((sum, a) => sum + a.amountPhp, 0);
 
@@ -1115,7 +1128,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                           </td>
                           <td className="py-3.5 px-4">
                             <div className="font-mono font-semibold text-slate-800">{trk?.plateNumber}</div>
-                            <div className="text-[10px] text-slate-500">{drv?.name}</div>
+                            <div className="text-[10px] text-slate-500">{drv?.name}{helper ? ` · ${helper.name.split(' ')[0]}` : ''}</div>
                           </td>
                           <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
                             <select
@@ -1268,6 +1281,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
           trip={deliveryNoteTrip}
           truck={trucks.find(t => t.id === deliveryNoteTrip.truckId)}
           driver={drivers.find(d => d.id === deliveryNoteTrip.driverId)}
+          helper={drivers.find(d => d.id === deliveryNoteTrip.helperId)}
           client={clients.find(c => c.id === deliveryNoteTrip.clientId)}
           company={company}
         />

@@ -6,6 +6,7 @@ import { matchingTruckBans } from '../../lib/truckBans';
 import { DeliveryNoteModal } from './DeliveryNoteModal';
 import { TripExceptionModal } from './TripExceptionModal';
 import { resumeTarget, TripKanbanCard } from './TripKanbanCard';
+import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface TripExceptionsPageProps {
   onSelectTrip: (trip: Trip) => void;
@@ -121,6 +122,9 @@ export const TripExceptionsPage: React.FC<TripExceptionsPageProps> = ({ onSelect
             <p className="text-xs text-slate-500 mt-1">
               Holds and cancellations leave the trip board so dispatch stays on the happy path.
             </p>
+            <div className="mt-3 max-w-xl">
+              <FeatureHowTo feature="exceptions" />
+            </div>
           </div>
           <div className="relative w-full lg:w-72">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -228,6 +232,7 @@ export const TripExceptionsPage: React.FC<TripExceptionsPageProps> = ({ onSelect
           trip={deliveryNoteTrip}
           truck={trucks.find((t) => t.id === deliveryNoteTrip.truckId)}
           driver={drivers.find((d) => d.id === deliveryNoteTrip.driverId)}
+          helper={drivers.find((d) => d.id === deliveryNoteTrip.helperId)}
           client={clients.find((c) => c.id === deliveryNoteTrip.clientId)}
           company={company}
         />

@@ -37,6 +37,7 @@ interface TripKanbanCardProps {
   trip: Trip;
   truck?: Truck;
   driver?: Driver;
+  helper?: Driver;
   client?: Client;
   effectiveSearch: string;
   selectedTruckId: string;
@@ -57,6 +58,7 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
   trip,
   truck,
   driver,
+  helper,
   client,
   effectiveSearch,
   selectedTruckId,
@@ -277,7 +279,7 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
             {driver ? driver.name.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'DR'}
           </div>
           <p className="text-[11px] text-slate-600 font-medium truncate">
-            {driver?.name.split(' ')[0]}
+            {driver?.name.split(' ')[0]}{helper ? ` · ${helper.name.split(' ')[0]}` : ''}
           </p>
         </div>
 

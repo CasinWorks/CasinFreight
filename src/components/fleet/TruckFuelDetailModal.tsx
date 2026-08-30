@@ -109,6 +109,7 @@ export const TruckFuelDetailModal: React.FC<TruckFuelDetailModalProps> = ({
   };
 
   const assignedDriver = drivers.find(d => d.id === truck.assignedDriverId);
+  const assignedHelper = drivers.find(d => d.id === truck.assignedHelperId);
   const canLog = canLogFuel().allowed;
   const canDelete = canDeleteFuelLog().allowed;
 
@@ -142,7 +143,9 @@ export const TruckFuelDetailModal: React.FC<TruckFuelDetailModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                {truck.type} • Driver: <strong className="text-slate-200">{assignedDriver ? assignedDriver.name : 'Unassigned'}</strong> • Last Odo: <span className="font-mono text-slate-200">{truck.lastOdometerKm.toLocaleString()} km</span>
+                {truck.type} • Driver: <strong className="text-slate-200">{assignedDriver ? assignedDriver.name : 'Unassigned'}</strong>
+                {assignedHelper ? <> • Helper: <strong className="text-slate-200">{assignedHelper.name}</strong></> : null}
+                {' '}• Last Odo: <span className="font-mono text-slate-200">{truck.lastOdometerKm.toLocaleString()} km</span>
               </p>
             </div>
           </div>

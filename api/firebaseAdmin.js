@@ -31,6 +31,64 @@ function isPlatformAdmin(email) {
   return PLATFORM_ADMINS.includes(String(email || '').trim().toLowerCase());
 }
 
+function firebaseWebApiKey() {
+  return (process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || '').trim();
+}
+
+async function lookupCaller(authHeader) {
+  const token = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+  const admin = getAdmin();
+  if (admin) {
+    try {
+      const decoded = await admin.auth().verifyIdToken(token);
+      return {
+        uid: decoded.uid,
+        email: decoded.email || '',
+        admin: decoded.admin === true,
+      };
+    } catch {
+      return null;
+    }
+  }
+  const apiKey = firebaseWebApiKey();
+  if (!apiKey) return null;
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: token }),
+    }
+  );
+  if (!response.ok) return null;
+  const payload = await response.json();
+  const user = payload.users && payload.users[0];
+  if (!user || !user.localId) return null;
+  return { uid: user.localId, email: user.email || '', admin: false };
+}
+
+async function stampAdminSession(authHeader) {
+  const caller = await lookupCaller(authHeader);
+  if (!caller) {
+    return { status: 401, data: { error: 'Sign in required.' } };
+  }
+  if (!isPlatformAdmin(caller.email)) {
+    return { status: 200, data: { admin: false, refreshed: false } };
+  }
+  const admin = getAdmin();
+  if (!admin) {
+    return { status: 200, data: { admin: caller.admin === true, refreshed: false } };
+  }
+  const user = await admin.auth().getUser(caller.uid);
+  const claims = { ...(user.customClaims || {}) };
+  if (claims.admin === true) {
+    return { status: 200, data: { admin: true, refreshed: false } };
+  }
+  await admin.auth().setCustomUserClaims(caller.uid, { ...claims, admin: true });
+  return { status: 200, data: { admin: true, refreshed: true } };
+}
+
 function addBillingMonths(from, months) {
   const next = new Date(from);
   next.setMonth(next.getMonth() + months);
@@ -257,6 +315,7 @@ async function rolloverAllCompanies(db) {
 module.exports = {
   getAdminDb,
   isPlatformAdmin,
+  stampAdminSession,
   grantFounding,
   setCancelFlag,
   rolloverAllCompanies,
