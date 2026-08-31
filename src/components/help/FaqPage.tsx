@@ -39,7 +39,7 @@ export const FaqPage: React.FC<FaqPageProps> = ({ onBack }) => {
           </div>
           <h1 className="text-2xl font-extrabold text-white mt-2">Features & frequently asked questions</h1>
           <p className="text-sm text-slate-400 mt-2">
-            Office web app for dispatch, billing, and books. Driver phone app for GPS, seals, and e-POD.
+            Office web app for dispatch, billing, and books. Driver phone app for seals and e-POD.
             This is fleet software for your own trucks — not a public load board.
           </p>
         </div>

@@ -32,7 +32,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'what',
     question: 'What is CasinFreight in one sentence?',
     answer:
-      'Software for a Philippine trucking company: office dispatch, billing, and ledger on the web, plus driver GPS and e-POD on the phone.',
+      'Software for a Philippine trucking company: office dispatch, billing, and ledger on the web, plus driver e-POD on the phone.',
   },
   {
     id: 'marketplace',
@@ -62,12 +62,6 @@ export const FAQ_ITEMS: FaqItem[] = [
     question: 'How does the driver log in?',
     answer:
       'Invite them under Company with role Driver, put the same email on the Driver Roster, then they sign in on the CasinFreight Driver app with email and password. There is no Google login.',
-  },
-  {
-    id: 'gps',
-    question: 'Can the office see the truck live?',
-    answer:
-      'Yes, while the trip is open and the driver has GPS on. The trip file shows pings. You can open a point in Google Maps. There is no separate nationwide map product.',
   },
   {
     id: 'tolls',
@@ -123,7 +117,7 @@ export const FEATURE_HIGHLIGHTS: { title: string; body: string }[] = [
   },
   {
     title: 'Trip file & e-POD',
-    body: 'Waybill, seal, custody signatures, demurrage, accessorials, live GPS, status rollback for Owner / GM.',
+    body: 'Waybill, seal, custody signatures, demurrage, accessorials, status rollback for Owner / GM.',
   },
   {
     title: 'Invoices & ledger',
@@ -147,7 +141,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     steps: [
       'Open Trip Board. Each card is one booked trip.',
       'Use Kanban for the pipeline or List for a spreadsheet-style table.',
-      'Tap a card to open the trip file (waybill, GPS, POD, invoice).',
+      'Tap a card to open the trip file (waybill, seal, POD, invoice).',
       'Use New Load to book. Search the top bar for plate, client, or trip number.',
       'Export CSV from the board when you need a dispatch list.',
     ],
@@ -176,18 +170,16 @@ export const HELP_GUIDES: HelpGuide[] = [
   {
     id: 'tripfile',
     title: 'Trip file',
-    summary: 'Run one load: status, GPS, seals, signatures, accessorials, invoice.',
+    summary: 'Run one load: status, seals, signatures, accessorials, invoice.',
     steps: [
       'Open a trip from the board.',
-      'Advance status only when the next gate is ready (seal, GPS, POD).',
-      'Watch live GPS while the driver app is pinging.',
+      'Advance status only when the next gate is ready (seal, POD).',
       'Add accessorials (demurrage, overweight, helper crew, overnight, etc.) if they apply.',
       'Print or share the delivery note / waybill.',
       'When Delivered, create the invoice from this file or from Invoices.',
     ],
     tips: [
       'Owner / GM can request a status rollback if a stage was marked too early.',
-      'Mock GPS on the driver phone is blocked and flagged here.',
     ],
   },
   {
@@ -247,16 +239,12 @@ export const HELP_GUIDES: HelpGuide[] = [
   {
     id: 'driverapp',
     title: 'Driver phone app',
-    summary: 'GPS, seal photos, and e-POD for the assigned driver only.',
+    summary: 'Seal photos and e-POD for the assigned driver only.',
     steps: [
       'Invite the person under Company → role Driver.',
       'Put that exact email on Drivers & Helpers.',
       'They install CasinFreight Driver and sign in with email and password.',
-      'They only see assigned open trips. They stamp pickup/delivery GPS, take the seal photo, and collect signatures.',
-    ],
-    tips: [
-      'Turn on phone Location. The app cannot force the system GPS toggle without MDM.',
-      'Mock GPS is blocked.',
+      'They only see assigned open trips. They take the seal photo and collect signatures.',
     ],
   },
   {
@@ -353,7 +341,7 @@ export const HELP_GUIDES: HelpGuide[] = [
   {
     id: 'notifications',
     title: 'Notifications',
-    summary: 'Ops alerts for overdue invoices, license expiry, and GPS issues.',
+    summary: 'Ops alerts for overdue invoices and license expiry.',
     steps: [
       'Tap the bell in the top bar.',
       'Open an alert to jump to the trip, invoice, or driver.',

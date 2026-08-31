@@ -81,7 +81,7 @@
 
   <p class="lede">
     CasinFreight is fleet software for <strong>your own trucks and your own shippers</strong> — not a public load board.
-    The office runs dispatch, billing, and books on the web. Drivers run GPS, seals, and e-POD on the phone.
+    The office runs dispatch, billing, and books on the web. Drivers run seals and e-POD on the phone.
   </p>
 
   <div class="callout">
@@ -109,7 +109,7 @@
       <tr><td>Trip Board</td><td>Kanban of loads: Pending → Loaded → In Transit → Delivered → Invoiced, plus On Hold / Cancelled. Search, filter, CSV export.</td></tr>
       <tr><td>New Load / Load Calculator</td><td>Book a trip with GVWR payload gauge, volume, rate-card rates, fuel surcharge, toll estimate, multi-stop and overweight (RA 8794 cargo kg vs net payload).</td></tr>
       <tr><td>Exceptions</td><td>Hold or cancel with Philippine ops reasons (gate pass, port congestion, LTO/overweight checkpoint, etc.).</td></tr>
-      <tr><td>Trip file</td><td>Waybill / delivery note, seal, custody signatures, demurrage, accessorials, profitability, live GPS, status rollback (Owner / GM).</td></tr>
+      <tr><td>Trip file</td><td>Waybill / delivery note, seal, custody signatures, demurrage, accessorials, profitability, status rollback (Owner / GM).</td></tr>
       <tr><td>Invoices &amp; Billing</td><td>Draft → Send → Paid / Void. 12% VAT + EWT. Proof of payment and BIR 2307. Dual-control void/retract.</td></tr>
       <tr><td>Trucks &amp; Fuel</td><td>Plate, type, GVWR / tare / CBM, status. Assign a driver and a helper per truck. Diesel logs and km/L.</td></tr>
       <tr><td>Drivers &amp; Helpers</td><td>Licensed drivers (LTO, restrictions, expiry, app email) and helpers / pahinante assigned to the same truck.</td></tr>
@@ -127,13 +127,10 @@
   <ul>
     <li>Sign in with the same email the company invited (must also be on the Driver Roster).</li>
     <li>Sees only assigned open trips (not cancelled or invoiced).</li>
-    <li>Live GPS while the trip is open — office sees pings on the trip file.</li>
-    <li>Pickup and delivery GPS stamp.</li>
     <li>Camera: seal photo (required), container, cargo.</li>
     <li>Signatures: driver dispatch after seal; warehouse / consignee POD with receiver name.</li>
-    <li>Blocks mock GPS; alerts the office if GPS is off or spoofed.</li>
   </ul>
-  <p>The app does not force the phone Location toggle on (that would need MDM). Helpers are not driver-app users.</p>
+  <p>Helpers are not driver-app users.</p>
 
   <div class="page-break"></div>
 
@@ -195,7 +192,7 @@
 
   <div class="qa">
     <strong>What is CasinFreight in one sentence?</strong>
-    Software for a Philippine trucking company: office dispatch/billing/ledger on the web, driver GPS and e-POD on the phone.
+    Software for a Philippine trucking company: office dispatch/billing/ledger on the web, driver e-POD on the phone.
   </div>
   <div class="qa">
     <strong>Is this a marketplace where shippers post loads?</strong>
@@ -216,10 +213,6 @@
   <div class="qa">
     <strong>How does the driver log in?</strong>
     Invite them under Company with role Driver, put the same email on the Driver Roster, then they sign in on the CasinFreight Driver app with email and password. There is no Google login.
-  </div>
-  <div class="qa">
-    <strong>Can the office see the truck live?</strong>
-    Yes, while the trip is open and the driver has GPS on. The office trip file shows pings. You can also open the point in Google Maps. There is no separate nationwide map product.
   </div>
   <div class="qa">
     <strong>Do you pull Easytrip / Autosweep automatically?</strong>

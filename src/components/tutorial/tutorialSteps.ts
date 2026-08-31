@@ -100,7 +100,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'trip-board',
     target: '[data-tutorial="nav-board"]',
     title: 'Trip Board',
-    body: 'Pending → Loaded → In Transit → Delivered → Invoiced. Open a card for GPS, seal, POD, and the waybill.',
+    body: 'Pending → Loaded → In Transit → Delivered → Invoiced. Open a card for seal, POD, and the waybill.',
     placement: 'right',
     tab: 'board',
     requires: 'trips',
@@ -160,7 +160,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'notifications',
     target: '[data-tutorial="notifications-btn"]',
     title: 'Alerts',
-    body: 'The bell lists license expiry, GPS issues, and collections. Tap an alert to jump there.',
+    body: 'The bell lists license expiry and collections. Tap an alert to jump there.',
     placement: 'bottom',
   },
   {
