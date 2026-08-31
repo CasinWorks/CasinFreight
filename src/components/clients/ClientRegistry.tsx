@@ -100,7 +100,7 @@ export const ClientRegistry: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Billing names, TIN, payment terms, and contacts used when you book a trip and issue invoices.
+              Billing names, TIN, payment terms, and contacts used when you book a trip and create a freight bill.
             </p>
             <div className="mt-3 max-w-xl">
               <FeatureHowTo feature="clients" />

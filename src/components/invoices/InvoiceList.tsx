@@ -28,6 +28,8 @@ import { Invoice, InvoiceStatus } from '../../types';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
 import { FeatureHowTo } from '../help/FeatureHowTo';
+import { InvoiceNotOfficialNotice } from './InvoiceNotOfficialNotice';
+import { VAT_EWT_ONE_LINER } from '../../content/taxCopy';
 
 interface InvoiceListProps {
   onSelectInvoice: (invoiceId: string) => void;
@@ -127,8 +129,11 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Freight bills with 12% VAT and 2% EWT computed for your bookkeeper. CasinFreight does not register, transmit, or certify invoices with BIR. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice. Dual-control void and payment verification stay in the trip file.
+              {VAT_EWT_ONE_LINER} Dual-control void and payment verification stay in the trip file.
             </p>
+            <div className="mt-3 max-w-2xl">
+              <InvoiceNotOfficialNotice />
+            </div>
             <div className="mt-3 max-w-xl">
               <FeatureHowTo feature="invoices" />
             </div>
@@ -239,7 +244,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
                   {unbilledDeliveredTrips.length} Delivered Shipment(s) Ready for Invoicing
                 </div>
                 <div className="text-[11px] text-slate-500">
-                  Consignee Proof of Delivery (e-POD) signed. Issue tax invoices to initiate collection terms.
+                  Consignee Proof of Delivery (e-POD) signed. Create a freight bill to start collection. This is not an official invoice.
                 </div>
               </div>
             </div>

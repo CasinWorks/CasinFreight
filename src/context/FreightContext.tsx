@@ -3268,7 +3268,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         break;
       case 'Invoiced':
         requiredPerm = 'trips.status_invoiced';
-        label = 'audit transport deliverables and issue official VAT billing invoices';
+        label = 'audit transport deliverables and create a freight bill (not an official invoice)';
         break;
       case 'On Hold':
         requiredPerm = 'trips.edit';

@@ -29,6 +29,7 @@ import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
 import { Invoice, InvoiceStatus, InvoiceLineItem } from '../../types';
 import { VAT_EWT_DISCLAIMER, VAT_EWT_ONE_LINER } from '../../content/taxCopy';
+import { InvoiceNotOfficialNotice } from './InvoiceNotOfficialNotice';
 import { closeIfBackdrop } from '../../lib/modal';
 import { safeHttpsUrl } from '../../lib/safeUrl';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
@@ -293,7 +294,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
           </div>
 
-          <div className="px-4 py-2 border-b border-slate-200 bg-white print:hidden">
+          <div className="px-4 py-2 border-b border-slate-200 bg-white print:hidden space-y-2">
+            <InvoiceNotOfficialNotice />
             <FeatureHowTo feature="invoices" compact />
           </div>
 
@@ -449,6 +451,9 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     </span>
                   ) : null}
                 </div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800 mt-1">
+                  Not an official invoice
+                </p>
                 <div className="text-xs font-mono font-bold text-neutral-700 mt-1">
                   Invoice No: <span className="text-neutral-950 font-black">{invoice.invoiceNumber}</span>
                 </div>
@@ -459,6 +464,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 </div>
               </div>
             </div>
+
+            <InvoiceNotOfficialNotice variant="print" />
 
             {/* Billed To & Shipment Reference Meta */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-6 bg-neutral-50 p-4 rounded-lg border border-neutral-200 text-xs">
