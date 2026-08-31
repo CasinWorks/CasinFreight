@@ -49,7 +49,7 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({
   const startTutorial = useCallback(() => {
     setStepIndex(0);
     setIsActive(true);
-    onNavigate('board');
+    onNavigate(tutorialSteps[0]?.tab || 'board');
   }, [onNavigate]);
 
   const next = useCallback(() => {

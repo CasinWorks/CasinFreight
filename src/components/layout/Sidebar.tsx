@@ -120,6 +120,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const topItems: NavItemDef[] = [
     {
+      id: 'dashboard',
+      label: 'Owner Dashboard',
+      icon: LayoutDashboard,
+      permission: 'dashboard',
+    },
+    {
       id: 'board',
       label: 'Trip Board',
       icon: KanbanSquare,
@@ -218,14 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const accountItems: NavItemDef[] = useMemo(() => {
-    const items: NavItemDef[] = [
-      {
-        id: 'dashboard',
-        label: 'Owner Dashboard',
-        icon: LayoutDashboard,
-        permission: 'dashboard',
-      },
-    ];
+    const items: NavItemDef[] = [];
     if (canManageBilling) {
       items.push({
         id: 'admin',

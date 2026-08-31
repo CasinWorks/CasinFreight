@@ -140,7 +140,7 @@ export const TruckBanRegistry: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
+    <div data-tutorial="truckbans-page" className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
       <div className="p-4 md:px-6 md:pt-6 md:pb-4 border-b border-slate-200 bg-white">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

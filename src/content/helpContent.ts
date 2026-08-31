@@ -305,7 +305,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     title: 'Owner Dashboard',
     summary: 'Profit, utilization, aging, and flags at a glance.',
     steps: [
-      'Open Owner Dashboard from the account menu at the bottom of the sidebar.',
+      'Open Owner Dashboard at the top of the sidebar.',
       'Switch This Month / Quarter / Year.',
       'Tap a trip or invoice card to jump to the file.',
     ],

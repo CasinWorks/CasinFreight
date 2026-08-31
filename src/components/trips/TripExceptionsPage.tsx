@@ -109,7 +109,7 @@ export const TripExceptionsPage: React.FC<TripExceptionsPageProps> = ({ onSelect
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC] text-slate-900 overflow-hidden">
+    <div data-tutorial="exceptions-page" className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC] text-slate-900 overflow-hidden">
       <div className="p-4 md:px-6 md:pt-5 md:pb-4 border-b border-slate-200 bg-white shadow-2xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
