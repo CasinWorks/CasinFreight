@@ -23,7 +23,7 @@ import { OwnerDashboard } from './components/dashboard/OwnerDashboard';
 import { RbacManagementView } from './components/rbac/RbacManagementView';
 import { OrgSetupModal } from './components/onboarding/OrgSetupModal';
 import { NotificationDrawer } from './components/notifications/NotificationDrawer';
-import { LoginPage } from './components/auth/LoginPage';
+import { LandingPage } from './landing/LandingPage';
 import { BootSplash } from './components/auth/BootSplash';
 import { Trip } from './types';
 import { KanbanSquare, PlusCircle, Receipt, Truck, LayoutDashboard, Menu } from 'lucide-react';
@@ -338,7 +338,7 @@ function AppContent() {
             CasinFreight is in downtime — {activeDowntime.title}. Team members cannot operate after sign-in. The platform owner can sign in to turn this off.
           </div>
         )}
-        <LoginPage />
+        <LandingPage />
       </>
     );
   }

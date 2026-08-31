@@ -27,7 +27,7 @@ export const FaqPage: React.FC<FaqPageProps> = ({ onBack }) => {
           className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-300 hover:text-white"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to sign in
+          Back to landing
         </button>
       </header>
 
