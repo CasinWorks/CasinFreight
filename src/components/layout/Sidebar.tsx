@@ -132,12 +132,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       permission: 'pod_upload',
     },
     {
-      id: 'help',
-      label: 'How to',
-      icon: CircleHelp,
-      permission: 'pod_upload',
-    },
-    {
       id: 'exceptions',
       label: 'Exceptions',
       icon: AlertTriangle,
@@ -156,6 +150,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Trucks & Fuel',
       icon: Truck,
       permission: 'truck_crud',
+    },
+    {
+      id: 'help',
+      label: 'How to',
+      icon: CircleHelp,
+      permission: 'pod_upload',
     },
   ];
 
