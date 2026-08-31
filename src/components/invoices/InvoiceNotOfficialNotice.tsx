@@ -7,7 +7,7 @@ export const InvoiceNotOfficialNotice: React.FC<{ variant?: 'banner' | 'print' }
 }) => {
   if (variant === 'print') {
     return (
-      <div className="mt-4 border border-neutral-400 bg-neutral-50 px-3 py-2 text-[10px] text-neutral-800 leading-relaxed">
+      <div className="mt-4 border-2 border-amber-500 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 leading-relaxed">
         <strong className="uppercase tracking-wide">Not an official invoice. </strong>
         {INVOICE_NOT_OFFICIAL} {VAT_EWT_DISCLAIMER}
       </div>

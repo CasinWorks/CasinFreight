@@ -437,10 +437,13 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               </div>
 
               <div className="text-left sm:text-right">
-                <div className="flex items-center sm:justify-end gap-2">
+                <div className="flex flex-wrap items-center sm:justify-end gap-2">
                   <div className="text-2xl font-black text-neutral-900 tracking-tight uppercase">
                     FREIGHT BILL
                   </div>
+                  <span className="text-[10px] font-mono font-black bg-amber-100 text-amber-900 border border-amber-500 px-2 py-0.5 rounded uppercase">
+                    Not an official invoice
+                  </span>
                   {isVoided ? (
                     <span className="text-[10px] font-mono font-black bg-rose-100 text-rose-800 border border-rose-400 px-2 py-0.5 rounded uppercase">
                       VOID / CANCELLED
@@ -451,9 +454,6 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     </span>
                   ) : null}
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800 mt-1">
-                  Not an official invoice
-                </p>
                 <div className="text-xs font-mono font-bold text-neutral-700 mt-1">
                   Invoice No: <span className="text-neutral-950 font-black">{invoice.invoiceNumber}</span>
                 </div>
@@ -644,7 +644,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                         Payment recorded
                       </h4>
                       <p className="text-[10px] text-emerald-800 font-medium">
-                        Internal confirmation in CasinFreight — not a BIR Official Receipt
+                        This freight bill is not an official invoice. Internal confirmation only — not a BIR Official Receipt.
                       </p>
                     </div>
                   </div>
