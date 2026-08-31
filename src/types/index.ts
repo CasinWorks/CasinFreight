@@ -513,8 +513,8 @@ export interface ProofOfPayment {
   paymentMethod: PaymentMethodType;
   paymentDate: string;
   amountPaidPhp: number;
-  ewtDeductedPhp?: number; // 2% BIR 2307 Creditable Withholding Tax Certificate
-  officialReceiptNo?: string; // BIR OR #
+  ewtDeductedPhp?: number; // 2% EWT from the client’s Form 2307
+  officialReceiptNo?: string; // Client or bank OR / payment reference, if they issued one
   popFileUrl?: string; // Image / screenshot of deposit slip or bank advice
   popFileName?: string;
   verifiedBy: string; // Finance / Billing Officer

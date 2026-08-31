@@ -135,7 +135,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>BIR 12% VAT + 2% EWT official PDF invoicing</span>
+                  <span>12% VAT + 2% EWT computed on every bill</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />

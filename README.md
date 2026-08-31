@@ -2,7 +2,7 @@
 
 Philippine trucking and fleet management SaaS for dispatch, billing, and operations.
 
-CasinFreight is a React + Vite operations console built for PH freight companies: live trip Kanban, load/payload checks, digital POD, BIR-style invoicing (12% VAT + 2% EWT), double-entry ledger, fleet/fuel tracking, and role-based access.
+CasinFreight is a React + Vite operations console built for PH freight companies: live trip Kanban, load/payload checks, digital POD, VAT + EWT calculator on freight bills (12% VAT + 2% EWT), double-entry ledger, fleet/fuel tracking, and role-based access. CasinFreight does not register, transmit, or certify invoices with BIR. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice.
 
 ## Product surface
 

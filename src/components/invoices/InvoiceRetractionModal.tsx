@@ -116,7 +116,7 @@ export const InvoiceRetractionModal: React.FC<InvoiceRetractionModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Enterprise Dual-Control Financial Workflow & BIR Audit Trail Compliance
+                Owner dual-control void (internal record)
               </p>
             </div>
           </div>
@@ -241,7 +241,7 @@ export const InvoiceRetractionModal: React.FC<InvoiceRetractionModalProps> = ({
                           <span>Void Permanently</span>
                         </div>
                         <p className="text-[10px] font-normal text-slate-500">
-                          Cancels invoice permanently with BIR Credit Note record.
+                          Void record in CasinFreight (not a BIR credit note).
                         </p>
                       </button>
                     </div>

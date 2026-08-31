@@ -122,7 +122,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'invoices',
     target: '[data-tutorial="nav-invoices"]',
     title: 'Billing',
-    body: 'Bill after delivery. 12% VAT and EWT. Attach proof of payment and BIR 2307, then mark Paid.',
+    body: 'Bill after delivery. 12% VAT and 2% EWT are computed for your bookkeeper. Attach proof of payment and the client’s Form 2307, then mark Paid.',
     placement: 'right',
     tab: 'invoices',
     requires: 'invoices',

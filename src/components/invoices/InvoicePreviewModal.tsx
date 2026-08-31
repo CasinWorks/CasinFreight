@@ -28,6 +28,7 @@ import {
 import confetti from 'canvas-confetti';
 import { useFreight } from '../../context/FreightContext';
 import { Invoice, InvoiceStatus, InvoiceLineItem } from '../../types';
+import { VAT_EWT_DISCLAIMER, VAT_EWT_ONE_LINER } from '../../content/taxCopy';
 import { closeIfBackdrop } from '../../lib/modal';
 import { safeHttpsUrl } from '../../lib/safeUrl';
 import { PaymentReconciliationModal } from './PaymentReconciliationModal';
@@ -326,7 +327,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               <div className="flex items-center gap-2">
                 <Ban className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>
-                  <strong>INVOICE VOIDED:</strong> This invoice was officially cancelled and retracted. It is non-payable and retained solely for BIR audit compliance.
+                  <strong>BILL VOIDED:</strong> This freight bill was cancelled in CasinFreight. It is non-payable and kept in the trip file for your records. This is not a BIR-filed document.
                 </span>
               </div>
               <span className="text-[10px] font-mono bg-white text-rose-800 px-2 py-0.5 rounded border border-rose-300 font-bold shrink-0">
@@ -353,7 +354,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
-                  <strong>Receivable Reconciled & Locked:</strong> Official proof of payment is permanently sealed on file (Ref: <span className="font-mono font-bold">{invoice.proofOfPayment?.paymentReference || invoice.paymentReference}</span>). Line items are immutable.
+                  <strong>Receivable Reconciled & Locked:</strong> Proof of payment is on file (Ref: <span className="font-mono font-bold">{invoice.proofOfPayment?.paymentReference || invoice.paymentReference}</span>). Line items are immutable.
                 </span>
               </div>
               <span className="text-[10px] font-mono bg-white text-emerald-800 px-2 py-0.5 rounded border border-emerald-300 font-bold shrink-0">
@@ -402,7 +403,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
           )}
 
-          {/* Printable Official Invoice Document */}
+          {/* Printable freight bill */}
           <div className="overflow-y-auto p-6 md:p-8 flex-1 bg-white text-neutral-900 font-sans print:p-0 relative">
             
             {/* VOID Watermark if voided */}
@@ -427,7 +428,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   {company.address}
                 </p>
                 <div className="text-xs text-neutral-600 font-mono mt-1 space-y-0.5">
-                  <div><strong>TIN:</strong> {company.tin} (VAT Registered)</div>
+                  <div><strong>TIN:</strong> {company.tin || '—'}</div>
                   <div><strong>Contact:</strong> {company.contactNumber}</div>
                   <div><strong>Email:</strong> {company.email}</div>
                 </div>
@@ -436,7 +437,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               <div className="text-left sm:text-right">
                 <div className="flex items-center sm:justify-end gap-2">
                   <div className="text-2xl font-black text-neutral-900 tracking-tight uppercase">
-                    FREIGHT INVOICE
+                    FREIGHT BILL
                   </div>
                   {isVoided ? (
                     <span className="text-[10px] font-mono font-black bg-rose-100 text-rose-800 border border-rose-400 px-2 py-0.5 rounded uppercase">
@@ -610,7 +611,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 </div>
 
                 <div className="flex justify-between text-neutral-500 py-1 text-[11px]">
-                  <span>Less 2% BIR EWT Withholding (Form 2307):</span>
+                  <span>Less 2% EWT (estimate for Form 2307):</span>
                   <span className="font-mono">
                     (₱{withholdingTaxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                   </span>
@@ -625,7 +626,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               </div>
             </div>
 
-            {/* Official Proof of Payment & BIR EWT Certification Box (Printed & Displayed when Reconciled) */}
+            {/* Payment recorded (internal — not a BIR Official Receipt) */}
             {invoice.isLocked && invoice.proofOfPayment && !isVoided && (
               <div className="mt-6 p-4 rounded-xl border-2 border-emerald-600 bg-emerald-50/40 text-xs space-y-3">
                 <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
@@ -633,10 +634,10 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     <ShieldCheck className="w-5 h-5 text-emerald-700" />
                     <div>
                       <h4 className="font-black text-emerald-950 uppercase tracking-tight text-xs">
-                        OFFICIAL PAYMENT RECEIPT & RECONCILIATION CERTIFICATE
+                        Payment recorded
                       </h4>
                       <p className="text-[10px] text-emerald-800 font-medium">
-                        Proof of Payment Verified & Locked in General Ledger
+                        Internal confirmation in CasinFreight — not a BIR Official Receipt
                       </p>
                     </div>
                   </div>
@@ -661,7 +662,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-emerald-800 uppercase font-semibold">2% BIR 2307 Withheld</div>
+                    <div className="text-[10px] text-emerald-800 uppercase font-semibold">2% EWT withheld (from client 2307)</div>
                     <div className="font-mono font-bold text-neutral-700 mt-0.5">
                       {invoice.proofOfPayment.ewtDeductedPhp ? `₱${invoice.proofOfPayment.ewtDeductedPhp.toLocaleString()}` : 'None'}
                     </div>
@@ -670,9 +671,9 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-emerald-200/60 text-xs">
                   <div>
-                    <div className="text-[10px] text-emerald-800 uppercase font-semibold">Official Receipt (OR) #</div>
+                    <div className="text-[10px] text-emerald-800 uppercase font-semibold">Payment reference (client/bank OR if any)</div>
                     <div className="font-mono font-bold text-neutral-800 mt-0.5">
-                      {invoice.proofOfPayment.officialReceiptNo || 'OR-PENDING'}
+                      {invoice.proofOfPayment.officialReceiptNo || '—'}
                     </div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">
                       Date Paid: {invoice.proofOfPayment.paymentDate}
@@ -711,24 +712,27 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               </div>
             )}
 
-            {/* Signatures & Certification */}
             <div className="grid grid-cols-2 gap-8 mt-12 pt-6 border-t border-neutral-300 text-xs">
               <div className="text-center">
                 <div className="h-10"></div>
                 <div className="border-t border-neutral-700 pt-1 font-bold text-neutral-900 uppercase">
-                  Clarisse Anne Mendoza, CPA
+                  Prepared by
                 </div>
-                <div className="text-[10px] text-neutral-500">Billing & Accounting Lead</div>
+                <div className="text-[10px] text-neutral-500">Billing</div>
               </div>
 
               <div className="text-center">
                 <div className="h-10"></div>
                 <div className="border-t border-neutral-700 pt-1 font-bold text-neutral-900 uppercase">
-                  Authorized Client Representative
+                  Received by
                 </div>
-                <div className="text-[10px] text-neutral-500">Conforme / Received by</div>
+                <div className="text-[10px] text-neutral-500">Client / consignee</div>
               </div>
             </div>
+
+            <p className="mt-8 text-[10px] text-neutral-500 leading-relaxed border-t border-neutral-200 pt-3">
+              {VAT_EWT_DISCLAIMER} {VAT_EWT_ONE_LINER}
+            </p>
 
           </div>
 

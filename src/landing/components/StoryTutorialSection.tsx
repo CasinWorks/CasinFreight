@@ -263,7 +263,7 @@ export const StoryTutorialSection: React.FC<StoryTutorialSectionProps> = ({
         return (
           <div className="p-4 space-y-2.5 text-slate-800 bg-white h-full overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <span className="text-xs font-black uppercase text-blue-600 tracking-wider">Step 4: BIR Invoicing</span>
+              <span className="text-xs font-black uppercase text-blue-600 tracking-wider">Step 4: VAT + EWT</span>
               <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-bold rounded-md">
                 VAT & 2% EWT
               </span>
@@ -279,7 +279,7 @@ export const StoryTutorialSection: React.FC<StoryTutorialSectionProps> = ({
                 <span className="font-bold text-slate-900">+ ₱3,360.00</span>
               </div>
               <div className="flex justify-between text-amber-700 font-sans">
-                <span>Less 2% EWT (BIR 2307):</span>
+                <span>Less 2% EWT (estimate):</span>
                 <span className="font-bold">- ₱560.00</span>
               </div>
               <div className="pt-2 border-t border-slate-300 flex justify-between text-sm font-black font-sans text-blue-900">
@@ -289,7 +289,7 @@ export const StoryTutorialSection: React.FC<StoryTutorialSectionProps> = ({
             </div>
 
             <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-              <p className="text-xs font-black text-emerald-900">✓ Official PDF Receipt Ready</p>
+              <p className="text-xs font-black text-emerald-900">✓ Billing PDF ready (not a BIR OR)</p>
               <p className="text-[10px] text-emerald-700">1-click send to client’s accounting & WhatsApp</p>
             </div>
           </div>

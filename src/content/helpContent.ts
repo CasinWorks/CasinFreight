@@ -79,7 +79,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'vat',
     question: 'Does billing handle VAT and EWT?',
     answer:
-      'Yes. 12% VAT and EWT on invoices, plus proof of payment and BIR 2307 reconcile. The general ledger is double-entry.',
+      'Yes. 12% VAT and 2% EWT are computed on the freight bill so your bookkeeper can review it. Attach proof of payment and the client’s Form 2307 when they pay. CasinFreight does not register, transmit, or certify invoices with BIR. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice.',
   },
   {
     id: 'free-seats',
@@ -121,7 +121,7 @@ export const FEATURE_HIGHLIGHTS: { title: string; body: string }[] = [
   },
   {
     title: 'Invoices & ledger',
-    body: '12% VAT + EWT, BIR 2307, dual-control void. Double-entry books, trial balance, AR, per-truck costs.',
+    body: '12% VAT + EWT calculator on freight bills. Attach the client’s Form 2307 when they pay. Dual-control void. Double-entry books, trial balance, AR, per-truck costs.',
   },
   {
     title: 'Fleet crew',
@@ -199,12 +199,12 @@ export const HELP_GUIDES: HelpGuide[] = [
     summary: 'Bill the shipper after delivery, then mark paid.',
     steps: [
       'Deliver the trip first. Unbilled deliveries show at the top of Invoices.',
-      'Create the invoice. VAT 12% and EWT (default 2%) are applied.',
-      'Send it, then attach proof of payment and BIR 2307 when the client pays.',
+      'Create the freight bill. VAT 12% and EWT (default 2%) are computed for your bookkeeper.',
+      'Send it, then attach proof of payment and the client’s Form 2307 when they pay. The PDF is a billing aid, not an Official Receipt.',
       'Mark Paid to lock collections. Void or retract needs dual control (Owner).',
     ],
     tips: [
-      'Invoice numbers and TIN come from Company setup and the shipper record.',
+      'Invoice numbers and TIN come from Company setup and the shipper record. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice.',
     ],
   },
   {
@@ -285,7 +285,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       'Open General Ledger for journal, trial balance, P&L, and AR.',
       'Post a Journal Voucher for expenses not auto-created from trips (PMS, wages).',
       'Fuel, RFID/tolls, and invoice activity post into the chart of accounts.',
-      'Print or export when you need a BIR-style book copy.',
+      'Print or export when you need a bookkeeper copy (not a BIR-filed book).',
     ],
   },
   {

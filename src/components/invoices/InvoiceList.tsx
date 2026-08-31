@@ -127,7 +127,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              BIR-compliant tax billing, dual-control retraction governance with mandatory operator justification, and payment verification locking.
+              Freight bills with 12% VAT and 2% EWT computed for your bookkeeper. CasinFreight does not register, transmit, or certify invoices with BIR. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice. Dual-control void and payment verification stay in the trip file.
             </p>
             <div className="mt-3 max-w-xl">
               <FeatureHowTo feature="invoices" />
@@ -150,7 +150,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             </div>
             <div className="bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg shadow-2xs">
               <div className="text-[10px] text-purple-700 uppercase font-semibold flex items-center gap-1">
-                <span>2% BIR 2307 Withheld</span>
+                <span>2% EWT withheld</span>
               </div>
               <div className="font-mono font-bold text-purple-900 text-xs mt-0.5">
                 ₱{totalEwtWithheld.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

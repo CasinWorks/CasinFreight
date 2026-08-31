@@ -317,7 +317,7 @@ export const PaymentReconciliationModal: React.FC<PaymentReconciliationModalProp
 
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                BIR Official Receipt (OR) #
+                Client / bank reference (OR # if they issued one)
               </label>
               <input
                 type="text"

@@ -51,11 +51,11 @@ export const STORY_SLIDES: StorySlide[] = [
   {
     id: 'step-4',
     stepNumber: 4,
-    title: 'Instant BIR 12% VAT + 2% EWT Invoicing',
-    tagline: 'Get paid 14 days faster with instant official billing.',
+    title: 'VAT + EWT auto-calculator',
+    tagline: 'Get paid faster with VAT and EWT already computed on the bill.',
     explanation:
-      'The moment e-POD is signed, CasinFreight generates a BIR-compliant invoice with 12% VAT and 2% Expanded Withholding Tax pre-calculated. Print or WhatsApp in 1 click.',
-    simpleTip: '💡 Tip for owners: Ready for your accountant and BIR Form 2307 reconciliation.',
+      'The moment e-POD is signed, CasinFreight computes 12% VAT and 2% EWT on the freight bill so your bookkeeper can review it. Print or WhatsApp in 1 click. This is an aid for your accountant — not a BIR-registered Sales Invoice or Official Receipt.',
+    simpleTip: '💡 Tip for owners: Ready for your accountant. Attach the client’s Form 2307 when they pay. CasinFreight does not file with BIR.',
     image: IMAGES.birOffice,
     iconName: 'Receipt',
     phoneScreenType: 'bir_invoice',
@@ -87,8 +87,8 @@ export const FAQS = [
     a: 'Philippine Republic Act 8794 sets strict Maximum Gross Vehicle Weight (GVWR) per axle. Our system automatically checks your cargo weight against the legal limit for your truck configuration before it leaves the yard, giving you a green “Safe” or red “Overweight” warning.',
   },
   {
-    q: 'Can my bookkeeper and accountant export to Excel or BIR formats?',
-    a: 'Yes! All trip records, fuel expenses, 12% VAT, and 2% EWT summaries can be downloaded to Excel (.xlsx) or printed as BIR-compliant invoices with 1 single click.',
+    q: 'Can my bookkeeper and accountant export to Excel?',
+    a: 'Yes. Trip records, fuel expenses, 12% VAT, and 2% EWT summaries can be downloaded to Excel (.xlsx) or printed as a billing summary for your accountant. CasinFreight does not register, transmit, or certify invoices with BIR. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice.',
   },
   {
     q: 'What if I need help or have questions while using the app?',

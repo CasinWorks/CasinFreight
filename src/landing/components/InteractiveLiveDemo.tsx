@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Truck, CheckCircle2, FileText, ArrowRight, RotateCcw, Printer, Share2, Sparkles, MapPin, ShieldCheck, Download } from 'lucide-react';
 import { TRUCK_PRESETS } from '../data/mockData';
 import { TextScale, LanguageMode } from '../types';
+import { VAT_EWT_DISCLAIMER } from '../../content/taxCopy';
 
 interface InteractiveLiveDemoProps {
   textScale: TextScale;
@@ -106,8 +107,8 @@ export const InteractiveLiveDemo: React.FC<InteractiveLiveDemoProps> = ({
 
           <p className="text-slate-600 text-base sm:text-lg">
             {languageMode === 'en'
-              ? 'See how simple it is to assign a truck, sign an e-POD, and calculate BIR tax in under 60 seconds.'
-              : 'Tingnan kung gaano kabilis mag-assign ng truck, pumirma sa phone, at magkwenta ng BIR tax.'}
+              ? 'See how simple it is to assign a truck, sign an e-POD, and compute VAT and EWT in under 60 seconds.'
+              : 'Tingnan kung gaano kabilis mag-assign ng truck, pumirma sa phone, at magkwenta ng VAT at EWT.'}
           </p>
         </div>
 
@@ -263,22 +264,22 @@ export const InteractiveLiveDemo: React.FC<InteractiveLiveDemoProps> = ({
                 onClick={() => setInvoiceReady(true)}
                 className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl shadow-lg shadow-blue-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>Generate Instant BIR Invoicing Preview</span>
+                <span>Generate VAT + EWT billing preview</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Step 3: Instant Live BIR Invoice Preview (Right Column) */}
+          {/* Step 3: VAT + EWT billing preview */}
           <div className="lg:col-span-6 bg-white border-2 border-slate-300 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 relative overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between border-b-2 border-slate-800 pb-4">
               <div>
                 <span className="text-xs font-black uppercase tracking-wider text-blue-600 block">
-                  Official Billing Summary
+                  Billing summary (tax computation)
                 </span>
                 <h3 className="text-xl font-black text-slate-900 font-display">CASINFREIGHT LOGISTICS PH</h3>
-                <p className="text-xs text-slate-500">TIN: 481-992-301-000 • VAT Registered</p>
+                <p className="text-xs text-slate-500">Sample TIN on file — not a BIR-authorized invoice</p>
               </div>
               <div className="text-right">
                 <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-extrabold">
@@ -316,7 +317,7 @@ export const InteractiveLiveDemo: React.FC<InteractiveLiveDemoProps> = ({
               </div>
               <div className="flex justify-between text-slate-700">
                 <span className="flex items-center gap-1">
-                  <span>Less: 2% BIR Form 2307 (EWT)</span>
+                  <span>Less: 2% EWT (estimate for Form 2307)</span>
                 </span>
                 <span className="font-bold text-amber-700 font-mono">- ₱{ewt2.toLocaleString()}.00</span>
               </div>
@@ -325,6 +326,9 @@ export const InteractiveLiveDemo: React.FC<InteractiveLiveDemoProps> = ({
                 <span>Net Total Collectible:</span>
                 <span className="text-blue-600 text-2xl font-mono">₱{totalInvoice.toLocaleString()}.00</span>
               </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
+                {VAT_EWT_DISCLAIMER}
+              </p>
             </div>
 
             {/* Electronic Proof of Delivery Box */}

@@ -95,7 +95,7 @@ export const SYSTEM_PERMISSIONS: RbacPermission[] = [
   {
     id: 'trips.status_invoiced',
     name: 'Set Status: Invoiced',
-    description: 'Verify transport deliverables and transition shipment to BIR billing.',
+    description: 'Verify transport deliverables and move the shipment to billing.',
     category: 'operations',
   },
   {
@@ -157,29 +157,29 @@ export const SYSTEM_PERMISSIONS: RbacPermission[] = [
     category: 'fuel',
   },
 
-  // Billing & BIR Invoices
+  // Billing & VAT/EWT
   {
     id: 'invoices.view',
     name: 'View Invoices & Billing Register',
-    description: 'View BIR sales invoices, 12% VAT computations, and payment status.',
+    description: 'View freight bills, 12% VAT computations, and payment status.',
     category: 'billing',
   },
   {
     id: 'invoices.create',
-    name: 'Generate & Issue Invoices',
-    description: 'Itemize freight charges, toll surcharges, demurrage, and issue official invoices.',
+    name: 'Create freight bills',
+    description: 'Itemize freight charges, toll surcharges, demurrage, and create freight bills.',
     category: 'billing',
   },
   {
     id: 'invoices.retract',
     name: 'Request / Approve Invoice Retraction',
-    description: 'Void or retract issued invoices with BIR audit-compliant reason tracking.',
+    description: 'Void or retract issued freight bills with a written reason.',
     category: 'billing',
   },
   {
     id: 'invoices.reconcile',
-    name: 'Reconcile Payments & BIR 2307',
-    description: 'Verify 1% or 2% creditable withholding tax (BIR 2307) and bank payment slips.',
+    name: 'Reconcile Payments & client Form 2307',
+    description: 'Record 1% or 2% creditable withholding from the client’s Form 2307 and bank payment slips.',
     category: 'billing',
   },
 
@@ -227,7 +227,7 @@ export const SYSTEM_PERMISSIONS: RbacPermission[] = [
   {
     id: 'settings.manage',
     name: 'Manage Company Profile & Settings',
-    description: 'Update BIR registered business name, TIN, corporate address, and billing plans.',
+    description: 'Update legal business name, TIN, corporate address, and billing plans.',
     category: 'admin',
   },
 ];

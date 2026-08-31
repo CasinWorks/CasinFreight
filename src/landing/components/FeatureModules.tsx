@@ -44,7 +44,7 @@ export const FeatureModules: React.FC<FeatureModulesProps> = ({
             <span>
               {languageMode === 'en'
                 ? 'Built Specially for Philippine Roads & Regulations'
-                : 'Pang-Pilipinas: DPWH, BIR, at NLEX/SLEX Compliant'}
+                : 'Pang-Pilipinas: DPWH weight check at VAT/EWT kwenta'}
             </span>
           </div>
 
@@ -140,7 +140,7 @@ export const FeatureModules: React.FC<FeatureModulesProps> = ({
               <span className="text-xs font-black uppercase tracking-wider text-slate-400">03</span>
             </div>
             <div>
-              <h3 className="font-extrabold text-slate-900 text-sm sm:text-lg">BIR Invoicing</h3>
+              <h3 className="font-extrabold text-slate-900 text-sm sm:text-lg">VAT + EWT calculator</h3>
               <p className="hidden sm:block text-xs text-slate-500 mt-1">12% VAT and 2% EWT auto-calculation.</p>
             </div>
           </button>
@@ -361,7 +361,7 @@ export const FeatureModules: React.FC<FeatureModulesProps> = ({
               <div className="lg:col-span-6 space-y-5 text-left">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-900 text-xs font-bold rounded-lg">
                   <Receipt className="w-4 h-4 text-purple-700" />
-                  <span>BIR Compliant • 12% Output VAT • 2% Withholding EWT</span>
+                  <span>Computes 12% VAT + 2% EWT for your bookkeeper</span>
                 </div>
 
                 <h3 className={`font-black text-slate-900 ${isLarge ? 'text-3xl' : 'text-2xl'}`}>
@@ -369,7 +369,10 @@ export const FeatureModules: React.FC<FeatureModulesProps> = ({
                 </h3>
 
                 <p className="text-slate-600 text-base sm:text-lg leading-relaxed">
-                  Philippine trucking billing requires careful handling of 12% VAT and 2% Expanded Withholding Tax (BIR Form 2307). CasinFreight automatically computes everything, generates clean official PDF bills, and exports ready summaries for your accountant.
+                  CasinFreight computes 12% VAT and 2% EWT on the freight bill so your bookkeeper can review it. Print or export a billing summary — this is an aid for your accountant, not a BIR-registered Sales Invoice or Official Receipt.
+                </p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  CasinFreight does not register, transmit, or certify invoices with BIR. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice.
                 </p>
 
                 <div className="space-y-2.5">
@@ -379,7 +382,7 @@ export const FeatureModules: React.FC<FeatureModulesProps> = ({
                   </div>
                   <div className="flex items-center gap-2.5 text-slate-800 font-semibold text-sm">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <span>1-click export to Excel (.xlsx) for monthly BIR 2550M & 2550Q filing</span>
+                    <span>Export Excel (.xlsx) for your accountant — CasinFreight does not file 2550M/2550Q for you</span>
                   </div>
                   <div className="flex items-center gap-2.5 text-slate-800 font-semibold text-sm">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -393,7 +396,7 @@ export const FeatureModules: React.FC<FeatureModulesProps> = ({
                     onClick={() => onOpenAuth('signup')}
                     className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-xl transition-all cursor-pointer shadow-md shadow-blue-600/20"
                   >
-                    See BIR Invoicing in Action →
+                    See VAT + EWT calculator →
                   </button>
                 </div>
               </div>
@@ -403,13 +406,13 @@ export const FeatureModules: React.FC<FeatureModulesProps> = ({
                 <div className="rounded-2xl overflow-hidden aspect-4/3 bg-slate-100 border-2 border-slate-200 shadow-lg relative">
                   <img
                     src={IMAGES.birOffice}
-                    alt="Business manager reviewing BIR digital invoices"
+                    alt="Bookkeeper reviewing VAT and EWT on a freight bill"
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
                   <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-xs p-3.5 rounded-xl border border-slate-200 shadow-md">
                     <p className="text-xs font-black text-slate-900">
-                      ✓ BIR Form 2307 Summary Ready
+                      ✓ VAT + EWT computed on the freight bill
                     </p>
                     <p className="text-[11px] text-slate-600 mt-0.5">
                       Quarterly VAT summaries generated automatically. Zero manual calculator errors.

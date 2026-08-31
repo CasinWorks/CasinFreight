@@ -189,7 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: BookOpen,
       permission: 'ledger_view',
       trailing: (
-        <span title="BIR books — double-entry journal and trial balance" className="text-slate-400">
+        <span title="General ledger — journal and trial balance" className="text-slate-400">
           <FileCheck2 className={`${ICON_CLASS} w-3.5 h-3.5`} />
         </span>
       ),

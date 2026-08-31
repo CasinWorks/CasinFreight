@@ -3,6 +3,7 @@ import { ShieldCheck, MapPin, Phone, Mail, CheckCircle } from 'lucide-react';
 import { LanguageMode } from '../types';
 import { CasinFreightLogo } from '../../components/brand/CasinFreightLogo';
 import { CasinWorksCredit } from '../../components/brand/CasinWorksCredit';
+import { VAT_EWT_DISCLAIMER } from '../../content/taxCopy';
 
 interface FooterProps {
   languageMode: LanguageMode;
@@ -25,7 +26,7 @@ export const Footer: React.FC<FooterProps> = ({ languageMode, onOpenAuth, onOpen
               </span>
             </div>
             <p className="text-sm text-slate-400 leading-relaxed max-w-sm">
-              The premier Philippine trucking operations platform. Eliminating paper delivery receipts, preventing DPWH overload penalties, and automating BIR tax invoicing for logistics business owners nationwide.
+              The premier Philippine trucking operations platform. Eliminating paper delivery receipts, preventing DPWH overload penalties, and computing VAT and EWT on freight bills for logistics business owners nationwide.
             </p>
             <div className="flex items-center gap-3 pt-2 text-xs text-slate-400">
               <span className="inline-flex items-center gap-1 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
@@ -34,9 +35,12 @@ export const Footer: React.FC<FooterProps> = ({ languageMode, onOpenAuth, onOpen
               </span>
               <span className="inline-flex items-center gap-1 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
                 <CheckCircle className="w-4 h-4 text-blue-400" />
-                BIR 12% VAT Compliant
+                12% VAT + 2% EWT calculator
               </span>
             </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed max-w-sm">
+              {VAT_EWT_DISCLAIMER}
+            </p>
           </div>
 
           {/* Col 3: Quick Links */}

@@ -71,7 +71,7 @@ export const initialUsers: User[] = [
     avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
     phone: '+63 917 338 1204',
     password: 'password123',
-    department: 'BIR Billing & Receivables',
+    department: 'Billing & Receivables',
   },
   {
     id: 'user-05',
@@ -2180,7 +2180,7 @@ export const initialPlans: Plan[] = [
   {
     id: 'plan_founding',
     name: 'Founding Plan',
-    description: 'Unlimited enterprise freight booking, multi-role dispatch & full BIR double-entry accounting.',
+    description: 'Unlimited enterprise freight booking, multi-role dispatch, and double-entry books.',
     price_php: 499.00,
     interval: 'month',
     max_bookings_per_month: null, // Unlimited
@@ -2189,7 +2189,7 @@ export const initialPlans: Plan[] = [
     features: [
       'Unlimited monthly trip bookings & dispatching',
       '5 GB POD photos & receipt storage; extra ₱99/GB per month',
-      'Full General Ledger & BIR 2307 EWT Tax Books',
+      'Full general ledger and VAT + EWT calculator on freight bills',
       'Enterprise P&L & direct cost analytics per plate',
       'Multi-role access (Owner, Dispatcher, Billing, Loading)',
       'Dual-control invoice retraction governance',

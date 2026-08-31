@@ -45,9 +45,9 @@ const CATEGORY_META: Record<PermissionCategory, { label: string; icon: string; d
     description: 'Pump receipts, odometer entries, consumption tracking, and expense auditing',
   },
   billing: {
-    label: 'BIR Billing & 12% VAT Invoices',
+    label: 'Billing & VAT/EWT',
     icon: '🧾',
-    description: 'Itemized sales invoices, accessorial billing, 2307 reconciliation, and retractions',
+    description: 'Itemized freight bills, accessorial billing, 2307 recording, and retractions',
   },
   ledger: {
     label: 'General Ledger & Financial Books',

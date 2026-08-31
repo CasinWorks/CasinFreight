@@ -91,11 +91,11 @@ export const FreightLedgerView: React.FC = () => {
                 General Ledger & Books of Accounts
               </h1>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono border border-slate-200">
-                BIR Standard
+                Books of accounts
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Official double-entry books, chart of accounts, automated journal entries, client AR sub-ledgers, and trial balance.
+              Internal double-entry books, chart of accounts, automated journal entries, client AR sub-ledgers, and trial balance.
             </p>
             <div className="mt-3 max-w-xl print:hidden">
               <FeatureHowTo feature="ledger" />
@@ -117,7 +117,7 @@ export const FreightLedgerView: React.FC = () => {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold shadow-2xs"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print Official Books</span>
+              <span>Print books</span>
             </button>
           </div>
         </div>
@@ -656,7 +656,7 @@ export const FreightLedgerView: React.FC = () => {
 
                 <div className="text-right">
                   <span className="text-xs font-mono px-3 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg font-bold">
-                    Official General Ledger Basis
+                    Internal general ledger
                   </span>
                 </div>
               </div>
@@ -891,7 +891,7 @@ export const FreightLedgerView: React.FC = () => {
                 Standard Philippine Freight Logistics Chart of Accounts (COA)
               </h3>
               <p className="text-xs text-slate-500 mb-4">
-                Structured chart of accounts aligned with BIR regulatory reporting and Philippine freight trucking standards.
+                Chart of accounts for Philippine freight (not a BIR-filed report).
               </p>
 
               <div className="overflow-x-auto">

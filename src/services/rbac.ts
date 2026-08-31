@@ -124,7 +124,7 @@ export const DEFAULT_RBAC_ROLES: RbacRole[] = [
   {
     id: 'Billing',
     name: 'Billing Specialist',
-    description: 'Calculates 12% VAT, issues itemized BIR sales invoices, manages accessorial surcharges, and reconciles 2307 withholding certificates.',
+    description: 'Calculates 12% VAT and 2% EWT on freight bills, manages accessorial surcharges, and records client Form 2307 when provided.',
     color: 'amber',
     isSystem: true,
     permissions: [

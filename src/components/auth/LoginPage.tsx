@@ -196,7 +196,7 @@ export const LoginPage: React.FC = () => {
               {[
                 { icon: Scale, title: 'Payload & GVWR', copy: 'Weighbridge checks and overweight alerts.' },
                 { icon: FileCheck2, title: 'Digital e-POD', copy: 'Seals, delivery notes, and signatures.' },
-                { icon: Receipt, title: 'BIR Invoicing', copy: '12% VAT and 2% EWT on every trip.' },
+                { icon: Receipt, title: 'VAT + EWT calculator', copy: 'Computes 12% VAT and 2% EWT on the freight bill so your bookkeeper can review it.' },
                 { icon: ShieldCheck, title: 'Team roles', copy: 'Live roles and seats per company.' },
               ].map((item) => (
                 <div key={item.title} className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1">

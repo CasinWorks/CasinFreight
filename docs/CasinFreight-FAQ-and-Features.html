@@ -110,7 +110,7 @@
       <tr><td>New Load / Load Calculator</td><td>Book a trip with GVWR payload gauge, volume, rate-card rates, fuel surcharge, toll estimate, multi-stop and overweight (RA 8794 cargo kg vs net payload).</td></tr>
       <tr><td>Exceptions</td><td>Hold or cancel with Philippine ops reasons (gate pass, port congestion, LTO/overweight checkpoint, etc.).</td></tr>
       <tr><td>Trip file</td><td>Waybill / delivery note, seal, custody signatures, demurrage, accessorials, profitability, status rollback (Owner / GM).</td></tr>
-      <tr><td>Invoices &amp; Billing</td><td>Draft → Send → Paid / Void. 12% VAT + EWT. Proof of payment and BIR 2307. Dual-control void/retract.</td></tr>
+      <tr><td>Invoices &amp; Billing</td><td>Draft → Send → Paid / Void. VAT + EWT calculator (12% VAT + EWT). Proof of payment and client Form 2307. Dual-control void/retract. Not a BIR Sales Invoice, Official Receipt, or CAS/PTU e-invoice.</td></tr>
       <tr><td>Trucks &amp; Fuel</td><td>Plate, type, GVWR / tare / CBM, status. Assign a driver and a helper per truck. Diesel logs and km/L.</td></tr>
       <tr><td>Drivers &amp; Helpers</td><td>Licensed drivers (LTO, restrictions, expiry, app email) and helpers / pahinante assigned to the same truck.</td></tr>
       <tr><td>Truck Bans &amp; Hours</td><td>MMDA-style windows (EDSA, C5, Makati, and your own). “In effect now” badges at booking.</td></tr>
@@ -136,7 +136,7 @@
 
   <h2>Philippine ops built in</h2>
   <ul>
-    <li>TIN on company and clients; invoices labeled for a VAT-registered hauler.</li>
+    <li>TIN on company and clients; 12% VAT and 2% EWT computed on freight bills for your bookkeeper (not a BIR Sales Invoice, Official Receipt, or CAS/PTU e-invoice).</li>
     <li>12% VAT and configurable EWT (default 2%); reconcile with BIR 2307 and deposit slips.</li>
     <li>Waybills / delivery notes with seal #, gate pass, plate, driver license, weight/volume, helper name.</li>
     <li>DPWH RA 8794 overweight flag when cargo exceeds net payload (GVWR − tare).</li>
@@ -224,7 +224,7 @@
   </div>
   <div class="qa">
     <strong>Does billing handle VAT and EWT?</strong>
-    Yes. 12% VAT and EWT on invoices, plus proof of payment and BIR 2307 reconcile. The general ledger is double-entry.
+    Yes. 12% VAT and 2% EWT are computed on the freight bill so your bookkeeper can review it. Attach proof of payment and the client’s Form 2307 when they pay. CasinFreight does not register, transmit, or certify invoices with BIR. This is not a Sales Invoice, Official Receipt, or CAS/PTU e-invoice.
   </div>
   <div class="qa">
     <strong>How many people can log in on Free?</strong>

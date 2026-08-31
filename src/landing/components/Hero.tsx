@@ -132,7 +132,7 @@ export const Hero: React.FC<HeroProps> = ({
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
                 <CheckCircle2 className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
                 <span className="text-sm font-bold text-slate-800 leading-snug">
-                  {languageMode === 'en' ? '12% VAT + 2% EWT Invoicing' : 'Kusang Kwenta ng BIR Tax & Invoice'}
+                  {languageMode === 'en' ? 'VAT + EWT calculator' : 'Kusang kwenta ng 12% VAT at 2% EWT'}
                 </span>
               </div>
             </div>
