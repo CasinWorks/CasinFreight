@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Banknote, Crown, Gift, Loader2, RefreshCw, RotateCcw, Search, Shield, Wallet, X } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
+import { FOUNDING_PRICE_PHP, PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS, isFoundingPeriodExpired, isFreeTrialExpired } from '../../config/plans';
+import type { Subscription } from '../../types';
 import { MAX_BILLABLE_TRUCKS } from '../../lib/subscriptionPrice';
 import type { CompanyDocument } from '../../services/firestoreCompany';
 import { listSalesAgents, setCompanySalesAgent, backfillLatestSaasCommission } from '../../services/firestoreSales';
@@ -30,6 +31,93 @@ function daysLeft(iso?: string) {
   return Math.ceil((end - Date.now()) / 86400000);
 }
 
+function periodEndIso(sub?: Subscription) {
+  return sub?.current_period_end || (sub?.plan_id === PLAN_FREE_ID ? sub?.created_at : undefined);
+}
+
+type PlanFilter = 'all' | 'founding' | 'promo' | 'free' | 'ending' | 'expired';
+
+function accountPlanId(sub?: Subscription) {
+  return sub?.plan_id || PLAN_FREE_ID;
+}
+
+function accountStatus(sub?: Subscription) {
+  const planId = accountPlanId(sub);
+  const endIso = periodEndIso(sub);
+  const left = daysLeft(endIso);
+  const expired = left !== null && left < 0;
+  const stored = sub?.status;
+  const autoRenew = planId === PLAN_FOUNDING_ID && sub?.auto_renew !== false && !sub?.cancel_at_period_end;
+
+  if (planId === PLAN_FREE_ID) {
+    const trialOver = isFreeTrialExpired(sub) || expired;
+    return {
+      label: trialOver ? 'Trial ended' : 'Free trial',
+      dateCaption: trialOver ? 'Trial ended' : 'Trial ends',
+      tone: trialOver ? 'rose' : 'slate',
+      expired: trialOver,
+      endingSoon: !trialOver && left !== null && left <= 7,
+    };
+  }
+
+  if (planId === PLAN_PROMO_ID) {
+    const promoOver = isFoundingPeriodExpired(sub) || expired;
+    return {
+      label: promoOver ? 'Promo ended' : 'Promo active',
+      dateCaption: promoOver ? 'Promo ended' : 'Promo ends',
+      tone: promoOver ? 'rose' : 'violet',
+      expired: promoOver,
+      endingSoon: !promoOver && left !== null && left <= 7,
+    };
+  }
+
+  if (stored === 'past_due') {
+    return {
+      label: 'Past due',
+      dateCaption: expired ? 'Period ended' : 'Due since',
+      tone: 'amber',
+      expired: Boolean(expired),
+      endingSoon: !expired && left !== null && left <= 7,
+    };
+  }
+
+  if (stored === 'canceled' || sub?.cancel_at_period_end) {
+    return {
+      label: expired ? 'Canceled' : 'Canceling',
+      dateCaption: expired ? 'Ended' : 'Ends',
+      tone: expired ? 'slate' : 'amber',
+      expired: Boolean(expired),
+      endingSoon: !expired && left !== null && left <= 7,
+    };
+  }
+
+  if (isFoundingPeriodExpired(sub) || expired) {
+    return {
+      label: 'Period ended',
+      dateCaption: 'Period ended',
+      tone: 'rose',
+      expired: true,
+      endingSoon: false,
+    };
+  }
+
+  return {
+    label: 'Active',
+    dateCaption: autoRenew ? 'Renews' : 'Ends',
+    tone: 'emerald',
+    expired: false,
+    endingSoon: left !== null && left <= 7,
+  };
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  rose: 'bg-rose-50 text-rose-700 border-rose-200',
+  slate: 'bg-slate-100 text-slate-600 border-slate-200',
+  violet: 'bg-violet-50 text-violet-700 border-violet-200',
+  amber: 'bg-amber-50 text-amber-800 border-amber-200',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+};
+
 function todayInputDate() {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -52,6 +140,7 @@ export const AdminSubscriptionsView: React.FC = () => {
   const [promoTrucks, setPromoTrucks] = useState('2');
   const [promoDeadline, setPromoDeadline] = useState(defaultPromoDate());
   const [agents, setAgents] = useState<SalesAgent[]>([]);
+  const [planFilter, setPlanFilter] = useState<PlanFilter>('all');
 
   const load = async () => {
     setIsLoading(true);
@@ -78,19 +167,36 @@ export const AdminSubscriptionsView: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) =>
-      [row.name, row.email, row.id, row.subscription?.plan_id, row.subscription?.status, agents.find((agent) => agent.id === row.salesAgentId)?.name]
+    return rows.filter((row) => {
+      const planId = accountPlanId(row.subscription);
+      const state = accountStatus(row.subscription);
+      if (planFilter === 'founding' && planId !== PLAN_FOUNDING_ID) return false;
+      if (planFilter === 'promo' && planId !== PLAN_PROMO_ID) return false;
+      if (planFilter === 'free' && planId !== PLAN_FREE_ID) return false;
+      if (planFilter === 'ending' && !state.endingSoon) return false;
+      if (planFilter === 'expired' && !state.expired) return false;
+      if (!q) return true;
+      return [
+        row.name,
+        row.email,
+        row.id,
+        planId,
+        row.subscription?.status,
+        state.label,
+        agents.find((agent) => agent.id === row.salesAgentId)?.name,
+      ]
         .join(' ')
         .toLowerCase()
-        .includes(q)
-    );
-  }, [query, rows, agents]);
+        .includes(q);
+    });
+  }, [query, rows, agents, planFilter]);
 
-  const foundingRows = rows.filter((row) => row.subscription?.plan_id === PLAN_FOUNDING_ID);
-  const promoRows = rows.filter((row) => row.subscription?.plan_id === PLAN_PROMO_ID);
+  const foundingRows = rows.filter((row) => accountPlanId(row.subscription) === PLAN_FOUNDING_ID);
+  const promoRows = rows.filter((row) => accountPlanId(row.subscription) === PLAN_PROMO_ID);
+  const freeRows = rows.filter((row) => accountPlanId(row.subscription) === PLAN_FREE_ID);
   const foundingCount = foundingRows.length;
   const promoCount = promoRows.length;
+  const freeCount = freeRows.length;
   const mrr = foundingRows.reduce((sum, row) => {
     const billed = Number(row.subscription?.last_billed_amount_php || 0);
     if (billed > 0) {
@@ -98,10 +204,8 @@ export const AdminSubscriptionsView: React.FC = () => {
     }
     return sum + (Number(row.subscription?.base_rate_php) || FOUNDING_PRICE_PHP);
   }, 0);
-  const expiringSoon = foundingRows.filter((row) => {
-    const left = daysLeft(row.subscription?.current_period_end);
-    return left !== null && left >= 0 && left <= 7;
-  }).length;
+  const expiringSoon = rows.filter((row) => accountStatus(row.subscription).endingSoon).length;
+  const expiredCount = rows.filter((row) => accountStatus(row.subscription).expired).length;
 
   const billed = invoices.reduce((sum, invoice) => sum + (invoice.grandTotalPhp || 0), 0);
   const collected = invoices.filter((invoice) => invoice.status === 'Paid').reduce((sum, invoice) => sum + (invoice.grandTotalPhp || 0), 0);
@@ -178,7 +282,7 @@ export const AdminSubscriptionsView: React.FC = () => {
             </div>
             <h1 className="text-xl font-extrabold text-slate-900 mt-1">Revenue & plans</h1>
             <p className="text-xs text-slate-500 mt-1">
-              Founding is ₱899/month for the first year (5 trucks included), then ₱1,599/month with the 5-truck allowance kept. After Dec 31, 2026 new signups pay List: ₱1,599/month for 2 trucks. Extra trucks are ₱150. Use <span className="font-semibold">Give promo</span> to turn a company on for free, with your truck cap and deadline.
+              Every company shows plan, status, and when the free trial, promo, or paid period ends. Founding is ₱899/month for the first year (5 trucks included), then ₱1,599/month with the 5-truck allowance kept. After Dec 31, 2026 new signups pay List: ₱1,599/month for 2 trucks. Extra trucks are ₱150. Use <span className="font-semibold">Give promo</span> to turn a company on for free, with your truck cap and deadline.
             </p>
             <div className="mt-3 max-w-xl">
               <FeatureHowTo feature="billing" />
@@ -196,19 +300,23 @@ export const AdminSubscriptionsView: React.FC = () => {
 
         <div>
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">CasinFreight SaaS</div>
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+            <button type="button" onClick={() => setPlanFilter('all')} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-slate-300">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Companies</div>
               <div className="text-2xl font-black text-slate-900 mt-1">{rows.length}</div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            </button>
+            <button type="button" onClick={() => setPlanFilter('founding')} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-blue-200">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Founding</div>
               <div className="text-2xl font-black text-blue-700 mt-1">{foundingCount}</div>
-            </div>
-            <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+            </button>
+            <button type="button" onClick={() => setPlanFilter('promo')} className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-left hover:border-violet-300">
               <div className="text-[11px] font-bold uppercase tracking-wider text-violet-600">Promo</div>
               <div className="text-2xl font-black text-violet-800 mt-1">{promoCount}</div>
-            </div>
+            </button>
+            <button type="button" onClick={() => setPlanFilter('free')} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left hover:border-slate-300">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Free</div>
+              <div className="text-2xl font-black text-slate-800 mt-1">{freeCount}</div>
+            </button>
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
               <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Monthly SaaS revenue</div>
               <div className="text-2xl font-black text-blue-800 mt-1">{pesos(mrr)}</div>
@@ -218,8 +326,19 @@ export const AdminSubscriptionsView: React.FC = () => {
               <div className="text-2xl font-black text-slate-900 mt-1">{pesos(mrr * 12)}</div>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Renews in 7 days</div>
-              <div className="text-2xl font-black text-amber-800 mt-1">{expiringSoon}</div>
+              <button type="button" onClick={() => setPlanFilter('ending')} className="w-full text-left">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Ends in 7 days</div>
+                <div className="text-2xl font-black text-amber-800 mt-1">{expiringSoon}</div>
+              </button>
+              {expiredCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPlanFilter('expired')}
+                  className="text-[10px] font-semibold text-rose-700 mt-1 underline"
+                >
+                  {expiredCount} already ended
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -252,14 +371,39 @@ export const AdminSubscriptionsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search company, email, or plan"
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:border-blue-500"
-          />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-1.5">
+            {([
+              ['all', 'All'],
+              ['founding', 'Founding'],
+              ['promo', 'Promo'],
+              ['free', 'Free'],
+              ['ending', 'Ends in 7 days'],
+              ['expired', 'Ended'],
+            ] as [PlanFilter, string][]).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setPlanFilter(id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                  planFilter === id
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search company, email, plan, or status"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:border-blue-500"
+            />
+          </div>
         </div>
 
         {error && (
@@ -273,9 +417,10 @@ export const AdminSubscriptionsView: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 font-bold">Company</th>
                   <th className="px-4 py-3 font-bold">Plan</th>
-                  <th className="px-4 py-3 font-bold">Agent</th>
-                  <th className="px-4 py-3 font-bold">Renews / ends</th>
+                  <th className="px-4 py-3 font-bold">Status</th>
+                  <th className="px-4 py-3 font-bold">Expires</th>
                   <th className="px-4 py-3 font-bold">Auto-renew</th>
+                  <th className="px-4 py-3 font-bold">Agent</th>
                   <th className="px-4 py-3 font-bold">Payment</th>
                   <th className="px-4 py-3 font-bold text-right">Actions</th>
                 </tr>
@@ -283,7 +428,7 @@ export const AdminSubscriptionsView: React.FC = () => {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                    <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
                       <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
                       Loading subscriptions…
                     </td>
@@ -291,17 +436,20 @@ export const AdminSubscriptionsView: React.FC = () => {
                 )}
                 {!isLoading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500 text-xs">
+                    <td colSpan={8} className="px-4 py-10 text-center text-slate-500 text-xs">
                       No companies match this search.
                     </td>
                   </tr>
                 )}
                 {!isLoading && filtered.map((row) => {
-                  const isFounding = row.subscription?.plan_id === PLAN_FOUNDING_ID;
-                  const isPromo = row.subscription?.plan_id === PLAN_PROMO_ID;
+                  const isFounding = accountPlanId(row.subscription) === PLAN_FOUNDING_ID;
+                  const isPromo = accountPlanId(row.subscription) === PLAN_PROMO_ID;
+                  const isFree = accountPlanId(row.subscription) === PLAN_FREE_ID;
                   const isUnlocked = isFounding || isPromo;
                   const isCurrent = row.id === company.id;
-                  const left = daysLeft(row.subscription?.current_period_end);
+                  const endIso = periodEndIso(row.subscription);
+                  const left = daysLeft(endIso);
+                  const state = accountStatus(row.subscription);
                   const autoRenew = isFounding && row.subscription?.auto_renew !== false && !row.subscription?.cancel_at_period_end;
                   return (
                     <tr key={row.id} className="border-t border-slate-100">
@@ -337,6 +485,36 @@ export const AdminSubscriptionsView: React.FC = () => {
                             {row.subscription?.billed_truck_count || 1} truck{(row.subscription?.billed_truck_count || 1) === 1 ? '' : 's'}
                           </div>
                         )}
+                        {isFree && (
+                          <div className="text-[10px] text-slate-500 mt-1">
+                            {FREE_INCLUDED_TRUCKS} truck · {FREE_TRIAL_MONTHS}-month trial
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <span className={`inline-flex text-[11px] font-bold px-2 py-0.5 rounded-full border ${STATUS_BADGE[state.tone]}`}>
+                          {state.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 align-top text-xs text-slate-600">
+                        <div className="font-semibold text-slate-800">{formatPhDate(endIso)}</div>
+                        <div className={`text-[10px] mt-0.5 ${state.expired ? 'text-rose-600 font-semibold' : 'text-slate-400'}`}>
+                          {endIso
+                            ? left === null
+                              ? state.dateCaption
+                              : left < 0
+                                ? `${state.dateCaption} · ${Math.abs(left)} day${Math.abs(left) === 1 ? '' : 's'} ago`
+                                : `${state.dateCaption} · ${left} day${left === 1 ? '' : 's'} left`
+                            : 'No period on file'}
+                        </div>
+                        {isFounding && row.subscription?.lock_expires_at && (
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            Price lock {formatPhDate(row.subscription.lock_expires_at)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top text-xs text-slate-600">
+                        {isFounding ? (autoRenew ? 'On' : 'Off') : isPromo ? 'No · promo' : 'No · trial'}
                       </td>
                       <td className="px-4 py-3 align-top">
                         {isPlatformAdmin ? (
@@ -357,21 +535,8 @@ export const AdminSubscriptionsView: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 align-top text-xs text-slate-600">
-                        {isUnlocked ? (
-                          <>
-                            <div>{formatPhDate(row.subscription?.current_period_end)}</div>
-                            <div className="text-[10px] text-slate-400">
-                              {left === null ? '' : left < 0 ? 'Expired' : `${left} day${left === 1 ? '' : 's'} left`}
-                            </div>
-                          </>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3 align-top text-xs text-slate-600">
-                        {isFounding ? (autoRenew ? 'On' : 'Off') : isPromo ? 'Promo' : '—'}
-                      </td>
                       <td className="px-4 py-3 align-top text-[11px] font-mono text-slate-500">
-                        {isPromo ? 'Complimentary' : (row.subscription?.last_payment_method || row.subscription?.payment_provider_checkout_id || '—')}
+                        {isPromo ? 'Complimentary' : isFree ? 'Not billed' : (row.subscription?.last_payment_method || row.subscription?.payment_provider_checkout_id || '—')}
                       </td>
                       <td className="px-4 py-3 align-top text-right">
                         <div className="inline-flex flex-col sm:flex-row gap-2 justify-end">
