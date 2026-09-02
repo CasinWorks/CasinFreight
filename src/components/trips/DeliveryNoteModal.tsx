@@ -20,6 +20,7 @@ import { useFreight } from '../../context/FreightContext';
 import { displaySignatory, isPlaceholderSignatory } from '../../lib/podSignoff';
 import { closeIfBackdrop } from '../../lib/modal';
 import { Trip, Truck as TruckType, Driver, Client, Company, TripStatus } from '../../types';
+import { printIsolatedElement } from '../../lib/printDocument';
 
 interface DeliveryNoteModalProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
 }) => {
   const { trips } = useFreight();
   const [copied, setCopied] = React.useState(false);
+  const printRef = React.useRef<HTMLDivElement>(null);
 
   if (!isOpen) return null;
 
@@ -79,7 +81,7 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    if (printRef.current) printIsolatedElement(printRef.current);
   };
 
   return (
@@ -130,7 +132,10 @@ export const DeliveryNoteModal: React.FC<DeliveryNoteModalProps> = ({
         </div>
 
         {/* Printable Document Paper */}
-        <div className="overflow-y-auto p-6 md:p-8 flex-1 bg-white text-slate-900 font-sans text-xs space-y-6">
+        <div
+          ref={printRef}
+          className="print-document overflow-y-auto p-6 md:p-8 flex-1 bg-white text-slate-900 font-sans text-xs space-y-6"
+        >
           
           {/* Letterhead & Document Meta */}
           <div className="border-b-2 border-slate-800 pb-5 flex flex-col sm:flex-row justify-between items-start gap-4">

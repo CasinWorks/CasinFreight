@@ -61,13 +61,39 @@
 
 /* High Fidelity Print Styles for Invoices */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  html,
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  header, aside, .print\:hidden {
+  header,
+  aside,
+  .print\:hidden,
+  .no-print {
     display: none !important;
+  }
+
+  .print-document {
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-bill {
+    font-size: 10px;
+    line-height: 1.3;
   }
 }
 

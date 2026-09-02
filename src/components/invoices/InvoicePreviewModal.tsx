@@ -36,6 +36,7 @@ import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 import { FeatureHowTo } from '../help/FeatureHowTo';
+import { printIsolatedElement } from '../../lib/printDocument';
 
 interface InvoicePreviewModalProps {
   invoiceId: string | null;
@@ -73,6 +74,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const [isRetractionOpen, setIsRetractionOpen] = useState(false);
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [unlockReason, setUnlockReason] = useState('');
+  const printRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (invoice) {
@@ -150,7 +152,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    if (printRef.current) printIsolatedElement(printRef.current);
   };
 
   const handleUnlockInvoice = () => {
@@ -406,7 +408,10 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
           )}
 
           {/* Printable freight bill */}
-          <div className="overflow-y-auto p-6 md:p-8 flex-1 bg-white text-neutral-900 font-sans print:p-0 relative">
+          <div
+            ref={printRef}
+            className="print-document print-bill overflow-y-auto p-6 md:p-8 flex-1 bg-white text-neutral-900 font-sans print:p-0 relative"
+          >
             
             {/* VOID Watermark if voided */}
             {isVoided && (
@@ -418,7 +423,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             )}
 
             {/* Header & Logo Section */}
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b-2 border-neutral-900 pb-6 gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b-2 border-neutral-900 pb-6 gap-4 print:flex-row print:pb-2 print:gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <CasinFreightLogo className="h-8 w-8 rounded" />
@@ -438,7 +443,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
 
               <div className="text-left sm:text-right">
                 <div className="flex flex-wrap items-center sm:justify-end gap-2">
-                  <div className="text-2xl font-black text-neutral-900 tracking-tight uppercase">
+                  <div className="text-2xl font-black text-neutral-900 tracking-tight uppercase print:text-lg">
                     FREIGHT BILL
                   </div>
                   <span className="text-[10px] font-mono font-black bg-amber-100 text-amber-900 border border-amber-500 px-2 py-0.5 rounded uppercase">
@@ -468,7 +473,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             <InvoiceNotOfficialNotice variant="print" />
 
             {/* Billed To & Shipment Reference Meta */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-6 bg-neutral-50 p-4 rounded-lg border border-neutral-200 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-6 bg-neutral-50 p-4 rounded-lg border border-neutral-200 text-xs print:grid-cols-2 print:gap-3 print:my-2 print:p-2.5">
               <div>
                 <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">
                   BILLED TO (CLIENT / CONSIGNEE)
@@ -498,21 +503,21 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
 
             {/* Itemized Table */}
-            <div className="mb-6">
+            <div className="mb-6 print:mb-2">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b-2 border-neutral-900 bg-neutral-100 text-neutral-900 font-bold uppercase text-[11px]">
-                    <th className="py-2.5 px-3">Description / Accessorial Particulars</th>
-                    <th className="py-2.5 px-3 text-center w-16">Qty</th>
-                    <th className="py-2.5 px-3 text-right w-28">Unit Rate (₱)</th>
-                    <th className="py-2.5 px-3 text-right w-32">Amount (₱)</th>
+                    <th className="py-2.5 px-3 print:py-1">Description / Accessorial Particulars</th>
+                    <th className="py-2.5 px-3 text-center w-16 print:py-1">Qty</th>
+                    <th className="py-2.5 px-3 text-right w-28 print:py-1">Unit Rate (₱)</th>
+                    <th className="py-2.5 px-3 text-right w-32 print:py-1">Amount (₱)</th>
                     {isEditing && invoice.status === 'Draft' && <th className="py-2.5 px-2 w-10 text-center">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-200">
                   {lineItems.map((item, idx) => (
                     <tr key={item.id || idx} className="hover:bg-neutral-50">
-                      <td className="py-2.5 px-3">
+                      <td className="py-2.5 px-3 print:py-1">
                         {isEditing && invoice.status === 'Draft' ? (
                           <input
                             type="text"
@@ -531,7 +536,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                           </div>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="py-2.5 px-3 text-center print:py-1">
                         {isEditing && invoice.status === 'Draft' ? (
                           <input
                             type="number"
@@ -543,7 +548,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                           <span className="font-mono">{item.qty}</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono">
+                      <td className="py-2.5 px-3 text-right font-mono print:py-1">
                         {isEditing && invoice.status === 'Draft' ? (
                           <input
                             type="number"
@@ -555,7 +560,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                           item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-neutral-900">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-neutral-900 print:py-1">
                         ₱{item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       {isEditing && invoice.status === 'Draft' && (
@@ -587,7 +592,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
 
             {/* Totals & Tax Calculation Breakdown */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 border-t-2 border-neutral-900 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 border-t-2 border-neutral-900 pt-4 print:grid-cols-12 print:gap-3 print:pt-2">
               <div className="sm:col-span-7 space-y-3 text-xs text-neutral-600">
                 <div className="bg-neutral-50 p-3 rounded border border-neutral-200">
                   <div className="font-bold text-neutral-800 uppercase text-[10px] mb-1">
@@ -624,7 +629,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </span>
                 </div>
 
-                <div className="flex justify-between text-base font-black text-neutral-950 py-2 border-t-2 border-neutral-900">
+                <div className="flex justify-between text-base font-black text-neutral-950 py-2 border-t-2 border-neutral-900 print:text-sm print:py-1">
                   <span>TOTAL AMOUNT DUE:</span>
                   <span className="font-mono text-neutral-950">
                     ₱{grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -635,15 +640,15 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
 
             {/* Payment recorded (internal — not a BIR Official Receipt) */}
             {invoice.isLocked && invoice.proofOfPayment && !isVoided && (
-              <div className="mt-6 p-4 rounded-xl border-2 border-emerald-600 bg-emerald-50/40 text-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
+              <div className="mt-6 p-4 rounded-xl border-2 border-emerald-600 bg-emerald-50/40 text-xs space-y-3 print:mt-2 print:p-2 print:space-y-1.5">
+                <div className="flex items-center justify-between border-b border-emerald-200 pb-2 print:pb-1">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-emerald-700" />
+                    <ShieldCheck className="w-5 h-5 text-emerald-700 print:w-4 print:h-4" />
                     <div>
                       <h4 className="font-black text-emerald-950 uppercase tracking-tight text-xs">
                         Payment recorded
                       </h4>
-                      <p className="text-[10px] text-emerald-800 font-medium">
+                      <p className="text-[10px] text-emerald-800 font-medium print:hidden">
                         This freight bill is not an official invoice. Internal confirmation only — not a BIR Official Receipt.
                       </p>
                     </div>
@@ -653,7 +658,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs print:grid-cols-4 print:gap-2">
                   <div>
                     <div className="text-[10px] text-emerald-800 uppercase font-semibold">Payment Channel</div>
                     <div className="font-bold text-neutral-900 mt-0.5">{invoice.proofOfPayment.paymentMethod}</div>
@@ -676,7 +681,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-emerald-200/60 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-emerald-200/60 text-xs print:grid-cols-2 print:gap-2 print:pt-1">
                   <div>
                     <div className="text-[10px] text-emerald-800 uppercase font-semibold">Payment reference (client/bank OR if any)</div>
                     <div className="font-mono font-bold text-neutral-800 mt-0.5">
@@ -696,7 +701,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
                 </div>
 
                 {invoice.proofOfPayment.popFileUrl && (
-                  <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between">
+                  <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between print:hidden">
                     <div className="flex items-center gap-2">
                       <Paperclip className="w-3.5 h-3.5 text-emerald-700" />
                       <span className="text-[11px] font-medium text-emerald-950">
@@ -719,9 +724,9 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-8 mt-12 pt-6 border-t border-neutral-300 text-xs">
+            <div className="grid grid-cols-2 gap-8 mt-12 pt-6 border-t border-neutral-300 text-xs print:mt-3 print:pt-2 print:gap-6">
               <div className="text-center">
-                <div className="h-10"></div>
+                <div className="h-10 print:h-5"></div>
                 <div className="border-t border-neutral-700 pt-1 font-bold text-neutral-900 uppercase">
                   Prepared by
                 </div>
@@ -729,7 +734,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               </div>
 
               <div className="text-center">
-                <div className="h-10"></div>
+                <div className="h-10 print:h-5"></div>
                 <div className="border-t border-neutral-700 pt-1 font-bold text-neutral-900 uppercase">
                   Received by
                 </div>
@@ -737,7 +742,7 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
               </div>
             </div>
 
-            <p className="mt-8 text-[10px] text-neutral-500 leading-relaxed border-t border-neutral-200 pt-3">
+            <p className="mt-8 text-[10px] text-neutral-500 leading-relaxed border-t border-neutral-200 pt-3 print:mt-2 print:pt-1.5 print:leading-snug">
               {VAT_EWT_DISCLAIMER} {VAT_EWT_ONE_LINER}
             </p>
 
