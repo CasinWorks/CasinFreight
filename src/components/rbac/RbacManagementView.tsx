@@ -787,7 +787,7 @@ export const RbacManagementView: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => setMemberToRemove(u)}
-                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 shrink-0"
                               >
                                 {u.status === 'invited' ? 'Cancel invite' : 'Remove'}
                               </button>

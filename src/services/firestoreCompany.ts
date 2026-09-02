@@ -184,15 +184,26 @@ export async function removeCompanyMember(params: {
     await deleteDoc(doc(getFirebaseDb(), 'companies', companyId, 'members', memberId));
   } catch (error) {
     const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+    if (code.includes('permission-denied')) {
+      throw new Error('Firestore blocked removing this teammate. In Firebase Console → Firestore → Rules, paste firestore.rules from this project, click Publish, then try Remove again.');
+    }
     if (!code.includes('not-found')) throw error;
   }
 
   if (memberId.startsWith('invite-')) return;
 
   const userRef = doc(getFirebaseDb(), 'users', memberId);
-  const snap = await getDoc(userRef);
-  if (snap.exists() && String(snap.data()?.companyId || '') === companyId) {
-    await deleteDoc(userRef);
+  try {
+    const snap = await getDoc(userRef);
+    if (snap.exists() && String(snap.data()?.companyId || '') === companyId) {
+      await deleteDoc(userRef);
+    }
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+    if (code.includes('permission-denied')) {
+      throw new Error('They were taken off the roster, but their login is still tied to this company. Publish firestore.rules, then Remove again.');
+    }
+    if (!code.includes('not-found')) throw error;
   }
 }
 

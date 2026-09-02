@@ -1783,7 +1783,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await removeCompanyMember({
           companyId: company.id,
           memberId: userId,
-          email: target.email,
+          email: target.status === 'invited' ? target.email : undefined,
         });
       } catch (error) {
         setUsers((prev) => (prev.some((user) => user.id === userId) ? prev : [...prev, target]));
