@@ -84,6 +84,22 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
   await setDoc(doc(getFirebaseDb(), 'users', profile.uid || profile.id), stripUndefined(safe as unknown as Record<string, unknown>));
 }
 
+export async function saveMemberProfile(companyId: string, profile: UserProfile): Promise<void> {
+  const { password: _password, ...safe } = profile;
+  await setDoc(
+    doc(getFirebaseDb(), 'companies', companyId, 'members', profile.id),
+    stripUndefined(safe as unknown as Record<string, unknown>)
+  );
+}
+
+export async function deleteOwnAccountRecords(params: { uid: string; companyId: string }): Promise<void> {
+  if (!params.companyId || !params.uid) {
+    throw new Error('Account records are incomplete. Sign in again and try again.');
+  }
+  await deleteDoc(doc(getFirebaseDb(), 'companies', params.companyId, 'members', params.uid));
+  await deleteDoc(doc(getFirebaseDb(), 'users', params.uid));
+}
+
 export async function getCompanyDocument(companyId: string): Promise<CompanyDocument | null> {
   const snap = await getDoc(doc(getFirebaseDb(), 'companies', companyId));
   return snap.exists() ? (snap.data() as CompanyDocument) : null;

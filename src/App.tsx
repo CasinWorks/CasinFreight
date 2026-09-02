@@ -22,6 +22,7 @@ import { TruckBanRegistry } from './components/truckbans/TruckBanRegistry';
 import { OwnerDashboard } from './components/dashboard/OwnerDashboard';
 import { RbacManagementView } from './components/rbac/RbacManagementView';
 import { OrgSetupModal } from './components/onboarding/OrgSetupModal';
+import { ProfileModal } from './components/account/ProfileModal';
 import { NotificationDrawer } from './components/notifications/NotificationDrawer';
 import { LandingPage } from './landing/LandingPage';
 import { BootSplash } from './components/auth/BootSplash';
@@ -43,6 +44,7 @@ function MainLayout() {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [isOrgSetupOpen, setIsOrgSetupOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
     if (isOnboardingOpen) {
@@ -81,7 +83,7 @@ function MainLayout() {
       activeTab={activeTab}
       onNavigate={handleTabChange}
       onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-      isBlocked={isOrgSetupOpen || isOnboardingOpen}
+      isBlocked={isOrgSetupOpen || isOnboardingOpen || isProfileOpen}
     >
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans antialiased selection:bg-blue-500 selection:text-white">
       {/* Top Navigation */}
@@ -100,6 +102,7 @@ function MainLayout() {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onOpenHowTo={() => handleTabChange('help')}
+        onOpenProfile={() => setIsProfileOpen(true)}
       />
 
       {/* Main Content Area with Responsive Sidebar */}
@@ -109,6 +112,7 @@ function MainLayout() {
           setActiveTab={handleTabChange}
           isMobileMenuOpen={isMobileMenuOpen}
           onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
+          onOpenProfile={() => setIsProfileOpen(true)}
         />
 
         <main data-tutorial="main-workspace" className="flex-1 flex flex-col min-w-0 w-full overflow-hidden bg-[#F8FAFC] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
@@ -296,6 +300,15 @@ function MainLayout() {
         onClose={() => {
           setIsOrgSetupOpen(false);
           setIsOnboardingOpen(false);
+        }}
+      />
+
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        onOpenOrgSetup={() => {
+          setIsProfileOpen(false);
+          setIsOrgSetupOpen(true);
         }}
       />
 

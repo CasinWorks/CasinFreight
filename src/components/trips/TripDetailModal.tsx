@@ -31,7 +31,8 @@ import {
   PauseCircle,
   Play,
   MoreHorizontal,
-  ArrowDown
+  ArrowDown,
+  RotateCcw
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { SignaturePad, SignaturePadHandle } from './SignaturePad';
@@ -40,6 +41,7 @@ import { Trip, TripStatus, AccessorialType, POD, HOLD_EXCEPTION_KINDS, CANCEL_EX
 import { matchingTruckBans } from '../../lib/truckBans';
 import { TruckBanAlert } from '../truckbans/TruckBanAlert';
 import { isStatusRetraction } from '../../lib/stageGates';
+import { formatTripAuditWhen, resolveTimelineRetraction } from '../../lib/tripAudit';
 import { DeliveryNoteModal } from './DeliveryNoteModal';
 import { StatusPrerequisiteModal } from './StatusPrerequisiteModal';
 import { TripExceptionModal } from './TripExceptionModal';
@@ -1019,18 +1021,31 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               </div>
 
               <div className="space-y-3 relative pl-4 before:content-[''] before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                {trip.timeline.map((event, idx) => (
+                {(() => {
+                  const usedHistoryIds = new Set<string>();
+                  return trip.timeline.map((event, idx) => {
+                    const retraction = resolveTimelineRetraction(event, trip, usedHistoryIds);
+                    const isRollback = Boolean(retraction);
+                    const rejected = retraction?.outcome === 'Rejected';
+                    return (
                   <div key={event.id || idx} className="relative pl-3 space-y-0.5">
                     <div className={`w-3 h-3 rounded-full absolute -left-4 top-1 border-2 border-white ${
+                      rejected ? 'bg-rose-500' :
+                      isRollback ? 'bg-amber-600' :
                       event.status === 'Pending' ? 'bg-slate-400' :
                       event.status === 'Loaded' ? 'bg-blue-500' :
                       event.status === 'In Transit' ? 'bg-amber-500' :
-                      event.status === 'Delivered' ? 'bg-emerald-500' : 'bg-purple-500'
+                      event.status === 'Delivered' ? 'bg-emerald-500' :
+                      event.status === 'On Hold' ? 'bg-amber-400' :
+                      event.status === 'Cancelled' ? 'bg-rose-400' : 'bg-purple-500'
                     }`} />
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-slate-800">{event.status}</span>
-                      <span className="font-mono text-slate-400 text-[10px]">
-                        {new Date(event.timestamp).toLocaleString()}
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="font-bold text-slate-800 flex items-center gap-1">
+                        {isRollback && <RotateCcw className="w-3 h-3 text-amber-700" />}
+                        {rejected ? `Rollback rejected · stayed ${event.status}` : isRollback ? `${event.status} (Status rollback)` : event.status}
+                      </span>
+                      <span className="font-mono text-slate-400 text-[10px] shrink-0">
+                        {formatTripAuditWhen(event.timestamp)}
                       </span>
                     </div>
                     {event.location && (
@@ -1039,12 +1054,49 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                         <span>{event.location}</span>
                       </div>
                     )}
-                    <p className="text-[11px] text-slate-600 leading-relaxed bg-white p-2 rounded border border-slate-200 shadow-2xs mt-1">
-                      {event.note}
-                    </p>
-                    <div className="text-[9px] text-slate-400">By: {event.updatedBy}</div>
+                    {retraction ? (
+                      <div className={`text-[11px] leading-relaxed p-2.5 rounded border shadow-2xs mt-1 space-y-1.5 ${
+                        rejected ? 'bg-rose-50 border-rose-200 text-rose-950' : 'bg-amber-50 border-amber-200 text-amber-950'
+                      }`}>
+                        <div className="font-bold uppercase tracking-wide text-[10px]">
+                          {rejected ? 'Status rollback rejected' : `Status rollback ${retraction.fromStatus} → ${retraction.toStatus}`}
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-semibold text-slate-500">Retracted by</span>
+                          <div className="font-semibold">
+                            {retraction.requestedBy}
+                            {retraction.requestedByRole ? ` (${retraction.requestedByRole})` : ''}
+                          </div>
+                          <div className="font-mono text-[10px] text-slate-500">{formatTripAuditWhen(retraction.requestedAt)}</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-semibold text-slate-500">
+                            {rejected ? 'Rejected by' : 'Approved by'}
+                          </span>
+                          <div className="font-semibold">
+                            {retraction.approvedBy}
+                            {retraction.approvedByRole ? ` (${retraction.approvedByRole})` : ''}
+                          </div>
+                          <div className="font-mono text-[10px] text-slate-500">{formatTripAuditWhen(retraction.approvedAt)}</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-semibold text-slate-500">Reason</span>
+                          <div>{retraction.reasonCategory}</div>
+                          <div className="text-slate-800">{retraction.reason}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-600 leading-relaxed bg-white p-2 rounded border border-slate-200 shadow-2xs mt-1">
+                        {event.note}
+                      </p>
+                    )}
+                    {!retraction && (
+                      <div className="text-[9px] text-slate-400">By: {event.updatedBy}</div>
+                    )}
                   </div>
-                ))}
+                    );
+                  });
+                })()}
               </div>
 
               {/* Status Transition Action Box */}

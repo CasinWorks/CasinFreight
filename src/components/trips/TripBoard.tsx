@@ -31,7 +31,8 @@ import {
   Check,
   Lock,
   ShieldAlert,
-  UserCheck
+  UserCheck,
+  ArrowUpDown
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { Trip, TripStatus, HOLD_EXCEPTION_KINDS, CANCEL_EXCEPTION_KINDS, TripExceptionKind } from '../../types';
@@ -59,6 +60,21 @@ const COLUMNS: { id: TripStatus; label: string; countColor: string; headerBorder
   { id: 'Delivered', label: 'Delivered', countColor: 'bg-emerald-50 text-emerald-700 border-emerald-200', headerBorder: 'border-l-emerald-500', desc: 'Consignee received / POD verified' },
   { id: 'Invoiced', label: 'Invoiced', countColor: 'bg-purple-50 text-purple-700 border-purple-200', headerBorder: 'border-l-purple-500', desc: 'Itemized billing transmitted' },
 ];
+
+type TripSortKey = 'pickup' | 'delivery' | 'created' | 'tripNumber' | 'client' | 'destination' | 'rate';
+
+const SORT_OPTIONS: { key: TripSortKey; label: string }[] = [
+  { key: 'pickup', label: 'Pickup date' },
+  { key: 'delivery', label: 'Delivery date' },
+  { key: 'created', label: 'Booked' },
+  { key: 'tripNumber', label: 'Trip #' },
+  { key: 'client', label: 'Customer' },
+  { key: 'destination', label: 'Destination' },
+  { key: 'rate', label: 'Rate' },
+];
+
+const DEFAULT_SORT_KEY: TripSortKey = 'pickup';
+const DEFAULT_SORT_DIR: 'asc' | 'desc' = 'asc';
 
 export const TripBoard: React.FC<TripBoardProps> = ({ 
   onOpenNewTrip, 
@@ -104,6 +120,10 @@ export const TripBoard: React.FC<TripBoardProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [overweightOnly, setOverweightOnly] = useState<boolean>(false);
   const [demurrageOnly, setDemurrageOnly] = useState<boolean>(false);
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [sortKey, setSortKey] = useState<TripSortKey>(DEFAULT_SORT_KEY);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(DEFAULT_SORT_DIR);
 
   // Derive unique destinations dynamically from all registered trips
   const uniqueDestinations = useMemo(() => {
@@ -128,9 +148,9 @@ export const TripBoard: React.FC<TripBoardProps> = ({
   // Combined search term
   const effectiveSearch = localSearch.trim().toLowerCase();
 
-  // Dynamic filter function
+  // Dynamic filter + order
   const filteredTrips = useMemo(() => {
-    return trips.filter((trip) => {
+    const matched = trips.filter((trip) => {
       const trk = trucks.find(t => t.id === trip.truckId);
       const drv = drivers.find(d => d.id === trip.driverId);
       const helper = drivers.find(d => d.id === trip.helperId);
@@ -160,10 +180,47 @@ export const TripBoard: React.FC<TripBoardProps> = ({
       const matchesStatus = statusFilter === 'ALL' || trip.status === statusFilter;
       const matchesOverweight = !overweightOnly || trip.isOverweight;
       const matchesDemurrage = !demurrageOnly || trip.demurrageHours > 0;
+      const pickupDay = (trip.scheduledPickup || trip.createdAt || '').split('T')[0];
+      const matchesDate =
+        (!dateFrom && !dateTo) ||
+        (Boolean(pickupDay) &&
+          (!dateFrom || pickupDay >= dateFrom) &&
+          (!dateTo || pickupDay <= dateTo));
 
-      return matchesSearch && matchesDestination && matchesTruck && matchesClient && matchesStatus && matchesOverweight && matchesDemurrage;
+      return matchesSearch && matchesDestination && matchesTruck && matchesClient && matchesStatus && matchesOverweight && matchesDemurrage && matchesDate;
     });
-  }, [trips, trucks, drivers, clients, effectiveSearch, selectedDestination, selectedTruckId, selectedClientId, statusFilter, overweightOnly, demurrageOnly]);
+
+    const sortValue = (trip: Trip): string | number => {
+      switch (sortKey) {
+        case 'pickup':
+          return trip.scheduledPickup || trip.createdAt || '';
+        case 'delivery':
+          return trip.scheduledDelivery || '';
+        case 'created':
+          return trip.createdAt || '';
+        case 'tripNumber':
+          return trip.tripNumber;
+        case 'destination':
+          return trip.destinationZone || '';
+        case 'rate':
+          return trip.baseRatePhp || 0;
+        case 'client':
+          return clients.find((c) => c.id === trip.clientId)?.name || '';
+        default:
+          return '';
+      }
+    };
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...matched].sort((a, b) => {
+      const av = sortValue(a);
+      const bv = sortValue(b);
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return (av - bv) * dir;
+      }
+      return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * dir;
+    });
+  }, [trips, trucks, drivers, clients, effectiveSearch, selectedDestination, selectedTruckId, selectedClientId, statusFilter, overweightOnly, demurrageOnly, dateFrom, dateTo, sortKey, sortDir]);
 
   const hasActiveFilters = Boolean(
     localSearch.trim() || 
@@ -172,7 +229,10 @@ export const TripBoard: React.FC<TripBoardProps> = ({
     selectedClientId !== 'ALL' || 
     statusFilter !== 'ALL' || 
     overweightOnly || 
-    demurrageOnly
+    demurrageOnly ||
+    Boolean(dateFrom || dateTo) ||
+    sortKey !== DEFAULT_SORT_KEY ||
+    sortDir !== DEFAULT_SORT_DIR
   );
 
   const resetFilters = () => {
@@ -183,6 +243,10 @@ export const TripBoard: React.FC<TripBoardProps> = ({
     setStatusFilter('ALL');
     setOverweightOnly(false);
     setDemurrageOnly(false);
+    setDateFrom('');
+    setDateTo('');
+    setSortKey(DEFAULT_SORT_KEY);
+    setSortDir(DEFAULT_SORT_DIR);
   };
 
   const handleDirectStatusChange = (e: React.MouseEvent, trip: Trip, targetStatus: TripStatus) => {
@@ -830,6 +894,55 @@ export const TripBoard: React.FC<TripBoardProps> = ({
               </select>
             </div>
 
+            {/* Filter by scheduled pickup date */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="text-slate-500 font-medium shrink-0">Pickup</span>
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+                aria-label="Pickup from date"
+                className="bg-transparent text-slate-700 text-xs focus:outline-none cursor-pointer font-medium max-w-[118px]"
+              />
+              <span className="text-slate-400">–</span>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+                aria-label="Pickup to date"
+                className="bg-transparent text-slate-700 text-xs focus:outline-none cursor-pointer font-medium max-w-[118px]"
+              />
+            </div>
+
+            {/* Order by */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-2xs">
+              <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="text-slate-500 font-medium shrink-0">Order by</span>
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as TripSortKey)}
+                aria-label="Order trips by"
+                className="bg-transparent text-slate-700 text-xs focus:outline-none cursor-pointer pr-1 font-medium"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                className="text-[10px] font-bold uppercase tracking-wide text-slate-600 hover:text-slate-900 px-1.5 py-0.5 rounded border border-slate-200 bg-white"
+                title={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
+              >
+                {sortDir === 'asc' ? 'Asc' : 'Desc'}
+              </button>
+            </div>
+
             {/* Filter by Client / Customer Name Dropdown */}
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-2xs">
               <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -984,6 +1097,38 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-medium">
                   Stage: {statusFilter}
                   <button onClick={() => setStatusFilter('ALL')} className="hover:text-purple-900 ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {(dateFrom || dateTo) && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
+                  <Calendar className="w-3 h-3" />
+                  Pickup: {dateFrom || '…'} – {dateTo || '…'}
+                  <button
+                    onClick={() => {
+                      setDateFrom('');
+                      setDateTo('');
+                    }}
+                    className="hover:text-blue-900 ml-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {(sortKey !== DEFAULT_SORT_KEY || sortDir !== DEFAULT_SORT_DIR) && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                  <ArrowUpDown className="w-3 h-3" />
+                  {SORT_OPTIONS.find((o) => o.key === sortKey)?.label} ({sortDir === 'asc' ? 'asc' : 'desc'})
+                  <button
+                    onClick={() => {
+                      setSortKey(DEFAULT_SORT_KEY);
+                      setSortDir(DEFAULT_SORT_DIR);
+                    }}
+                    className="hover:text-slate-900 ml-0.5"
+                  >
                     <X className="w-3 h-3" />
                   </button>
                 </span>

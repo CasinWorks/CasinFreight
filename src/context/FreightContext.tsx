@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  deleteUser,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
@@ -69,6 +72,8 @@ import {
   saveCompanySubscription,
   saveInvite,
   saveUserProfile,
+  saveMemberProfile,
+  deleteOwnAccountRecords,
   seedCompanyWorkspace,
   deleteCompanyWorkspace as deleteCompanyWorkspaceDocs,
   type WorkspaceCollection,
@@ -94,6 +99,7 @@ import { uploadCompanyFile } from '../lib/uploads';
 import { refreshPlatformAdminClaim } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 import { isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
+import { timelineRetractionFromRequest } from '../lib/tripAudit';
 import { isHelperCrew } from '../lib/crew';
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
@@ -140,6 +146,9 @@ interface FreightContextType {
   switchUserAccount: (userId: string) => void;
   switchUserRole: (role: UserRole) => void;
   addUser: (user: Omit<User, 'id' | 'companyId'>) => Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }>;
+  updateCurrentUserProfile: (updates: Partial<Pick<User, 'name' | 'phone' | 'department' | 'avatarUrl'>>) => Promise<void>;
+  isSoleOwnerAccount: boolean;
+  deleteCurrentUserAccount: (password: string) => Promise<void>;
   
   trucks: Truck[];
   addTruck: (truck: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>) => Truck | null;
@@ -174,7 +183,7 @@ interface FreightContextType {
   fieldEvents: FieldEvent[];
   addTrip: (tripData: Omit<Trip, 'id' | 'companyId' | 'tripNumber' | 'waybillNumber' | 'timeline' | 'createdAt' | 'isOverweight' | 'overweightKg'>) => Trip | null;
   updateTrip: (id: string, updates: Partial<Trip>) => void;
-  updateTripStatus: (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>, options?: { allowRetraction?: boolean }) => void;
+  updateTripStatus: (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>, options?: { allowRetraction?: boolean; retraction?: TripStatusRetractionRequest }) => void;
   addAccessorialToTrip: (tripId: string, accessorial: Omit<TripAccessorial, 'id' | 'tripId'>) => void;
   removeAccessorialFromTrip: (tripId: string, accessorialId: string) => void;
   submitPOD: (tripId: string, podData: Omit<POD, 'id' | 'tripId' | 'signedAt'>) => void;
@@ -994,6 +1003,93 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       status: member.status || 'active',
       has_seen_tutorial: true,
     }).catch(console.error);
+  };
+
+  const isOwnerLikeRole = (role: string) => role === 'Owner' || role.toLowerCase().includes('owner');
+
+  const isSoleOwnerAccount = Boolean(
+    currentUserId
+    && isOwnerLikeRole(currentUser.role)
+    && users.filter((user) => user.status !== 'invited' && isOwnerLikeRole(user.role)).length <= 1
+  );
+
+  const persistSelfProfile = async (next: User) => {
+    const profile: UserProfile = {
+      ...(next as UserProfile),
+      id: currentUserId,
+      uid: currentUserId,
+      companyId: company.id,
+      role: currentUser.role,
+      email: currentUser.email,
+      status: next.status || 'active',
+    };
+    await saveUserProfile(profile);
+    if (company.id) {
+      await saveMemberProfile(company.id, profile);
+    }
+  };
+
+  const updateCurrentUserProfile = async (updates: Partial<Pick<User, 'name' | 'phone' | 'department' | 'avatarUrl'>>) => {
+    if (!currentUserId) {
+      throw new Error('You are not signed in.');
+    }
+    const name = (updates.name ?? currentUser.name ?? '').trim();
+    if (!name) {
+      throw new Error('Enter your name.');
+    }
+    const next: User = {
+      ...currentUser,
+      id: currentUserId,
+      name,
+      phone: updates.phone !== undefined ? (updates.phone || undefined) : currentUser.phone,
+      department: updates.department !== undefined ? (updates.department || undefined) : currentUser.department,
+      avatarUrl: updates.avatarUrl !== undefined ? (updates.avatarUrl || undefined) : currentUser.avatarUrl,
+      role: currentUser.role,
+      email: currentUser.email,
+      companyId: company.id,
+    };
+    setUsers((prev) => {
+      const exists = prev.some((user) => user.id === currentUserId);
+      if (!exists) return [...prev, next];
+      return prev.map((user) => (user.id === currentUserId ? { ...user, ...next } : user));
+    });
+    if (isFirebaseConfigured()) {
+      await persistSelfProfile(next);
+    }
+  };
+
+  const deleteCurrentUserAccount = async (password: string) => {
+    if (!currentUserId) {
+      throw new Error('You are not signed in.');
+    }
+    if (isSoleOwnerAccount) {
+      throw new Error('You are the only Owner. Delete the company in Company setup instead, or assign another Owner first.');
+    }
+    if (isFirebaseConfigured()) {
+      const auth = getFirebaseAuth();
+      const fbUser = auth.currentUser;
+      if (!fbUser?.email) {
+        throw new Error('Sign in again, then delete your account.');
+      }
+      const trimmed = password.trim();
+      if (!trimmed) {
+        throw new Error('Enter your password to confirm.');
+      }
+      await reauthenticateWithCredential(fbUser, EmailAuthProvider.credential(fbUser.email, trimmed));
+      try {
+        await deleteOwnAccountRecords({ uid: currentUserId, companyId: company.id });
+      } catch (err) {
+        const code = typeof err === 'object' && err && 'code' in err ? String((err as { code: string }).code) : '';
+        const message = err instanceof Error ? err.message : '';
+        if (code.includes('permission-denied') || message.toLowerCase().includes('insufficient permissions')) {
+          throw new Error('This login cannot remove its own seat yet. The updated Firestore rules must be deployed to Firebase, then try Delete forever again.');
+        }
+        throw err;
+      }
+      await deleteUser(fbUser);
+    }
+    resetWorkspace();
+    setIsAuthenticated(false);
   };
 
   const canManageBilling = isPlatformAdmin
@@ -1991,7 +2087,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
   };
 
-  const updateTripStatus = (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>, options?: { allowRetraction?: boolean }) => {
+  const updateTripStatus = (id: string, newStatus: TripStatus, note?: string, location?: string, extras?: Partial<Trip>, options?: { allowRetraction?: boolean; retraction?: TripStatusRetractionRequest }) => {
     setTrips(prev => prev.map(trip => {
       if (trip.id === id) {
         const previousStatus = trip.status;
@@ -2012,14 +2108,23 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
         tripsDirtyRef.current = true;
 
+        const retraction = options?.retraction;
         const newEvent = {
           id: `tl-${Date.now()}`,
           tripId: id,
           status: newStatus,
           timestamp: new Date().toISOString(),
-          note: note || `Trip status updated to ${newStatus}`,
+          note: retraction
+            ? `Status rollback: ${retraction.fromStatus} → ${retraction.toStatus}.`
+            : (note || `Trip status updated to ${newStatus}`),
           updatedBy: `${currentUser.name} (${currentUser.role})`,
           location: location || undefined,
+          ...(retraction
+            ? {
+                kind: 'status_rollback' as const,
+                retraction: timelineRetractionFromRequest(retraction),
+              }
+            : {}),
         };
 
         const updatedTrip = {
@@ -2236,13 +2341,13 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     updateTripStatus(
       tripId,
       toStatus,
-      `Status rollback: ${trip.status} → ${toStatus}. ${reason}`,
+      `Status rollback: ${trip.status} → ${toStatus}.`,
       undefined,
       {
         activeStatusRetraction: null,
         statusRetractionHistory: [...(trip.statusRetractionHistory || []), resolved],
       },
-      { allowRetraction: true }
+      { allowRetraction: true, retraction: resolved }
     );
   };
 
@@ -2268,13 +2373,13 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     updateTripStatus(
       tripId,
       req.toStatus,
-      `Status rollback approved: ${req.fromStatus} → ${req.toStatus}. ${resolved.reviewNote}`,
+      `Status rollback: ${req.fromStatus} → ${req.toStatus}.`,
       undefined,
       {
         activeStatusRetraction: null,
         statusRetractionHistory: [...(trip.statusRetractionHistory || []), resolved],
       },
-      { allowRetraction: true }
+      { allowRetraction: true, retraction: resolved }
     );
 
     addNotification({
@@ -2313,6 +2418,17 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       reviewNote: note,
     };
 
+    const rejectEvent = {
+      id: `tl-${Date.now()}`,
+      tripId,
+      status: trip.status,
+      timestamp: new Date().toISOString(),
+      note: `Status rollback rejected. Kept at ${trip.status}.`,
+      updatedBy: `${currentUser.name} (${currentUser.role})`,
+      kind: 'status_rollback_rejected' as const,
+      retraction: timelineRetractionFromRequest(resolved),
+    };
+
     tripsDirtyRef.current = true;
     setTrips((prev) => prev.map((item) => (
       item.id === tripId
@@ -2320,6 +2436,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
             ...item,
             activeStatusRetraction: null,
             statusRetractionHistory: [...(item.statusRetractionHistory || []), resolved],
+            timeline: [...item.timeline, rejectEvent],
           }
         : item
     )));
@@ -3711,6 +3828,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       switchUserAccount,
       switchUserRole,
       addUser,
+      updateCurrentUserProfile,
+      isSoleOwnerAccount,
+      deleteCurrentUserAccount,
       trucks,
       addTruck,
       updateTruck,

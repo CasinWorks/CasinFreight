@@ -300,7 +300,7 @@ service cloud.firestore {
             && request.resource.data.role == resource.data.role
             && request.resource.data.companyId == resource.data.companyId
           );
-        allow delete: if isCompanyOwner(companyId);
+        allow delete: if isCompanyOwner(companyId) || request.auth.uid == memberId;
       }
 
       match /roles/{roleId} {

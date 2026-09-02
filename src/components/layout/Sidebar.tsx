@@ -23,6 +23,7 @@ import {
   Settings,
   HardDrive,
   CircleHelp,
+  User,
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { bansInEffectNow } from '../../lib/truckBans';
@@ -73,6 +74,7 @@ interface SidebarProps {
   setActiveTab: (tab: NavTab) => void;
   isMobileMenuOpen?: boolean;
   onCloseMobileMenu?: () => void;
+  onOpenProfile?: () => void;
 }
 
 const ACTION_BADGE = 'text-[10px] px-2 py-0.5 rounded font-mono font-medium bg-amber-50 text-amber-800 border border-amber-200';
@@ -83,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   isMobileMenuOpen = false,
   onCloseMobileMenu,
+  onOpenProfile,
 }) => {
   const {
     trips,
@@ -399,8 +402,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
             aria-expanded={showAccount}
           >
-            <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0">
-              {(currentUser.name || currentUser.email || 'U').charAt(0).toUpperCase()}
+            <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0 overflow-hidden">
+              {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                (currentUser.name || currentUser.email || 'U').charAt(0).toUpperCase()
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[11px] font-semibold text-slate-800 truncate">
@@ -412,6 +419,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
           {showAccount && (
             <div className="border-t border-slate-100 p-1 space-y-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenProfile?.();
+                  onCloseMobileMenu?.();
+                }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[12px] font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <User className={`${ICON_CLASS} text-slate-500`} />
+                My profile
+              </button>
               {accountItems.map(renderItem)}
               {(currentUser.role === 'Owner' || currentUser.role.toLowerCase().includes('owner')) && (
                 <button

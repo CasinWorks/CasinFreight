@@ -1,0 +1,22 @@
+---
+description: Draft a product-update notice whenever user-facing changes ship
+alwaysApply: true
+---
+
+# Product update notices
+
+When we introduce user-facing changes (new screens, filters, billing copy, account tools, or behavior customers will notice), do not stop at the code.
+
+Also draft copy for **Platform admin → Maintenance & product notices → New product update**.
+
+Fill:
+
+- **Type:** Product update / what's new (not maintenance, no downtime)
+- **Title:** short, customer-facing (often keep “What's new in CasinFreight”)
+- **Popup message:** a short list of what changed, in CasinFreight voice — plain English, Philippine ops, no git/commit jargon, no Firestore/rules/deploy talk
+- **Show popup until:** about 7 days from today unless the user picks another date
+- **Active:** checked
+
+Only include features that actually landed (or that the user is about to publish). Skip internal-only work.
+
+Put the ready-to-paste title and message in the reply so the owner can publish without rewriting.

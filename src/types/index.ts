@@ -311,6 +311,22 @@ export interface TripTimelineEvent {
   note?: string;
   updatedBy: string;
   location?: string;
+  kind?: 'status' | 'status_rollback' | 'status_rollback_rejected';
+  retraction?: TripTimelineRetraction;
+}
+
+export interface TripTimelineRetraction {
+  fromStatus: TripStatus;
+  toStatus: TripStatus;
+  requestedBy: string;
+  requestedByRole: string;
+  requestedAt: string;
+  approvedBy: string;
+  approvedByRole: string;
+  approvedAt: string;
+  reasonCategory: TripRetractionReasonCategory;
+  reason: string;
+  outcome: 'Approved' | 'Rejected';
 }
 
 export interface CustodySignoff {

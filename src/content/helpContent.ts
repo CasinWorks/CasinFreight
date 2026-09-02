@@ -141,6 +141,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     steps: [
       'Open Trip Board. Each card is one booked trip.',
       'Use Kanban for the pipeline or List for a spreadsheet-style table.',
+      'Filter by pickup date, destination, customer, truck, or stage in the bar under the stats. Order by pickup, delivery, booked date, trip #, customer, destination, or rate.',
       'Tap a card to open the trip file (waybill, seal, POD, invoice).',
       'Use New Load to book. Search the top bar for plate, client, or trip number.',
       'Export CSV from the board when you need a dispatch list.',
@@ -310,6 +311,20 @@ export const HELP_GUIDES: HelpGuide[] = [
       'Read the audit log when you need to see who changed access.',
     ],
     tips: ['Free includes one Owner seat. Subscribe to add more accounts.'],
+  },
+  {
+    id: 'profile',
+    title: 'My profile',
+    summary: 'Your photo, name, mobile, and account delete.',
+    steps: [
+      'Open My profile from your name in the top bar or the account block in the sidebar.',
+      'Change your photo, name, mobile, and department. Email and role stay as they are.',
+      'Save profile.',
+      'Delete account permanently only if you are not the only Owner. Type your email, DELETE, and your password.',
+    ],
+    tips: [
+      'The only Owner must delete the company in Company setup, or assign another Owner first.',
+    ],
   },
   {
     id: 'orgsetup',
