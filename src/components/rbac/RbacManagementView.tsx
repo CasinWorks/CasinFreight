@@ -59,6 +59,8 @@ export const RbacManagementView: React.FC = () => {
     users, 
     addUser,
     removeUserFromCompany,
+    tiedCompanyLogins,
+    untieTiedCompanyLogin,
     updateUserRole, 
     currentUser, 
     rbacAuditLogs,
@@ -809,6 +811,44 @@ export const RbacManagementView: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {canRemoveTeammates && tiedCompanyLogins.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-bold text-amber-950">Logins still tied to this company</h4>
+                  <p className="text-xs text-amber-900 mt-0.5">
+                    Off the roster, but their login still points here. They cannot open this workspace. Untie so they can join another company or a new invite.
+                  </p>
+                </div>
+                <ul className="space-y-2">
+                  {tiedCompanyLogins.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex flex-wrap items-center justify-between gap-2 bg-white border border-amber-200 rounded-xl px-3 py-2"
+                    >
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">{row.name || row.email || row.id}</div>
+                        <div className="text-[11px] text-slate-500">{row.email}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const result = await untieTiedCompanyLogin(row.id);
+                          if (!result.success) {
+                            showToast(result.error || 'Could not untie this login.');
+                            return;
+                          }
+                          showToast(`Untied ${row.name || row.email}. They can use a new invite.`);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-rose-200 text-rose-700 hover:bg-rose-50"
+                      >
+                        Untie login
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 

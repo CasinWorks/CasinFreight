@@ -75,6 +75,8 @@ import {
   saveMemberProfile,
   deleteOwnAccountRecords,
   removeCompanyMember,
+  listCompanyUserProfiles,
+  untieCompanyLogin,
   seedCompanyWorkspace,
   deleteCompanyWorkspace as deleteCompanyWorkspaceDocs,
   type WorkspaceCollection,
@@ -148,6 +150,9 @@ interface FreightContextType {
   switchUserRole: (role: UserRole) => void;
   addUser: (user: Omit<User, 'id' | 'companyId'>) => Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }>;
   removeUserFromCompany: (userId: string) => Promise<{ success: boolean; error?: string }>;
+  tiedCompanyLogins: User[];
+  refreshTiedCompanyLogins: () => Promise<void>;
+  untieTiedCompanyLogin: (uid: string) => Promise<{ success: boolean; error?: string }>;
   updateCurrentUserProfile: (updates: Partial<Pick<User, 'name' | 'phone' | 'department' | 'avatarUrl'>>) => Promise<void>;
   isSoleOwnerAccount: boolean;
   deleteCurrentUserAccount: (password: string) => Promise<void>;
@@ -438,6 +443,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const workspaceUnsubsRef = useRef<Array<() => void>>([]);
   const [company, setCompany] = useState<Company>(BLANK_COMPANY);
   const [users, setUsers] = useState<User[]>([]);
+  const [tiedCompanyLogins, setTiedCompanyLogins] = useState<User[]>([]);
   const [roles, setRoles] = useState<RbacRole[]>([]);
   const [rbacAuditLogs, setRbacAuditLogs] = useState<RbacAuditEntry[]>([]);
   const [currentRole, setCurrentRole] = useState<UserRole>('Owner');
@@ -478,6 +484,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     workspaceUnsubsRef.current = [];
     setCompany(BLANK_COMPANY);
     setUsers([]);
+    setTiedCompanyLogins([]);
     setRoles([]);
     setRbacAuditLogs([]);
     setCurrentRole('Owner');
@@ -556,6 +563,23 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
+  const refreshTiedCompanyLogins = async (companyId?: string, roster?: User[]) => {
+    const id = companyId || company.id;
+    if (!id || !isFirebaseConfigured()) {
+      setTiedCompanyLogins([]);
+      return;
+    }
+    try {
+      const profiles = await listCompanyUserProfiles(id);
+      const onRoster = new Set((roster || users).map((member) => member.id));
+      setTiedCompanyLogins(
+        profiles.filter((profile) => profile.id && !onRoster.has(profile.id))
+      );
+    } catch {
+      setTiedCompanyLogins([]);
+    }
+  };
+
   const hydrateCompany = async (companyId: string, uid: string, profile?: UserProfile | null) => {
     const companyDoc = await getCompanyDocument(companyId);
     if (!companyDoc) {
@@ -627,6 +651,12 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ).map((member) => (
       member.id === uid ? { ...member, has_seen_tutorial: Boolean(member.has_seen_tutorial) || seenTutorial } : member
     ));
+    if (
+      !uniqueMembers.some((member) => member.id === uid)
+      && createdBy !== uid
+    ) {
+      throw new Error('You no longer have a seat on this company. Ask the owner to invite you again.');
+    }
     if (seenTutorial) {
       markTutorialSeenLocally(uid);
     }
@@ -671,6 +701,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsAuthenticated(true);
     setIsOnboardingOpen(!onboardingComplete);
     persistReadyRef.current = true;
+    refreshTiedCompanyLogins(companyId, uniqueMembers).catch(() => setTiedCompanyLogins([]));
   };
 
   useEffect(() => {
@@ -1544,9 +1575,23 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       const existing = await getUserProfile(uid);
-      if (existing?.companyId) return { success: true };
-
       const invite = await getInviteByEmail(email);
+
+      if (existing?.companyId) {
+        if (invite && existing.companyId === invite.companyId) {
+          await joinCompanyFromInvite({ uid, email, name, invite });
+          return { success: true };
+        }
+        if (invite && existing.companyId !== invite.companyId) {
+          await signOut(getFirebaseAuth());
+          return {
+            success: false,
+            error: 'This login is still tied to another company. Ask that owner to Untie login on Roles & permissions, then open this join link again.',
+          };
+        }
+        return { success: true };
+      }
+
       if (!invite) {
         await signOut(getFirebaseAuth());
         return {
@@ -1798,7 +1843,28 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       target.role,
       target.name
     );
+    refreshTiedCompanyLogins(
+      company.id,
+      users.filter((user) => user.id !== userId)
+    ).catch(() => {});
     return { success: true };
+  };
+
+  const untieTiedCompanyLogin = async (uid: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isOwnerLikeRole(currentUser.role)) {
+      return { success: false, error: 'Only the Owner can untie a leftover login.' };
+    }
+    if (!company.id || !uid) {
+      return { success: false, error: 'That login record is incomplete.' };
+    }
+    try {
+      await untieCompanyLogin({ companyId: company.id, uid });
+      setTiedCompanyLogins((prev) => prev.filter((row) => row.id !== uid));
+      pushAudit('USER_REMOVED', `Untied leftover login ${uid} from this company.`, undefined, uid);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error) };
+    }
   };
 
   const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck | null => {
@@ -3873,6 +3939,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       switchUserRole,
       addUser,
       removeUserFromCompany,
+      tiedCompanyLogins,
+      refreshTiedCompanyLogins,
+      untieTiedCompanyLogin,
       updateCurrentUserProfile,
       isSoleOwnerAccount,
       deleteCurrentUserAccount,

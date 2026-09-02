@@ -6,8 +6,10 @@ import {
   getDocs,
   increment,
   onSnapshot,
+  query,
   setDoc,
   updateDoc,
+  where,
   writeBatch,
   type DocumentData,
   type Unsubscribe,
@@ -207,6 +209,36 @@ export async function removeCompanyMember(params: {
   }
 }
 
+export async function listCompanyUserProfiles(companyId: string): Promise<UserProfile[]> {
+  if (!companyId) return [];
+  const snap = await getDocs(
+    query(collection(getFirebaseDb(), 'users'), where('companyId', '==', companyId))
+  );
+  return snap.docs.map((d) => ({ ...(d.data() as UserProfile), id: d.id, uid: d.id }));
+}
+
+export async function untieCompanyLogin(params: { companyId: string; uid: string }): Promise<void> {
+  const { companyId, uid } = params;
+  if (!companyId || !uid) {
+    throw new Error('That login record is incomplete.');
+  }
+  const userRef = doc(getFirebaseDb(), 'users', uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) return;
+  if (String(snap.data()?.companyId || '') !== companyId) {
+    throw new Error('That login is not tied to this company.');
+  }
+  try {
+    await deleteDoc(userRef);
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+    if (code.includes('permission-denied')) {
+      throw new Error('Firestore blocked untying this login. Publish firestore.rules, then try again.');
+    }
+    throw error;
+  }
+}
+
 export async function loadCollection<T extends { id: string }>(
   companyId: string,
   name: WorkspaceCollection
@@ -388,7 +420,14 @@ export async function joinCompanyFromInvite(params: {
     has_seen_tutorial: false,
   };
 
-  await saveUserProfile(profile);
+  const userRef = doc(getFirebaseDb(), 'users', params.uid);
+  const existing = await getDoc(userRef);
+  const existingCompanyId = existing.exists() ? String(existing.data()?.companyId || '') : '';
+  if (!existing.exists()) {
+    await saveUserProfile(profile);
+  } else if (existingCompanyId && existingCompanyId !== params.invite.companyId) {
+    throw new Error('This login is still tied to another company. Ask that owner to Untie login, then open this join link again.');
+  }
 
   const company = await getCompanyDocument(params.invite.companyId);
   if (!company) {
