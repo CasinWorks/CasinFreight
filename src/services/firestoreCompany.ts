@@ -162,6 +162,40 @@ export async function deleteInvite(email: string): Promise<void> {
   await deleteDoc(doc(getFirebaseDb(), 'invites', emailKey(email)));
 }
 
+export async function removeCompanyMember(params: {
+  companyId: string;
+  memberId: string;
+  email?: string;
+}): Promise<void> {
+  const { companyId, memberId, email } = params;
+  if (!companyId || !memberId) {
+    throw new Error('That teammate record is incomplete.');
+  }
+
+  if (email) {
+    try {
+      await deleteInvite(email);
+    } catch {
+      // Pending invite may already be gone.
+    }
+  }
+
+  try {
+    await deleteDoc(doc(getFirebaseDb(), 'companies', companyId, 'members', memberId));
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+    if (!code.includes('not-found')) throw error;
+  }
+
+  if (memberId.startsWith('invite-')) return;
+
+  const userRef = doc(getFirebaseDb(), 'users', memberId);
+  const snap = await getDoc(userRef);
+  if (snap.exists() && String(snap.data()?.companyId || '') === companyId) {
+    await deleteDoc(userRef);
+  }
+}
+
 export async function loadCollection<T extends { id: string }>(
   companyId: string,
   name: WorkspaceCollection

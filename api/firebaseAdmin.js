@@ -69,8 +69,15 @@ async function lookupCaller(authHeader) {
 }
 
 async function stampAdminSession(authHeader) {
+  const token = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) {
+    return { status: 401, data: { error: 'Sign in required.' } };
+  }
   const caller = await lookupCaller(authHeader);
   if (!caller) {
+    if (!getAdmin() && !firebaseWebApiKey()) {
+      return { status: 200, data: { admin: false, refreshed: false } };
+    }
     return { status: 401, data: { error: 'Sign in required.' } };
   }
   if (!isPlatformAdmin(caller.email)) {

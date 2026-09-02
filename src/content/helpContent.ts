@@ -307,6 +307,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     steps: [
       'Open Roles & permissions.',
       'Invite by email and pick a role (Dispatcher, Billing, Driver, custom).',
+      'Remove a teammate from this company when they should no longer have access. They can be invited again later.',
       'Edit a role’s permission matrix. Changes apply immediately.',
       'Read the audit log when you need to see who changed access.',
     ],

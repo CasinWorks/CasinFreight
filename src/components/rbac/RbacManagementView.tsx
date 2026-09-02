@@ -58,6 +58,7 @@ export const RbacManagementView: React.FC = () => {
     resetRolesToDefault,
     users, 
     addUser,
+    removeUserFromCompany,
     updateUserRole, 
     currentUser, 
     rbacAuditLogs,
@@ -85,6 +86,8 @@ export const RbacManagementView: React.FC = () => {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserRole, setNewUserRole] = useState<string>('Dispatcher');
+  const [memberToRemove, setMemberToRemove] = useState<typeof users[number] | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -219,6 +222,24 @@ export const RbacManagementView: React.FC = () => {
       /* clipboard may be blocked */
     }
     showToast(`Invite saved for ${invitedName}. Send them this join link (copied): they choose a password and join your company — they must not Create company.`);
+  };
+
+  const canRemoveTeammates =
+    currentUser.role === 'Owner' || currentUser.role.toLowerCase().includes('owner');
+
+  const handleConfirmRemoveMember = async () => {
+    if (!memberToRemove) return;
+    setIsRemovingMember(true);
+    const result = await removeUserFromCompany(memberToRemove.id);
+    setIsRemovingMember(false);
+    if (!result.success) {
+      showToast(result.error || 'Could not remove this teammate.');
+      return;
+    }
+    const name = memberToRemove.name;
+    const pending = memberToRemove.status === 'invited';
+    setMemberToRemove(null);
+    showToast(pending ? `Cancelled invite for ${name}.` : `${name} was removed from this company.`);
   };
 
   const customRolesCount = roles.filter(r => !r.isSystem).length;
@@ -661,7 +682,7 @@ export const RbacManagementView: React.FC = () => {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Registered Team Members & Operators</h3>
                 <p className="text-xs text-slate-500">
-                  Invite teammates by email. Free plans include 1 account — subscribe to add seats.
+                  Invite teammates by email. Free plans include 1 account — subscribe to add seats. Owner can remove a person from this company; they lose access but their login is not deleted.
                 </p>
               </div>
 
@@ -760,6 +781,15 @@ export const RbacManagementView: React.FC = () => {
                                 className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-700 hover:bg-slate-50"
                               >
                                 Copy join link
+                              </button>
+                            )}
+                            {canRemoveTeammates && !isCurrentUser && (
+                              <button
+                                type="button"
+                                onClick={() => setMemberToRemove(u)}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-rose-200 text-rose-700 hover:bg-rose-50"
+                              >
+                                {u.status === 'invited' ? 'Cancel invite' : 'Remove'}
                               </button>
                             )}
                             <span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
@@ -863,6 +893,7 @@ export const RbacManagementView: React.FC = () => {
                           log.action === 'ROLE_UPDATED' ? 'bg-blue-100 text-blue-800' :
                           log.action === 'ROLE_DELETED' ? 'bg-rose-100 text-rose-800' :
                           log.action === 'USER_ROLE_ASSIGNED' ? 'bg-purple-100 text-purple-800' :
+                          log.action === 'USER_REMOVED' ? 'bg-rose-100 text-rose-800' :
                           'bg-slate-100 text-slate-800'
                         }`}>
                           {log.action}
@@ -978,6 +1009,61 @@ export const RbacManagementView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {memberToRemove && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
+          onClick={closeIfBackdrop(() => !isRemovingMember && setMemberToRemove(null))}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  {memberToRemove.status === 'invited' ? 'Cancel invite' : 'Remove from company'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMemberToRemove(null)}
+                disabled={isRemovingMember}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {memberToRemove.status === 'invited'
+                ? `${memberToRemove.name} (${memberToRemove.email}) will not be able to join with the current link. You can invite them again later.`
+                : `${memberToRemove.name} (${memberToRemove.email}) will lose access to this company immediately. Their login is not deleted — they just cannot open this workspace. You can invite them again later.`}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setMemberToRemove(null)}
+                disabled={isRemovingMember}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveMember}
+                disabled={isRemovingMember}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold disabled:opacity-60"
+              >
+                {isRemovingMember
+                  ? 'Removing…'
+                  : memberToRemove.status === 'invited'
+                    ? 'Cancel invite'
+                    : 'Remove from company'}
+              </button>
+            </div>
           </div>
         </div>
       )}

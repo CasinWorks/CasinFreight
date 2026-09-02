@@ -30,7 +30,7 @@ export interface RbacAuditEntry {
   timestamp: string;
   actorName: string;
   actorRole: string;
-  action: 'ROLE_CREATED' | 'ROLE_UPDATED' | 'ROLE_DELETED' | 'USER_ROLE_ASSIGNED' | 'PERMISSIONS_RESET' | 'DB_IMPORTED';
+  action: 'ROLE_CREATED' | 'ROLE_UPDATED' | 'ROLE_DELETED' | 'USER_ROLE_ASSIGNED' | 'USER_REMOVED' | 'PERMISSIONS_RESET' | 'DB_IMPORTED';
   targetRole?: string;
   targetUser?: string;
   details: string;

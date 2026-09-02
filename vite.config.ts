@@ -2,7 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { createRequire } from 'node:module';
 import path from 'path';
-import {defineConfig, type Plugin} from 'vite';
+import {defineConfig, loadEnv, type Plugin} from 'vite';
 import {runPayMongoAction} from './src/lib/paymongoBilling';
 
 const nodeRequire = createRequire(import.meta.url);
@@ -50,7 +50,12 @@ function jsonDevApi(
   };
 }
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  for (const [key, value] of Object.entries(env)) {
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+
   return {
     plugins: [
       react(),

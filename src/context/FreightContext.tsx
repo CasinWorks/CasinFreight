@@ -74,6 +74,7 @@ import {
   saveUserProfile,
   saveMemberProfile,
   deleteOwnAccountRecords,
+  removeCompanyMember,
   seedCompanyWorkspace,
   deleteCompanyWorkspace as deleteCompanyWorkspaceDocs,
   type WorkspaceCollection,
@@ -146,6 +147,7 @@ interface FreightContextType {
   switchUserAccount: (userId: string) => void;
   switchUserRole: (role: UserRole) => void;
   addUser: (user: Omit<User, 'id' | 'companyId'>) => Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }>;
+  removeUserFromCompany: (userId: string) => Promise<{ success: boolean; error?: string }>;
   updateCurrentUserProfile: (updates: Partial<Pick<User, 'name' | 'phone' | 'department' | 'avatarUrl'>>) => Promise<void>;
   isSoleOwnerAccount: boolean;
   deleteCurrentUserAccount: (password: string) => Promise<void>;
@@ -1755,6 +1757,48 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     pushAudit('USER_ROLE_ASSIGNED', `Invited ${userData.name} (${userData.email}) as ${userData.role}.`, userData.role, userData.name);
     return { success: true, emailed: false, inviteUrl };
+  };
+
+  const removeUserFromCompany = async (userId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isOwnerLikeRole(currentUser.role)) {
+      return { success: false, error: 'Only the Owner can remove a teammate from this company.' };
+    }
+    if (userId === currentUserId) {
+      return { success: false, error: 'You cannot remove yourself here. Use My profile to delete your own account.' };
+    }
+    const target = users.find((user) => user.id === userId);
+    if (!target) {
+      return { success: false, error: 'That teammate is not on this company.' };
+    }
+    const remainingOwners = users.filter(
+      (user) => user.id !== userId && user.status !== 'invited' && isOwnerLikeRole(user.role)
+    );
+    if (target.status !== 'invited' && isOwnerLikeRole(target.role) && remainingOwners.length === 0) {
+      return { success: false, error: 'You cannot remove the only Owner. Assign another Owner first.' };
+    }
+
+    setUsers((prev) => prev.filter((user) => user.id !== userId));
+    if (isFirebaseConfigured() && company.id) {
+      try {
+        await removeCompanyMember({
+          companyId: company.id,
+          memberId: userId,
+          email: target.email,
+        });
+      } catch (error) {
+        setUsers((prev) => (prev.some((user) => user.id === userId) ? prev : [...prev, target]));
+        return { success: false, error: mapAuthError(error) };
+      }
+    }
+    pushAudit(
+      'USER_REMOVED',
+      target.status === 'invited'
+        ? `Cancelled invite for ${target.name} (${target.email}).`
+        : `Removed ${target.name} (${target.email}) from this company.`,
+      target.role,
+      target.name
+    );
+    return { success: true };
   };
 
   const addTruck = (truckData: Omit<Truck, 'id' | 'companyId' | 'netPayloadKg'>): Truck | null => {
@@ -3828,6 +3872,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       switchUserAccount,
       switchUserRole,
       addUser,
+      removeUserFromCompany,
       updateCurrentUserProfile,
       isSoleOwnerAccount,
       deleteCurrentUserAccount,
