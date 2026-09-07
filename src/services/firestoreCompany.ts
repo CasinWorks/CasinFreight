@@ -4,8 +4,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  getCountFromServer,
   increment,
+  limit,
   onSnapshot,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -83,7 +86,29 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
   const { password: _password, ...safe } = profile;
-  await setDoc(doc(getFirebaseDb(), 'users', profile.uid || profile.id), stripUndefined(safe as unknown as Record<string, unknown>));
+  await setDoc(
+    doc(getFirebaseDb(), 'users', profile.uid || profile.id),
+    stripUndefined(safe as unknown as Record<string, unknown>),
+    { merge: true }
+  );
+}
+
+export async function stampUserPresence(params: {
+  uid: string;
+  lastLoginAt?: string;
+  lastSeenAt?: string;
+}): Promise<void> {
+  const patch: Record<string, string> = {};
+  if (params.lastLoginAt) patch.lastLoginAt = params.lastLoginAt;
+  if (params.lastSeenAt) patch.lastSeenAt = params.lastSeenAt;
+  if (!params.uid || Object.keys(patch).length === 0) return;
+  try {
+    await updateDoc(doc(getFirebaseDb(), 'users', params.uid), patch);
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+    if (code.includes('not-found')) return;
+    throw error;
+  }
 }
 
 export async function saveMemberProfile(companyId: string, profile: UserProfile): Promise<void> {
@@ -215,6 +240,114 @@ export async function listCompanyUserProfiles(companyId: string): Promise<UserPr
     query(collection(getFirebaseDb(), 'users'), where('companyId', '==', companyId))
   );
   return snap.docs.map((d) => ({ ...(d.data() as UserProfile), id: d.id, uid: d.id }));
+}
+
+export async function listAllUserProfiles(): Promise<UserProfile[]> {
+  const snap = await getDocs(collection(getFirebaseDb(), 'users'));
+  return snap.docs.map((d) => ({ ...(d.data() as UserProfile), id: d.id, uid: d.id }));
+}
+
+export interface CompanyUsageMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status?: UserProfile['status'];
+  lastLoginAt?: string;
+  lastSeenAt?: string;
+}
+
+export interface CompanyUsageRow {
+  company: CompanyDocument;
+  members: CompanyUsageMember[];
+  lastLoginAt?: string;
+  lastSeenAt?: string;
+  tripCount: number;
+  invoiceCount: number;
+  lastTripAt?: string;
+  lastInvoiceAt?: string;
+}
+
+async function collectionCount(companyId: string, name: WorkspaceCollection): Promise<number> {
+  const snap = await getCountFromServer(collection(getFirebaseDb(), 'companies', companyId, name));
+  return snap.data().count;
+}
+
+async function latestStringField(
+  companyId: string,
+  name: WorkspaceCollection,
+  field: string
+): Promise<string | undefined> {
+  try {
+    const snap = await getDocs(
+      query(collection(getFirebaseDb(), 'companies', companyId, name), orderBy(field, 'desc'), limit(1))
+    );
+    const value = snap.docs[0]?.data()?.[field];
+    return typeof value === 'string' && value ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function listPlatformCompanyUsage(): Promise<CompanyUsageRow[]> {
+  const [companies, profiles] = await Promise.all([
+    listCompanyDocuments(),
+    listAllUserProfiles(),
+  ]);
+  const membersByCompany = new Map<string, CompanyUsageMember[]>();
+  profiles.forEach((profile) => {
+    const companyId = String(profile.companyId || '');
+    if (!companyId) return;
+    const row: CompanyUsageMember = {
+      id: profile.id || profile.uid,
+      name: profile.name || profile.email || profile.id,
+      email: profile.email || '',
+      role: String(profile.role || ''),
+      status: profile.status,
+      lastLoginAt: profile.lastLoginAt,
+      lastSeenAt: profile.lastSeenAt,
+    };
+    const list = membersByCompany.get(companyId) || [];
+    list.push(row);
+    membersByCompany.set(companyId, list);
+  });
+
+  const rows: CompanyUsageRow[] = [];
+  const chunkSize = 6;
+  for (let i = 0; i < companies.length; i += chunkSize) {
+    const chunk = companies.slice(i, i + chunkSize);
+    const next = await Promise.all(chunk.map(async (company) => {
+      const members = (membersByCompany.get(company.id) || []).sort((a, b) => a.name.localeCompare(b.name));
+      const [tripCount, invoiceCount, lastTripAt, lastInvoiceAt] = await Promise.all([
+        collectionCount(company.id, 'trips'),
+        collectionCount(company.id, 'invoices'),
+        latestStringField(company.id, 'trips', 'createdAt'),
+        latestStringField(company.id, 'invoices', 'issueDate'),
+      ]);
+      const lastLoginAt = members
+        .map((member) => member.lastLoginAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1);
+      const lastSeenAt = members
+        .map((member) => member.lastSeenAt || member.lastLoginAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1);
+      return {
+        company,
+        members,
+        lastLoginAt,
+        lastSeenAt,
+        tripCount,
+        invoiceCount,
+        lastTripAt,
+        lastInvoiceAt,
+      };
+    }));
+    rows.push(...next);
+  }
+  return rows.sort((a, b) => (a.company.name || '').localeCompare(b.company.name || ''));
 }
 
 export async function untieCompanyLogin(params: { companyId: string; uid: string }): Promise<void> {

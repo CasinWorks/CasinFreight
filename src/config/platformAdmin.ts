@@ -1,6 +1,6 @@
 import type { User as FirebaseAuthUser } from 'firebase/auth';
 
-/** Platform admin is `request.auth.token.admin`, stamped by POST /api/session. Not an email list in the bundle. */
+/** Platform admin is request.auth.token.admin, stamped by POST /api/session for Auth UIDs in api/platformAdminUids.js. Not an email list. */
 export async function refreshPlatformAdminClaim(user: FirebaseAuthUser): Promise<boolean> {
   try {
     const token = await user.getIdToken();

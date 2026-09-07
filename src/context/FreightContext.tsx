@@ -73,6 +73,7 @@ import {
   saveInvite,
   saveUserProfile,
   saveMemberProfile,
+  stampUserPresence,
   deleteOwnAccountRecords,
   removeCompanyMember,
   listCompanyUserProfiles,
@@ -765,6 +766,19 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setIsAuthenticated(false);
           setIsAuthLoading(false);
           return;
+        }
+        const loginAt = fbUser.metadata.lastSignInTime
+          ? new Date(fbUser.metadata.lastSignInTime).toISOString()
+          : new Date().toISOString();
+        const seenAt = new Date().toISOString();
+        const prevSeen = Date.parse(profile.lastSeenAt || '');
+        const shouldStampSeen = !Number.isFinite(prevSeen) || Date.now() - prevSeen > 30 * 60 * 1000;
+        if (profile.lastLoginAt !== loginAt || shouldStampSeen) {
+          stampUserPresence({
+            uid: fbUser.uid,
+            lastLoginAt: loginAt,
+            ...(shouldStampSeen ? { lastSeenAt: seenAt } : {}),
+          }).catch(() => {});
         }
         await hydrateCompany(profile.companyId, fbUser.uid, profile);
       } catch (error) {

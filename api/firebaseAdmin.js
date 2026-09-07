@@ -1,6 +1,6 @@
 'use strict';
 
-const PLATFORM_ADMINS = ['christianjoshuacasin@gmail.com'];
+const { isPlatformAdminUid, platformAdminUids } = require('./platformAdminUids');
 
 function serviceAccount() {
   const raw = (process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '').trim();
@@ -27,8 +27,13 @@ function getAdminDb() {
   return admin ? admin.firestore() : null;
 }
 
-function isPlatformAdmin(email) {
-  return PLATFORM_ADMINS.includes(String(email || '').trim().toLowerCase());
+function isPlatformAdmin(caller) {
+  if (!caller) return false;
+  const uid = typeof caller === 'object' ? caller.uid : caller;
+  if (isPlatformAdminUid(uid)) return true;
+  // Until PLATFORM_ADMIN_UIDS is set, keep an already-stamped token.admin claim.
+  // Never grant that claim from an email address.
+  return platformAdminUids().length === 0 && Boolean(caller && caller.admin);
 }
 
 function firebaseWebApiKey() {
@@ -68,6 +73,17 @@ async function lookupCaller(authHeader) {
   return { uid: user.localId, email: user.email || '', admin: false };
 }
 
+async function stripAdminClaim(uid) {
+  const admin = getAdmin();
+  if (!admin || !uid) return false;
+  const user = await admin.auth().getUser(uid);
+  const claims = { ...(user.customClaims || {}) };
+  if (claims.admin !== true) return false;
+  delete claims.admin;
+  await admin.auth().setCustomUserClaims(uid, claims);
+  return true;
+}
+
 async function stampAdminSession(authHeader) {
   const token = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
   if (!token) {
@@ -80,9 +96,18 @@ async function stampAdminSession(authHeader) {
     }
     return { status: 401, data: { error: 'Sign in required.' } };
   }
-  if (!isPlatformAdmin(caller.email)) {
+
+  if (!isPlatformAdminUid(caller.uid)) {
+    if (platformAdminUids().length === 0) {
+      return { status: 200, data: { admin: caller.admin === true, refreshed: false } };
+    }
+    if (caller.admin === true) {
+      const stripped = await stripAdminClaim(caller.uid);
+      return { status: 200, data: { admin: false, refreshed: stripped } };
+    }
     return { status: 200, data: { admin: false, refreshed: false } };
   }
+
   const admin = getAdmin();
   if (!admin) {
     return { status: 200, data: { admin: caller.admin === true, refreshed: false } };
@@ -123,7 +148,7 @@ async function loadOwnedCompany(db, caller) {
   }
   const company = companySnap.data() || {};
   const createdBy = String(company.createdBy || '');
-  if (createdBy !== caller.uid && !isPlatformAdmin(caller.email)) {
+  if (createdBy !== caller.uid && !isPlatformAdmin(caller)) {
     throw Object.assign(new Error('Only the company owner can change billing.'), { status: 403 });
   }
   return { companyId, company };

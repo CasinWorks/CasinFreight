@@ -21,6 +21,8 @@ export interface User {
   department?: string;
   status?: 'active' | 'invited';
   has_seen_tutorial?: boolean;
+  lastLoginAt?: string;
+  lastSeenAt?: string;
 }
 
 export type SubscriptionTier = 'Free' | 'Starter' | 'Growth' | 'Fleet';

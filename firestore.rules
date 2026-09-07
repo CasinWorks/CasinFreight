@@ -37,13 +37,9 @@ service cloud.firestore {
     }
 
     function isPlatformAdmin() {
-      return signedIn() && (
-        request.auth.token.admin == true
-        || (
-          request.auth.token.email is string
-          && request.auth.token.email.lower() in ['christianjoshuacasin@gmail.com']
-        )
-      );
+      // Custom claim stamped by POST /api/session for Auth UIDs in api/platformAdminUids.js.
+      // Do not grant by email. Do not use email_verified without a verify-email flow.
+      return signedIn() && request.auth.token.admin == true;
     }
 
     function companyDoc(companyId) {
@@ -211,6 +207,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
+        isPlatformAdmin() ||
         (exists(userPath()) && resource.data.companyId == userData().companyId)
       );
 
