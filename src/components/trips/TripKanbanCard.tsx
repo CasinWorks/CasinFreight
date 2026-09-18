@@ -87,7 +87,8 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
   const nextTarget: TripStatus =
     trip.status === 'Pending' ? 'Loaded' :
     trip.status === 'Loaded' ? 'In Transit' :
-    trip.status === 'In Transit' ? 'Delivered' :
+    trip.status === 'In Transit' ? 'Inbound' :
+    trip.status === 'Inbound' ? 'Delivered' :
     trip.status === 'Delivered' ? 'Invoiced' :
     trip.status === 'On Hold' ? resumeTarget(trip) :
     'Invoiced';
@@ -246,9 +247,9 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
         <div className="mb-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stage:</span>
           <div className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-md border border-slate-200/80">
-            {(['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'] as TripStatus[]).map((stg) => {
+            {(['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'] as TripStatus[]).map((stg) => {
               const isCurrent = trip.status === stg;
-              const label = stg === 'Pending' ? 'P' : stg === 'Loaded' ? 'L' : stg === 'In Transit' ? 'T' : stg === 'Delivered' ? 'D' : 'INV';
+              const label = stg === 'Pending' ? 'P' : stg === 'Loaded' ? 'L' : stg === 'In Transit' ? 'T' : stg === 'Inbound' ? 'IN' : stg === 'Delivered' ? 'D' : 'INV';
 
               return (
                 <button
@@ -320,7 +321,9 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
             <span>
               {trip.status === 'Pending' && 'Load'}
               {trip.status === 'Loaded' && 'Dispatch'}
-              {trip.status === 'In Transit' && 'Deliver'}
+              {trip.status === 'In Transit' && 'Arrived'}
+              {trip.status === 'Inbound' && 'POD'}
+              {trip.status === 'Delivered' && 'Invoice'}
               {trip.status === 'Delivered' && 'Invoice'}
               {trip.status === 'Invoiced' && 'View'}
               {trip.status === 'On Hold' && 'Resume'}

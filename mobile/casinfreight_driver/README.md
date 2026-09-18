@@ -29,7 +29,7 @@ flutter pub get
 flutter run
 ```
 
-Firebase options default to the CasinFreight web project. In Firebase Console add an **Android** app with package `com.casinfreight.casinfreight_driver` (and an iOS bundle if you ship to iPhone).
+Firebase options use the CasinFreight project. For iPhone/TestFlight, Firebase Console must have an **iOS** app with bundle ID `com.casinfreight.casinfreightDriver` (Android package is `com.casinfreight.casinfreight_driver`). Download `GoogleService-Info.plist` into `ios/Runner/` and update `lib/firebase_options.dart` with that file’s `GOOGLE_APP_ID` — a web app ID on iOS crashes on launch.
 
 ## Web
 

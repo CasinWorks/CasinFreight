@@ -1,10 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { BookOpen, CircleHelp, Play } from 'lucide-react';
-import { FAQ_ITEMS, HELP_GUIDES } from '../../content/helpContent';
+import { ArrowRight, BookOpen, CircleHelp, Play, Sparkles } from 'lucide-react';
+import { FAQ_ITEMS, HELP_GUIDES, helpToolDestination, tutorialStepForGuide } from '../../content/helpContent';
 import { useTutorial } from '../tutorial';
 
-export const HowToPage: React.FC = () => {
-  const { startTutorial } = useTutorial();
+interface HowToPageProps {
+  onOpenTool: (guideId: string) => void;
+}
+
+export const HowToPage: React.FC<HowToPageProps> = ({ onOpenTool }) => {
+  const { startTutorial, startTutorialAt } = useTutorial();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string>(HELP_GUIDES[0]?.id ?? 'board');
   const [openFaq, setOpenFaq] = useState<string | null>(null);
@@ -28,6 +32,13 @@ export const HowToPage: React.FC = () => {
     );
   }, [query]);
 
+  const showOnScreen = (guideId: string) => {
+    onOpenTool(guideId);
+    const stepId = tutorialStepForGuide(guideId);
+    if (!stepId) return;
+    window.setTimeout(() => startTutorialAt(stepId, { single: true }), 180);
+  };
+
   return (
     <div data-tutorial="help-page" className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 overflow-y-auto">
       <div className="p-4 md:px-6 md:pt-6 md:pb-4 border-b border-slate-200 bg-white">
@@ -40,7 +51,7 @@ export const HowToPage: React.FC = () => {
               <h1 className="text-xl font-bold tracking-tight text-slate-900">How to use CasinFreight</h1>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Step-by-step for every screen. Each feature page also has a How to panel under the title.
+              Open a guide, then tap Show on screen to jump there with a highlight. Or replay the full tour.
             </p>
           </div>
           <button
@@ -66,6 +77,8 @@ export const HowToPage: React.FC = () => {
           {guides.length === 0 && <p className="text-xs text-slate-500">No matching how-to.</p>}
           {guides.map((guide) => {
             const open = openId === guide.id;
+            const canOpenTool = Boolean(helpToolDestination(guide.id));
+            const canHighlight = Boolean(tutorialStepForGuide(guide.id));
             return (
               <div key={guide.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                 <button
@@ -94,6 +107,40 @@ export const HowToPage: React.FC = () => {
                           <li key={tip}>• {tip}</li>
                         ))}
                       </ul>
+                    )}
+                    {(canOpenTool || canHighlight) && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {canHighlight && (
+                          <button
+                            type="button"
+                            onClick={() => showOnScreen(guide.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Show on screen
+                          </button>
+                        )}
+                        {canOpenTool && !canHighlight && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenTool(guide.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
+                          >
+                            Open this tool
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {guide.id === 'driverapp' && (
+                      <p className="mt-3 text-[11px] text-slate-500">
+                        Seal photos and warehouse e-POD run on the driver’s phone. Show on screen highlights Trip Board for the office side (Inbound → Delivered).
+                      </p>
+                    )}
+                    {guide.id === 'tripfile' && (
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        Opens Trip Board with a highlight — tap a load there for the full trip file.
+                      </p>
                     )}
                   </div>
                 )}

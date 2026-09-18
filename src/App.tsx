@@ -33,10 +33,12 @@ import { UpgradeModal } from './components/billing/UpgradeModal';
 import { PlatformNoticeGate, MaintenanceLockScreen } from './components/notices/PlatformNoticeGate';
 import { TutorialProvider, useTutorial } from './components/tutorial';
 import { HowToPage } from './components/help/HowToPage';
+import { WorkspaceBackupModal } from './components/onboarding/WorkspaceBackupModal';
+import { helpToolDestination } from './content/helpContent';
 import { Analytics } from '@vercel/analytics/react';
 
 function MainLayout() {
-  const { canAccess, isOnboardingOpen, setIsOnboardingOpen, canCreateBooking, setIsUpgradeModalOpen, canManageBilling } = useFreight();
+  const { canAccess, isOnboardingOpen, setIsOnboardingOpen, canCreateBooking, setIsUpgradeModalOpen, canManageBilling, canManageCompanyBilling } = useFreight();
 
   const [activeTab, setActiveTab] = useState<NavTab>('board');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -52,6 +54,7 @@ function MainLayout() {
     }
   }, [isOnboardingOpen]);
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
+  const [isBackupOpen, setIsBackupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Handle trip selection
@@ -63,12 +66,20 @@ function MainLayout() {
     setSelectedInvoiceId(invoiceId);
   };
 
+  const openUpgradeOrNotify = () => {
+    if (canManageCompanyBilling) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+    window.alert('Plan limit reached. Ask the company Owner to upgrade or manage the subscription.');
+  };
+
   const handleTabChange = (tab: NavTab) => {
     if (tab === 'orgsetup') {
       setIsOrgSetupOpen(true);
     } else if (tab === 'calculator') {
       if (!canCreateBooking) {
-        setIsUpgradeModalOpen(true);
+        openUpgradeOrNotify();
         return;
       }
       setIsNewTripOpen(true);
@@ -76,6 +87,38 @@ function MainLayout() {
       setActiveTab(tab);
     }
     setIsMobileMenuOpen(false);
+  };
+
+  const handleOpenHelpTool = (guideId: string) => {
+    const destination = helpToolDestination(guideId);
+    if (!destination) return;
+    if (destination.kind === 'tab') {
+      handleTabChange(destination.tab);
+      return;
+    }
+    if (destination.action === 'profile') {
+      setIsProfileOpen(true);
+      return;
+    }
+    if (destination.action === 'notifications') {
+      setIsNotificationDrawerOpen(true);
+      return;
+    }
+    if (destination.action === 'backup') {
+      setIsBackupOpen(true);
+      return;
+    }
+    if (destination.action === 'billing') {
+      if (canManageCompanyBilling) {
+        setIsUpgradeModalOpen(true);
+        return;
+      }
+      if (canManageBilling) {
+        handleTabChange('admin');
+        return;
+      }
+      window.alert('Only the company Owner can manage the subscription.');
+    }
   };
 
   return (
@@ -90,7 +133,7 @@ function MainLayout() {
       <Navbar
         onOpenNewTrip={() => {
           if (!canCreateBooking) {
-            setIsUpgradeModalOpen(true);
+            openUpgradeOrNotify();
             return;
           }
           setIsNewTripOpen(true);
@@ -117,14 +160,14 @@ function MainLayout() {
 
         <main data-tutorial="main-workspace" className="flex-1 flex flex-col min-w-0 w-full overflow-hidden bg-[#F8FAFC] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           {activeTab === 'help' && (
-            <HowToPage />
+            <HowToPage onOpenTool={handleOpenHelpTool} />
           )}
 
           {activeTab === 'board' && (
             <TripBoard
               onOpenNewTrip={() => {
                 if (!canCreateBooking) {
-                  setIsUpgradeModalOpen(true);
+                  openUpgradeOrNotify();
                   return;
                 }
                 setIsNewTripOpen(true);
@@ -206,7 +249,7 @@ function MainLayout() {
             data-tutorial="new-load-btn"
             onClick={() => {
               if (!canCreateBooking) {
-                setIsUpgradeModalOpen(true);
+                openUpgradeOrNotify();
                 return;
               }
               setIsNewTripOpen(true);
@@ -319,6 +362,8 @@ function MainLayout() {
         onSelectInvoice={(invoiceId) => setSelectedInvoiceId(invoiceId)}
         onNavigateToDrivers={() => setActiveTab('drivers')}
       />
+
+      <WorkspaceBackupModal isOpen={isBackupOpen} onClose={() => setIsBackupOpen(false)} />
     </div>
     <TutorialUpgradeGate />
     </TutorialProvider>

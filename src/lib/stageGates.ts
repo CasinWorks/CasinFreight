@@ -1,6 +1,6 @@
 import { Trip, TripStatus } from '../types';
 
-export const PIPELINE_STAGES: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+export const PIPELINE_STAGES: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'];
 
 export function resumeTarget(trip: Pick<Trip, 'holdFromStatus'>): TripStatus {
   const from = trip.holdFromStatus;
@@ -54,8 +54,14 @@ export function missingSignaturesForStatus(trip: Trip, targetStatus: TripStatus)
     }
   }
 
+  if (targetStatus === 'Inbound') {
+    if (trip.status !== 'In Transit' && trip.status !== 'Inbound') {
+      return 'Mark the truck In Transit first. The driver taps “I have arrived” at the warehouse to set Inbound.';
+    }
+  }
+
   if (targetStatus === 'Delivered' && !hasSignedInk(trip.pod?.signatureDataUrl)) {
-    return 'The warehouse or consignee must sign proof of delivery before this trip can be marked Delivered.';
+    return 'The warehouse or consignee must sign proof of delivery before this trip can be marked Delivered. Driver must tap “I have arrived” (Inbound) first, then collect e-POD on the driver phone (or office stamps it on the web).';
   }
 
   if (targetStatus === 'Invoiced' && !hasSignedInk(trip.pod?.signatureDataUrl)) {

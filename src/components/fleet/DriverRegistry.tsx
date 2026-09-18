@@ -207,6 +207,16 @@ export const DriverRegistry: React.FC = () => {
                         Helper / pahinante
                       </span>
                     )}
+                    {!helper && drv.userId && (
+                      <span className="mt-0.5 inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                        App login linked
+                      </span>
+                    )}
+                    {!helper && !drv.userId && drv.email && (
+                      <span className="mt-0.5 inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        Invite pending · {drv.email}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -359,7 +369,7 @@ export const DriverRegistry: React.FC = () => {
                   placeholder="Same email you invite under Company & Team"
                   className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Invite this person as role Driver, then they sign in on the CasinFreight Driver phone app.</p>
+                <p className="text-[10px] text-slate-400 mt-1">Prefer inviting under Company &amp; Team as role Driver — they are added to this roster automatically. Or enter the same email here to link an existing login.</p>
               </div>
               )}
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const { getAdminDb, grantFounding, setCancelFlag } = require('./firebaseAdmin');
+const { getAdminDb, grantFounding, setCancelFlag, loadOwnedCompany } = require('./firebaseAdmin');
 
 async function loadPricing() {
   return import('../src/lib/subscriptionPrice.js');
@@ -315,10 +315,8 @@ async function runAction(action, body, origin, authHeader) {
     }
   }
 
-  const { companyId, subscription: existingSub } = await loadCompanySubscription(db, caller.uid);
-  if (!companyId) {
-    return { status: 400, data: { error: 'No company is linked to this login.' } };
-  }
+  const { companyId, company } = await loadOwnedCompany(db, caller);
+  const existingSub = company.subscription || {};
   const actualTrucks = await countTrucks(db, companyId);
   const billedTrucks = Number(existingSub && existingSub.billed_truck_count) || 0;
   const truckCount = billableTruckCount(actualTrucks, billedTrucks, body.truckCount);

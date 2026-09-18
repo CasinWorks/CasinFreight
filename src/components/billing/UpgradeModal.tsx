@@ -22,6 +22,7 @@ export const UpgradeModal: React.FC = () => {
     cancelSubscriptionAtPeriodEnd,
     resumeSubscription,
     isPlatformAdmin,
+    canManageCompanyBilling,
   } = useFreight();
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -37,6 +38,10 @@ export const UpgradeModal: React.FC = () => {
 
   React.useEffect(() => {
     if (!isUpgradeModalOpen) return;
+    if (!canManageCompanyBilling) {
+      setIsUpgradeModalOpen(false);
+      return;
+    }
     const wantExtra = sessionStorage.getItem(EXTRA_TRUCK_INTENT_KEY) === '1';
     sessionStorage.removeItem(EXTRA_TRUCK_INTENT_KEY);
     if (usedTrucks > paidTrucks) {
@@ -44,9 +49,9 @@ export const UpgradeModal: React.FC = () => {
       return;
     }
     setDesiredTrucks(wantExtra ? Math.max(minTrucks, paidTrucks) + 1 : Math.max(minTrucks, paidTrucks));
-  }, [isUpgradeModalOpen, minTrucks, paidTrucks, usedTrucks]);
+  }, [isUpgradeModalOpen, canManageCompanyBilling, minTrucks, paidTrucks, usedTrucks, setIsUpgradeModalOpen]);
 
-  if (!isUpgradeModalOpen) return null;
+  if (!isUpgradeModalOpen || !canManageCompanyBilling) return null;
 
   const hosted = hostedPricingForCheckout(subscription);
   const truckCount = desiredTrucks;

@@ -24,6 +24,7 @@ import { useFreight } from '../../context/FreightContext';
 import { isPlaceholderSignatory } from '../../lib/podSignoff';
 import { closeIfBackdrop } from '../../lib/modal';
 import { Trip, TripStatus, Truck as TruckType, Driver, Client, POD, CustodySignoff } from '../../types';
+import { hasSignedInk } from '../../lib/stageGates';
 import { SignaturePad, SignaturePadHandle } from './SignaturePad';
 
 interface StatusPrerequisiteModalProps {
@@ -35,6 +36,8 @@ interface StatusPrerequisiteModalProps {
   driver?: Driver;
   client?: Client;
   onConfirmAdvance: (updates: Partial<Trip>, note?: string) => void;
+  /** Persist yard-release fields/signatures without changing trip status (wait for the other signer). */
+  onSaveWithoutAdvance?: (updates: Partial<Trip>, note?: string) => void;
   onOpenDeliveryNote?: () => void;
 }
 
@@ -47,6 +50,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   driver,
   client,
   onConfirmAdvance,
+  onSaveWithoutAdvance,
   onOpenDeliveryNote
 }) => {
   const { currentUser, canManipulateTripStatus, uploadWorkspaceFile } = useFreight();
@@ -103,23 +107,70 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     signatureDataUrl,
   });
 
-  const handleConfirm = () => {
-    const updates: Partial<Trip> = {
+  const baseYardUpdates = (): Partial<Trip> => ({
+    securitySealNumber,
+    deliveryNoteNumber,
+    gatePassNumber,
+    prerequisites: {
+      ...trip.prerequisites,
       securitySealNumber,
       deliveryNoteNumber,
       gatePassNumber,
-      prerequisites: {
-        ...trip.prerequisites,
-        securitySealNumber,
-        deliveryNoteNumber,
-        gatePassNumber,
-        tareWeightVerified: weightVerified,
-        podReceiverName: receiverName,
-        podReceiverRole: receiverRole,
-        podReceiverIdNumber: receiverIdNumber,
-        podCondition: conditionStatus,
-      }
-    };
+      tareWeightVerified: weightVerified,
+      podReceiverName: receiverName,
+      podReceiverRole: receiverRole,
+      podReceiverIdNumber: receiverIdNumber,
+      podCondition: conditionStatus,
+    },
+  });
+
+  const resolveDispatcherSignoff = (): CustodySignoff | null => {
+    const dispatcherSig = dispatcherPadRef.current?.read(trip.dispatcherSignoff?.signatureDataUrl);
+    if (!dispatcherSig) return null;
+    return trip.dispatcherSignoff?.signatureDataUrl === dispatcherSig
+      ? trip.dispatcherSignoff
+      : makeSignoff(dispatcherName, currentUser.role, dispatcherSig);
+  };
+
+  const resolveDriverSignoff = (): CustodySignoff | null => {
+    const driverSig = driverPadRef.current?.read(trip.driverSignoff?.signatureDataUrl);
+    if (!driverSig) return null;
+    return trip.driverSignoff?.signatureDataUrl === driverSig
+      ? trip.driverSignoff
+      : makeSignoff(driverName, 'Driver', driverSig);
+  };
+
+  /** Save dispatcher yard release (and optional driver ink) without moving to In Transit. */
+  const handleSaveYardReleaseOnly = () => {
+    if (!onSaveWithoutAdvance) return;
+    if (!securitySealNumber.trim()) {
+      window.alert('Enter the real seal number before saving the yard release.');
+      return;
+    }
+    const dispatcherSignoff = resolveDispatcherSignoff();
+    if (!dispatcherSignoff) {
+      window.alert('Sign the dispatcher release pad first. The trip will stay on its current status until the driver also signs.');
+      return;
+    }
+
+    const updates = baseYardUpdates();
+    updates.dispatcherSignoff = dispatcherSignoff;
+    const driverSignoff = resolveDriverSignoff();
+    if (driverSignoff) {
+      updates.driverSignoff = driverSignoff;
+    }
+
+    const waitingForDriver = !hasSignedInk(driverSignoff?.signatureDataUrl || trip.driverSignoff?.signatureDataUrl);
+    const logNote = waitingForDriver
+      ? `Dispatcher yard release saved by ${dispatcherName}. Waiting for driver signature before In Transit. Seal #${securitySealNumber}.`
+      : `Yard release signatures saved by ${dispatcherName}. Ready to advance to In Transit when you confirm.`;
+
+    onSaveWithoutAdvance(updates, logNote);
+    onClose();
+  };
+
+  const handleConfirm = () => {
+    const updates = baseYardUpdates();
 
     let logNote = `Prerequisites validated for ${targetStatus}.`;
 
@@ -132,14 +183,12 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
         window.alert('Tick weighbridge / cargo verified before the dispatcher signs this out.');
         return;
       }
-      const dispatcherSig = dispatcherPadRef.current?.read(trip.dispatcherSignoff?.signatureDataUrl);
-      if (!dispatcherSig) {
+      const dispatcherSignoff = resolveDispatcherSignoff();
+      if (!dispatcherSignoff) {
         window.alert('The dispatcher must sign the release pad before cargo can be marked Loaded.');
         return;
       }
-      updates.dispatcherSignoff = trip.dispatcherSignoff?.signatureDataUrl === dispatcherSig
-        ? trip.dispatcherSignoff
-        : makeSignoff(dispatcherName, currentUser.role, dispatcherSig);
+      updates.dispatcherSignoff = dispatcherSignoff;
       logNote = `Cargo loaded and released by ${dispatcherName}. Seal #${securitySealNumber}.`;
     } else if (targetStatus === 'In Transit') {
       if (!securitySealNumber.trim()) {
@@ -154,24 +203,35 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
         window.alert('Assign a driver before releasing this shipment for hauling.');
         return;
       }
-      const dispatcherSig = dispatcherPadRef.current?.read(trip.dispatcherSignoff?.signatureDataUrl);
-      if (!dispatcherSig) {
-        window.alert('The dispatcher must sign the release pad before this cargo can go In Transit.');
+      const dispatcherSignoff = resolveDispatcherSignoff();
+      if (!dispatcherSignoff) {
+        window.alert('The dispatcher must sign the release pad before this cargo can go In Transit. Or tap Save yard release and wait for the driver.');
         return;
       }
-      const driverSig = driverPadRef.current?.read(trip.driverSignoff?.signatureDataUrl);
-      if (!driverSig) {
-        window.alert('Hand the device to the driver. They must sign that they received the cargo for hauling.');
+      const driverSignoff = resolveDriverSignoff();
+      if (!driverSignoff) {
+        window.alert('Driver has not signed yet. Tap Save yard release to keep the trip on Loaded, or have the driver sign on the Driver app / this pad.');
         return;
       }
-      updates.dispatcherSignoff = trip.dispatcherSignoff?.signatureDataUrl === dispatcherSig
-        ? trip.dispatcherSignoff
-        : makeSignoff(dispatcherName, currentUser.role, dispatcherSig);
-      updates.driverSignoff = trip.driverSignoff?.signatureDataUrl === driverSig
-        ? trip.driverSignoff
-        : makeSignoff(driverName, 'Driver', driverSig);
+      updates.dispatcherSignoff = dispatcherSignoff;
+      updates.driverSignoff = driverSignoff;
       logNote = `Released by ${dispatcherName} and received for hauling by ${driverName}. DN #${deliveryNoteNumber}, Gate Pass #${gatePassNumber}.`;
+    } else if (targetStatus === 'Inbound') {
+      if (trip.status !== 'In Transit' && trip.status !== 'Inbound') {
+        window.alert('Set the trip to In Transit first. Drivers tap “I have arrived” on the phone to mark Inbound at the warehouse.');
+        return;
+      }
+      logNote = 'Truck arrived at consignee / warehouse (Inbound). Driver can now collect warehouse e-POD on the phone.';
     } else if (targetStatus === 'Delivered') {
+      const isDriverLogin = String(currentUser.role || '').toLowerCase() === 'driver';
+      if (isDriverLogin) {
+        window.alert('On the website, drivers cannot stamp warehouse e-POD. Use the Driver phone app after Inbound (hand the phone to the warehouse officer), or have office staff stamp it here.');
+        return;
+      }
+      if (trip.status !== 'Inbound' && trip.status !== 'Delivered') {
+        window.alert('Mark the trip Inbound first (driver taps “I have arrived” at the gate), then capture warehouse e-POD.');
+        return;
+      }
       if (isPlaceholderSignatory(receiverName)) {
         window.alert('Enter the consignee’s real full name.');
         return;
@@ -225,6 +285,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border w-fit ${
                   targetStatus === 'Loaded' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                   targetStatus === 'In Transit' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                  targetStatus === 'Inbound' ? 'bg-cyan-50 text-cyan-800 border-cyan-200' :
                   targetStatus === 'Delivered' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                   'bg-purple-50 text-purple-700 border-purple-200'
                 }`}>
@@ -234,7 +295,11 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
               <p className="text-[11px] text-slate-500">
                 {targetStatus === 'Invoiced'
                   ? 'Signatures are already captured. This step only creates the invoice.'
-                  : 'Collect the signatures and documents required for this stage.'}
+                  : targetStatus === 'In Transit'
+                    ? 'Dispatcher can save the yard release now. In Transit only unlocks after the driver also signs (web pad or Driver app).'
+                    : targetStatus === 'Inbound'
+                      ? 'Confirm the truck is at the warehouse gate. The driver can then collect e-POD on the phone.'
+                    : 'Collect the signatures and documents required for this stage.'}
               </p>
             </div>
           </div>
@@ -425,14 +490,40 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
               </div>
 
               {targetStatus === 'In Transit' && (
-                <SignaturePad
-                  ref={driverPadRef}
-                  label={`Driver hauling signature * — ${driverName || 'No driver assigned'}`}
-                  hint={driver?.licenseNo
-                    ? `Hand the phone or tablet to ${driverName} (Lic: ${driver.licenseNo}) to sign that they received the sealed cargo.`
-                    : 'Assign a driver, then hand them this pad to sign for the cargo.'}
-                  existingUrl={trip.driverSignoff?.signatureDataUrl}
-                />
+                <>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700 space-y-1">
+                    <div className="font-bold text-slate-800">Yard release progress</div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                        hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl)
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}>
+                        Dispatcher {hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl) ? 'signed' : 'waiting'}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                        hasSignedInk(trip.driverSignoff?.signatureDataUrl)
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}>
+                        Driver {hasSignedInk(trip.driverSignoff?.signatureDataUrl) ? 'signed' : 'waiting'}
+                      </span>
+                    </div>
+                    {!hasSignedInk(trip.driverSignoff?.signatureDataUrl) && (
+                      <p className="text-slate-600 leading-relaxed">
+                        You can save the dispatcher signature now. The trip stays Loaded until the driver signs here or on the CasinFreight Driver app.
+                      </p>
+                    )}
+                  </div>
+                  <SignaturePad
+                    ref={driverPadRef}
+                    label={`Driver hauling signature * — ${driverName || 'No driver assigned'}`}
+                    hint={driver?.licenseNo
+                      ? `Hand the phone or tablet to ${driverName} (Lic: ${driver.licenseNo}), or wait for their Driver app signature.`
+                      : 'Assign a driver, then have them sign here or on the Driver app.'}
+                    existingUrl={trip.driverSignoff?.signatureDataUrl}
+                  />
+                </>
               )}
             </div>
           )}
@@ -452,6 +543,13 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 </span>
               </div>
 
+              {String(currentUser.role || '').toLowerCase() === 'driver' ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 leading-relaxed">
+                  <strong className="text-slate-900">Drivers do not capture this signature.</strong>
+                  {' '}Consignee / warehouse e-POD is collected on the Driver phone after Inbound (hand the phone to the warehouse officer), or stamped here by office staff.
+                </div>
+              ) : (
+              <>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
@@ -545,6 +643,8 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                   ))}
                 </div>
               </div>
+              </>
+              )}
             </div>
           )}
 
@@ -614,13 +714,25 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 </button>
               </div>
             ) : (
-              <button
-                onClick={handleConfirm}
-                className="flex items-center gap-2 px-5 min-h-12 sm:min-h-0 py-3 sm:py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm sm:text-xs shadow-md transition-all active:scale-95"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{targetStatus === 'Invoiced' ? 'Generate invoice' : `Advance to ${targetStatus}`}</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {targetStatus === 'In Transit' && onSaveWithoutAdvance && (
+                  <button
+                    type="button"
+                    onClick={handleSaveYardReleaseOnly}
+                    className="flex items-center gap-2 px-4 min-h-12 sm:min-h-0 py-3 sm:py-2 rounded-xl border border-blue-200 bg-white hover:bg-blue-50 text-blue-800 font-bold text-sm sm:text-xs transition-all"
+                  >
+                    <FileSignature className="w-4 h-4" />
+                    <span>Save yard release</span>
+                  </button>
+                )}
+                <button
+                  onClick={handleConfirm}
+                  className="flex items-center gap-2 px-5 min-h-12 sm:min-h-0 py-3 sm:py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm sm:text-xs shadow-md transition-all active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{targetStatus === 'Invoiced' ? 'Generate invoice' : `Advance to ${targetStatus}`}</span>
+                </button>
+              </div>
             )}
           </div>
         </div>

@@ -18,6 +18,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../lib/firebase';
+import { isDriverSeatRole } from '../lib/crew';
 import { Company, Subscription, User } from '../types';
 import { RbacAuditEntry, RbacRole } from '../types/rbac';
 
@@ -77,6 +78,16 @@ export interface TeamInvite {
   companyId: string;
   invitedBy: string;
   createdAt: string;
+  /** client_portal = consignee POD login; omit/team = Company & Team seat. */
+  kind?: 'team' | 'client_portal';
+  clientId?: string;
+}
+
+export function isClientPortalInvite(invite: TeamInvite): boolean {
+  return (
+    invite.kind === 'client_portal' ||
+    String(invite.role || '').toLowerCase() === 'client'
+  );
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
@@ -181,6 +192,11 @@ export async function getInviteByEmail(email: string): Promise<TeamInvite | null
 export async function saveInvite(invite: TeamInvite): Promise<void> {
   if (String(invite.role || '').toLowerCase() === 'owner') {
     throw new Error('Invite a working role such as Dispatcher or Driver. Owner cannot be invited.');
+  }
+  if (isClientPortalInvite(invite)) {
+    throw new Error(
+      'Warehouse portal invites are discontinued. e-POD is signed on the driver’s phone after Inbound.'
+    );
   }
   await setDoc(doc(getFirebaseDb(), 'invites', emailKey(invite.email)), stripUndefined(invite as unknown as Record<string, unknown>));
 }
@@ -380,6 +396,18 @@ export async function loadCollection<T extends { id: string }>(
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
 }
 
+export async function loadCollectionWhere<T extends { id: string }>(
+  companyId: string,
+  name: WorkspaceCollection,
+  field: string,
+  value: string
+): Promise<T[]> {
+  const snap = await getDocs(
+    query(collection(getFirebaseDb(), 'companies', companyId, name), where(field, '==', value))
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
+}
+
 export function listenCollection<T extends { id: string }>(
   companyId: string,
   name: WorkspaceCollection,
@@ -393,6 +421,25 @@ export function listenCollection<T extends { id: string }>(
     },
     (error) => {
       console.error(`Firestore listen failed for ${name}`, error);
+    }
+  );
+}
+
+export function listenCollectionWhere<T extends { id: string }>(
+  companyId: string,
+  name: WorkspaceCollection,
+  field: string,
+  value: string,
+  onData: (items: T[]) => void
+): Unsubscribe {
+  const q = query(collection(getFirebaseDb(), 'companies', companyId, name), where(field, '==', value));
+  return onSnapshot(
+    q,
+    (snap) => {
+      onData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as T)));
+    },
+    (error) => {
+      console.error(`Firestore listen failed for ${name} where ${field}`, error);
     }
   );
 }
@@ -542,6 +589,9 @@ export async function joinCompanyFromInvite(params: {
   name: string;
   invite: TeamInvite;
 }): Promise<{ company: CompanyDocument; profile: UserProfile }> {
+  if (isClientPortalInvite(params.invite)) {
+    throw new Error('This invite is for the client portal. Use the client join path.');
+  }
   const profile: UserProfile = {
     id: params.uid,
     uid: params.uid,
@@ -556,10 +606,51 @@ export async function joinCompanyFromInvite(params: {
   const userRef = doc(getFirebaseDb(), 'users', params.uid);
   const existing = await getDoc(userRef);
   const existingCompanyId = existing.exists() ? String(existing.data()?.companyId || '') : '';
-  if (!existing.exists()) {
-    await saveUserProfile(profile);
-  } else if (existingCompanyId && existingCompanyId !== params.invite.companyId) {
+  if (existingCompanyId && existingCompanyId !== params.invite.companyId) {
     throw new Error('This login is still tied to another company. Ask that owner to Untie login, then open this join link again.');
+  }
+
+  // Member seat first so company read / inCompany checks succeed for this UID.
+  try {
+    await setDoc(
+      doc(getFirebaseDb(), 'companies', params.invite.companyId, 'members', params.uid),
+      stripUndefined(profile as unknown as Record<string, unknown>)
+    );
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+    if (code.includes('permission-denied')) {
+      throw new Error(
+        'Firestore blocked joining this company. Paid plans only for invites — or publish the latest firestore.rules in Firebase Console, then try Join company again.'
+      );
+    }
+    throw error;
+  }
+
+  if (!existing.exists() || existingCompanyId !== params.invite.companyId) {
+    try {
+      await saveUserProfile(profile);
+    } catch (error) {
+      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+      if (code.includes('permission-denied')) {
+        throw new Error(
+          'Firestore blocked saving your seat. Publish firestore.rules in Firebase Console, then open this join link again.'
+        );
+      }
+      throw error;
+    }
+  }
+
+  if (isDriverSeatRole(params.invite.role)) {
+    try {
+      await ensureDriverRosterForLogin({
+        companyId: params.invite.companyId,
+        uid: params.uid,
+        email: params.email,
+        name: params.name || params.invite.name,
+      });
+    } catch (error) {
+      console.error('Could not link Driver Roster after join', error);
+    }
   }
 
   const company = await getCompanyDocument(params.invite.companyId);
@@ -567,12 +658,73 @@ export async function joinCompanyFromInvite(params: {
     throw new Error('The company on this invite no longer exists.');
   }
 
-  await setDoc(
-    doc(getFirebaseDb(), 'companies', params.invite.companyId, 'members', params.uid),
-    stripUndefined(profile as unknown as Record<string, unknown>)
-  );
   await deleteInvite(params.email);
   return { company, profile };
+}
+
+/** @deprecated Warehouse portal accounts are discontinued — e-POD is on the driver phone. */
+export async function joinClientPortalFromInvite(_params: {
+  uid: string;
+  email: string;
+  name: string;
+  invite: TeamInvite;
+}): Promise<{ profile: UserProfile }> {
+  throw new Error(
+    'Warehouse portal invites are discontinued. e-POD is signed on the driver’s phone after Inbound.'
+  );
+}
+
+/** Create or link a Driver Roster row when someone is invited/joins as role Driver. */
+export async function ensureDriverRosterForLogin(params: {
+  companyId: string;
+  uid?: string;
+  email: string;
+  name: string;
+}): Promise<{ id: string; created: boolean }> {
+  const email = emailKey(params.email);
+  if (!params.companyId || !email) {
+    throw new Error('Driver roster needs a company and email.');
+  }
+  const db = getFirebaseDb();
+  const driversRef = collection(db, 'companies', params.companyId, 'drivers');
+  const snap = await getDocs(driversRef);
+  const match = snap.docs.find((d) => {
+    const data = d.data();
+    const rowEmail = String(data.email || '').trim().toLowerCase();
+    const rowUid = String(data.userId || '');
+    return rowEmail === email || (params.uid && rowUid === params.uid);
+  });
+
+  if (match) {
+    const patch: Record<string, unknown> = {
+      email,
+      name: params.name || match.data().name || email.split('@')[0],
+      crewRole: 'driver',
+    };
+    if (params.uid) patch.userId = params.uid;
+    await setDoc(match.ref, stripUndefined(patch), { merge: true });
+    return { id: match.id, created: false };
+  }
+
+  const id = `drv-${Date.now().toString(36)}`;
+  const row = {
+    id,
+    companyId: params.companyId,
+    name: params.name || email.split('@')[0],
+    phone: '',
+    crewRole: 'driver',
+    licenseNo: '',
+    licenseRestrictions: '',
+    licenseExpiry: '',
+    email,
+    userId: params.uid || undefined,
+    status: 'Available',
+    emergencyContact: '',
+    totalTripsCompleted: 0,
+    rating: 5,
+  };
+  await setDoc(doc(driversRef, id), stripUndefined(row as unknown as Record<string, unknown>));
+  return { id, created: true };
 }
 
 export function createAuditLog(companyId: string, entry: RbacAuditEntry): Promise<void> {

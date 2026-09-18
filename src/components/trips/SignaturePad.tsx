@@ -1,6 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Maximize2, PenTool, X } from 'lucide-react';
+import { CheckCircle2, Maximize2, PenTool, X } from 'lucide-react';
 import { canvasPointFromEvent, readSignatureDataUrl } from '../../lib/podSignoff';
 
 export type SignaturePadHandle = {
@@ -29,6 +29,18 @@ function fitCanvas(canvas: HTMLCanvasElement) {
   return dpr;
 }
 
+function paintUrl(canvas: HTMLCanvasElement | null, url?: string) {
+  if (!canvas || !url) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const image = new Image();
+  image.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  };
+  image.src = url;
+}
+
 function strokeWidth(canvas: HTMLCanvasElement): number {
   const rect = canvas.getBoundingClientRect();
   const scale = rect.width > 0 ? canvas.width / rect.width : 1;
@@ -47,6 +59,11 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
   const [expanded, setExpanded] = useState(false);
   const [hasInk, setHasInk] = useState(Boolean(existingUrl));
   const [committedUrl, setCommittedUrl] = useState<string | undefined>(existingUrl);
+
+  useEffect(() => {
+    setCommittedUrl(existingUrl);
+    setHasInk(Boolean(existingUrl));
+  }, [existingUrl]);
 
   useImperativeHandle(ref, () => ({
     read: (fallback) => {
@@ -71,10 +88,19 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
     const canvas = canvasRef.current;
     if (!canvas) return;
     fitCanvas(canvas);
-    const observer = new ResizeObserver(() => fitCanvas(canvas));
+    const source = committedUrl || existingUrl;
+    if (source) {
+      // Fit may clear pixels; paint saved ink after size is stable.
+      requestAnimationFrame(() => paintUrl(canvas, source));
+    }
+    const observer = new ResizeObserver(() => {
+      fitCanvas(canvas);
+      const latest = committedUrl || existingUrl;
+      if (latest) requestAnimationFrame(() => paintUrl(canvas, latest));
+    });
     if (wrapRef.current) observer.observe(wrapRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [committedUrl, existingUrl]);
 
   useLayoutEffect(() => {
     if (!expanded) return;
@@ -82,13 +108,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
     if (!canvas) return;
     requestAnimationFrame(() => {
       fitCanvas(canvas);
-      const source = committedUrl || existingUrl;
-      if (!source) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const image = new Image();
-      image.onload = () => ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      image.src = source;
+      paintUrl(canvas, committedUrl || existingUrl);
     });
   }, [expanded, committedUrl, existingUrl]);
 
@@ -149,21 +169,13 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
     if (ink) {
       setCommittedUrl(ink);
       setHasInk(true);
-      const inline = canvasRef.current;
-      const ctx = inline?.getContext('2d');
-      if (inline && ctx) {
-        const image = new Image();
-        image.onload = () => {
-          ctx.clearRect(0, 0, inline.width, inline.height);
-          ctx.drawImage(image, 0, 0, inline.width, inline.height);
-        };
-        image.src = ink;
-      }
+      paintUrl(canvasRef.current, ink);
     }
     setExpanded(false);
   };
 
   const canvasClass = 'w-full h-full cursor-crosshair bg-transparent touch-none relative z-10';
+  const showSavedBadge = Boolean(committedUrl || existingUrl) && hasInk;
 
   return (
     <div>
@@ -173,17 +185,23 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
           <span className="truncate">{label}</span>
         </label>
         <div className="flex items-center gap-2 shrink-0">
+          {showSavedBadge && (
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              <CheckCircle2 className="w-3 h-3" />
+              On file
+            </span>
+          )}
           <button
             type="button"
             onClick={() => {
-              const ink = readSignatureDataUrl(canvasRef.current) || committedUrl;
+              const ink = readSignatureDataUrl(canvasRef.current) || committedUrl || existingUrl;
               if (ink) setCommittedUrl(ink);
               setExpanded(true);
             }}
             className="inline-flex items-center gap-1.5 min-h-9 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold sm:min-h-0 sm:px-0 sm:bg-transparent sm:text-blue-700 hover:sm:text-blue-900"
           >
             <Maximize2 className="w-3.5 h-3.5" />
-            Sign full screen
+            {committedUrl || existingUrl ? 'Re-sign full screen' : 'Sign full screen'}
           </button>
           <button
             type="button"
@@ -202,8 +220,13 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
         ref={wrapRef}
         className="border-2 border-slate-300 rounded-xl bg-white overflow-hidden shadow-inner relative h-44 sm:h-28"
       >
-        {committedUrl && !hasInk && (
-          <img src={committedUrl} alt="" className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-40" />
+        {/* Fallback preview while canvas paints / if canvas redraw lags */}
+        {(committedUrl || existingUrl) && (
+          <img
+            src={committedUrl || existingUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none z-0"
+          />
         )}
         <canvas
           ref={canvasRef}
@@ -214,8 +237,8 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
           onPointerLeave={stopDrawing}
           className={canvasClass}
         />
-        {!hasInk && !committedUrl && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-400 px-3 text-center">
+        {!hasInk && !committedUrl && !existingUrl && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-400 px-3 text-center z-20">
             <PenTool className="w-6 h-6 mb-1 opacity-60" />
             <span className="text-sm sm:text-xs font-medium">Tap “Sign full screen” or sign here with your finger</span>
           </div>
@@ -241,6 +264,13 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
             </button>
           </div>
           <div className="flex-1 mx-3 mb-3 rounded-2xl bg-white overflow-hidden border-2 border-dashed border-slate-300 relative min-h-0">
+            {(committedUrl || existingUrl) && (
+              <img
+                src={committedUrl || existingUrl}
+                alt=""
+                className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-30"
+              />
+            )}
             <canvas
               ref={overlayRef}
               onPointerDown={startDrawing}

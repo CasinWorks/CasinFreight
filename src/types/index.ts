@@ -23,6 +23,9 @@ export interface User {
   has_seen_tutorial?: boolean;
   lastLoginAt?: string;
   lastSeenAt?: string;
+  /** Portal consignee login — not a Company & Team seat. */
+  kind?: 'member' | 'client_portal';
+  clientId?: string;
 }
 
 export type SubscriptionTier = 'Free' | 'Starter' | 'Growth' | 'Fleet';
@@ -173,6 +176,15 @@ export interface AppNotification {
   };
 }
 
+export interface ClientPortalAgent {
+  email: string;
+  name: string;
+  userId?: string;
+  status: 'invited' | 'active';
+  invitedAt: string;
+  activatedAt?: string;
+}
+
 export interface Client {
   id: string;
   companyId: string;
@@ -184,6 +196,13 @@ export interface Client {
   billingAddress: string;
   paymentTermsDays: number; // e.g. 15, 30, 45
   activeContractsCount: number;
+  /** @deprecated Prefer portalAgents — kept in sync for older rows. */
+  portalEmail?: string;
+  portalUserId?: string;
+  portalStatus?: 'none' | 'invited' | 'active';
+  portalInvitedAt?: string;
+  /** Warehouse / receiving contacts who can sign e-POD for this shipper (phone app). */
+  portalAgents?: ClientPortalAgent[];
 }
 
 export interface RateCard {
@@ -242,7 +261,7 @@ export interface TripAccessorial {
   approved: boolean;
 }
 
-export type TripStatus = 'Pending' | 'Loaded' | 'In Transit' | 'Delivered' | 'Invoiced' | 'On Hold' | 'Cancelled';
+export type TripStatus = 'Pending' | 'Loaded' | 'In Transit' | 'Inbound' | 'Delivered' | 'Invoiced' | 'On Hold' | 'Cancelled';
 
 export type TripRetractionReasonCategory =
   | 'Wrong status posted'

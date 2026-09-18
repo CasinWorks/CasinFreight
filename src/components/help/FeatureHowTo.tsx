@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronDown, CircleHelp } from 'lucide-react';
-import { guideById } from '../../content/helpContent';
+import { ChevronDown, CircleHelp, Sparkles } from 'lucide-react';
+import { guideById, tutorialStepForGuide } from '../../content/helpContent';
+import { useTutorial } from '../tutorial';
 
 interface FeatureHowToProps {
   feature: string;
@@ -10,10 +11,20 @@ interface FeatureHowToProps {
 export const FeatureHowTo: React.FC<FeatureHowToProps> = ({ feature, compact = false }) => {
   const [open, setOpen] = useState(false);
   const guide = guideById(feature);
+  const { startTutorialAt } = useTutorial();
   if (!guide) return null;
+
+  const stepId = tutorialStepForGuide(feature);
+
+  const showOnScreen = () => {
+    if (!stepId) return;
+    setOpen(false);
+    window.setTimeout(() => startTutorialAt(stepId, { single: true }), 80);
+  };
 
   return (
     <div
+      data-tutorial={`howto-${feature}`}
       className={`rounded-xl border ${
         compact
           ? 'border-slate-200 bg-white'
@@ -48,6 +59,18 @@ export const FeatureHowTo: React.FC<FeatureHowToProps> = ({ feature, compact = f
                 <li key={tip}>• {tip}</li>
               ))}
             </ul>
+          )}
+          {stepId && (
+            <button
+              type="button"
+              onClick={showOnScreen}
+              className={`mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold ${
+                compact ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1.5 text-[11px]'
+              }`}
+            >
+              <Sparkles className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+              Show on screen
+            </button>
           )}
         </div>
       )}

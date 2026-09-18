@@ -172,7 +172,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   const sealNumber = trip.securitySealNumber || 'Not recorded';
   const gatePassNumber = trip.gatePassNumber || 'Not recorded';
   const opsStatus = trip.status === 'On Hold' || trip.status === 'Cancelled' ? resumeTarget(trip) : trip.status;
-  const pipeline: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+  const pipeline: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'];
   const pipelineIndex = pipeline.indexOf(opsStatus);
   const nextOpsStage = trip.status === 'On Hold' || trip.status === 'Cancelled' || trip.status === 'Invoiced'
     ? null
@@ -181,8 +181,9 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
     trip.status === 'On Hold' ? 'Resume trip' :
     trip.status === 'Pending' ? 'Mark loaded' :
     trip.status === 'Loaded' ? 'Start in transit' :
-    trip.status === 'In Transit' && !trip.pod ? 'Capture signature' :
-    trip.status === 'In Transit' ? 'Mark delivered' :
+    trip.status === 'In Transit' ? 'Mark arrived (Inbound)' :
+    trip.status === 'Inbound' && !trip.pod ? 'Capture warehouse POD' :
+    trip.status === 'Inbound' ? 'Mark delivered' :
     null;
 
   const runFieldAction = () => {
@@ -191,7 +192,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
       updateTripStatus(trip.id, resumeTarget(trip), 'Resumed from hold.', statusUpdateLocation || undefined);
       return;
     }
-    if (trip.status === 'In Transit' && !trip.pod) {
+    if (trip.status === 'Inbound' && !trip.pod) {
       setActiveTab('OPERATIONS');
       window.setTimeout(() => {
         document.getElementById('trip-pod')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -291,7 +292,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
 
     if (trip.status === 'On Hold') {
       const from = resumeTarget(trip);
-      const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+      const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'];
       if (stages.indexOf(nextStatus) <= stages.indexOf(from)) {
         updateTripStatus(trip.id, nextStatus, 'Resumed from hold.', statusUpdateLocation || undefined);
         return;
@@ -365,6 +366,18 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
       setPrerequisiteTargetStatus(null);
     }
 
+    setStatusUpdateNote('');
+    setStatusUpdateLocation('');
+  };
+
+  const handleSavePrerequisiteWithoutAdvance = (updates: Partial<Trip>, _note?: string) => {
+    updateTrip(trip.id, {
+      ...updates,
+      deliveryNoteNumber: updates.deliveryNoteNumber || trip.deliveryNoteNumber,
+      securitySealNumber: updates.securitySealNumber || trip.securitySealNumber,
+      gatePassNumber: updates.gatePassNumber || trip.gatePassNumber,
+    });
+    setPrerequisiteTargetStatus(null);
     setStatusUpdateNote('');
     setStatusUpdateLocation('');
   };
@@ -603,8 +616,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
         {/* Interactive 5-Stage Status Stepper Banner */}
         <div className="hidden sm:flex bg-slate-100/90 px-4 md:px-6 py-2.5 border-b border-slate-200 flex-col md:flex-row md:items-center justify-between gap-2.5">
           <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
-            {(['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'] as TripStatus[]).map((stage, idx) => {
-              const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+            {(['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'] as TripStatus[]).map((stage, idx) => {
+              const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'];
               const pipelineStatus = trip.status === 'On Hold' || trip.status === 'Cancelled'
                 ? resumeTarget(trip)
                 : trip.status;
@@ -724,8 +737,10 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               <span>
                 {trip.pod 
                   ? `POD Verified (${trip.pod.receiverName})` 
-                  : opsStatus === 'Pending' || opsStatus === 'Loaded'
-                  ? 'POD Locked (Pre-Transit)'
+                  : opsStatus === 'Pending' || opsStatus === 'Loaded' || opsStatus === 'In Transit'
+                  ? 'POD Locked (Waiting for Inbound)'
+                  : opsStatus === 'Inbound'
+                  ? 'POD Ready — warehouse can sign'
                   : 'POD Pending at Destination'}
               </span>
             </span>
@@ -733,7 +748,13 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
 
           {trip.status !== 'On Hold' && trip.status !== 'Cancelled' && (
             <button
-              onClick={() => setPrerequisiteTargetStatus(trip.status === 'Delivered' ? 'Invoiced' : trip.status === 'In Transit' ? 'Delivered' : trip.status === 'Loaded' ? 'In Transit' : 'Loaded')}
+              onClick={() => setPrerequisiteTargetStatus(
+                trip.status === 'Delivered' ? 'Invoiced' :
+                trip.status === 'Inbound' ? 'Delivered' :
+                trip.status === 'In Transit' ? 'Inbound' :
+                trip.status === 'Loaded' ? 'In Transit' :
+                'Loaded'
+              )}
               className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
@@ -870,7 +891,13 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                 </div>
                 <div className="pt-1">
                   <button
-                    onClick={() => setPrerequisiteTargetStatus(trip.status === 'Delivered' ? 'Invoiced' : trip.status === 'In Transit' ? 'Delivered' : 'Loaded')}
+                    onClick={() => setPrerequisiteTargetStatus(
+                      trip.status === 'Delivered' ? 'Invoiced' :
+                      trip.status === 'Inbound' ? 'Delivered' :
+                      trip.status === 'In Transit' ? 'Inbound' :
+                      trip.status === 'Loaded' ? 'In Transit' :
+                      'Loaded'
+                    )}
                     className="w-full py-2 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
@@ -1035,6 +1062,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                       event.status === 'Pending' ? 'bg-slate-400' :
                       event.status === 'Loaded' ? 'bg-blue-500' :
                       event.status === 'In Transit' ? 'bg-amber-500' :
+                      event.status === 'Inbound' ? 'bg-cyan-500' :
                       event.status === 'Delivered' ? 'bg-emerald-500' :
                       event.status === 'On Hold' ? 'bg-amber-400' :
                       event.status === 'Cancelled' ? 'bg-rose-400' : 'bg-purple-500'
@@ -1126,7 +1154,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
 
                   {/* Direct status buttons for quick testing / switching */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    {(['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'] as TripStatus[]).map((stage) => {
+                    {(['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'] as TripStatus[]).map((stage) => {
                       const isCurrent = trip.status === stage;
                       const perm = canManipulateTripStatus(stage, trip.status);
                       return (
@@ -1145,6 +1173,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                               ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
                               : stage === 'In Transit'
                               ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                              : stage === 'Inbound'
+                              ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200'
                               : stage === 'Delivered'
                               ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200'
@@ -1323,7 +1353,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
             </div>
 
             {/* Proof of Delivery (POD) Interactive Section */}
-            <div id="trip-pod" className={`${trip.status === 'In Transit' && !trip.pod ? 'order-first sm:order-none' : ''} bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3 scroll-mt-4`}>
+            <div id="trip-pod" className={`${trip.status === 'Inbound' && !trip.pod ? 'order-first sm:order-none' : ''} bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3 scroll-mt-4`}>
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">
                   <FileSignature className="w-4 h-4 text-emerald-600" />
@@ -1396,8 +1426,8 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                     <span className="font-semibold text-slate-500">Notes:</span> {trip.pod.notes}
                   </div>
                 </div>
-              ) : opsStatus === 'Pending' || opsStatus === 'Loaded' ? (
-                /* Pre-Transit Locked State: Explains why POD isn't available yet at Origin Yard */
+              ) : opsStatus === 'Pending' || opsStatus === 'Loaded' || opsStatus === 'In Transit' ? (
+                /* Pre-Inbound Locked State: POD unlocks after driver taps I have arrived */
                 <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3.5 shadow-2xs">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
@@ -1407,11 +1437,11 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-slate-900 text-xs">Proof of Delivery Locked</h4>
                         <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-                          {opsStatus === 'Pending' ? 'Pending Loading' : 'Loaded at Origin Yard'}
+                          {opsStatus === 'Pending' ? 'Pending Loading' : opsStatus === 'Loaded' ? 'Loaded at Origin Yard' : 'In Transit — waiting for arrival'}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Proof of Delivery (e-POD) is executed upon cargo arrival and physical unloading at the destination ({trip.destinationZone}). This capture pad unlocks once the shipment is in transit and arriving at the consignee site.
+                        Warehouse e-POD unlocks only after the driver taps <strong>I have arrived</strong> at the destination (status becomes Inbound). Then hand the driver phone to the warehouse officer to sign, or stamp e-POD here in the office.
                       </p>
                     </div>
                   </div>
@@ -1421,15 +1451,18 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                     <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       Shipment Delivery Lifecycle:
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-[10px] font-medium text-center">
-                      <div className={`p-2 rounded border ${trip.status === 'Loaded' ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
-                        1. Loading & Seal ✓
+                    <div className="grid grid-cols-4 gap-1.5 text-[10px] font-medium text-center">
+                      <div className={`p-2 rounded border ${trip.status === 'Loaded' || trip.status === 'In Transit' ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
+                        1. Load
                       </div>
-                      <div className="p-2 rounded border bg-amber-50/50 border-amber-200 text-amber-800">
-                        2. Linehaul In Transit 🚚
+                      <div className={`p-2 rounded border ${trip.status === 'In Transit' ? 'bg-amber-50 border-amber-200 text-amber-800 font-bold' : 'bg-amber-50/50 border-amber-200 text-amber-800'}`}>
+                        2. Transit
+                      </div>
+                      <div className="p-2 rounded border bg-cyan-50/60 border-cyan-200 text-cyan-800">
+                        3. Inbound
                       </div>
                       <div className="p-2 rounded border bg-slate-100 border-slate-200 text-slate-400">
-                        3. Consignee POD 🔒
+                        4. POD
                       </div>
                     </div>
                   </div>
@@ -1445,6 +1478,16 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                       <span>Advance Shipment to In Transit</span>
                     </button>
                   )}
+                </div>
+              ) : String(currentUser.role || '').toLowerCase() === 'driver' ? (
+                <div className="space-y-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 leading-relaxed">
+                    <strong className="text-slate-900">Drivers do not capture consignee / warehouse e-POD.</strong>
+                    {' '}After Inbound, the warehouse officer signs on the driver’s phone (name + role), or office staff can stamp the signature here.
+                    {trip.pod?.signatureDataUrl ? (
+                      <span className="block mt-2 text-emerald-700 font-semibold">e-POD is already on file for this trip.</span>
+                    ) : null}
+                  </div>
                 </div>
               ) : (
                 /* Interactive POD Form (Active during In Transit, Delivered, or Invoiced) */
@@ -1765,6 +1808,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
           driver={drv}
           client={clt}
           onConfirmAdvance={handleConfirmPrerequisiteAdvance}
+          onSaveWithoutAdvance={handleSavePrerequisiteWithoutAdvance}
           onOpenDeliveryNote={() => {
             setShowDeliveryNoteModal(true);
           }}

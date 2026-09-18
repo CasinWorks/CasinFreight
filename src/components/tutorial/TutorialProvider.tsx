@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useFreight } from '../../context/FreightContext';
 import { TutorialOverlay } from './TutorialOverlay';
-import { tutorialSteps, type TutorialStep } from './tutorialSteps';
+import { tutorialStepIndexById, tutorialSteps, type TutorialStep } from './tutorialSteps';
 import { hasSeenTutorialLocally } from './tutorialSeen';
 import type { NavTab } from '../layout/Sidebar';
 
@@ -10,7 +10,10 @@ interface TutorialContextValue {
   stepIndex: number;
   stepCount: number;
   currentStep: TutorialStep | null;
+  /** Full tour from the beginning. */
   startTutorial: () => void;
+  /** Jump to one instruction and highlight it (optionally single-step). */
+  startTutorialAt: (stepId: string, options?: { single?: boolean }) => void;
   next: () => void;
   back: () => void;
   skip: () => void;
@@ -36,33 +39,50 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({
   const { currentUser, isAuthenticated, trips, trucks, drivers, invoices, markTutorialSeen } = useFreight();
   const [isActive, setIsActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [singleStep, setSingleStep] = useState(false);
   const [hasAutoStarted, setHasAutoStarted] = useState(false);
 
   const currentStep = isActive ? tutorialSteps[stepIndex] ?? null : null;
+  const stepCount = singleStep ? 1 : tutorialSteps.length;
 
   const finish = useCallback(() => {
     setIsActive(false);
     setStepIndex(0);
+    setSingleStep(false);
     markTutorialSeen();
   }, [markTutorialSeen]);
 
   const startTutorial = useCallback(() => {
+    setSingleStep(false);
     setStepIndex(0);
     setIsActive(true);
     onNavigate(tutorialSteps[0]?.tab || 'board');
   }, [onNavigate]);
 
+  const startTutorialAt = useCallback(
+    (stepId: string, options?: { single?: boolean }) => {
+      const index = tutorialStepIndexById(stepId);
+      const step = tutorialSteps[index];
+      setSingleStep(Boolean(options?.single));
+      setStepIndex(index);
+      setIsActive(true);
+      if (step?.tab) onNavigate(step.tab);
+    },
+    [onNavigate]
+  );
+
   const next = useCallback(() => {
-    if (stepIndex >= tutorialSteps.length - 1) {
+    if (singleStep || stepIndex >= tutorialSteps.length - 1) {
       finish();
       return;
     }
     setStepIndex((index) => index + 1);
-  }, [finish, stepIndex]);
+  }, [finish, singleStep, stepIndex]);
 
   const back = useCallback(() => {
+    if (singleStep) return;
     setStepIndex((index) => Math.max(0, index - 1));
-  }, []);
+  }, [singleStep]);
 
   const skip = useCallback(() => {
     finish();
@@ -105,15 +125,16 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({
   const value = useMemo(
     () => ({
       isActive,
-      stepIndex,
-      stepCount: tutorialSteps.length,
+      stepIndex: singleStep ? 0 : stepIndex,
+      stepCount,
       currentStep,
       startTutorial,
+      startTutorialAt,
       next,
       back,
       skip,
     }),
-    [isActive, stepIndex, currentStep, startTutorial, next, back, skip]
+    [isActive, stepIndex, stepCount, currentStep, singleStep, startTutorial, startTutorialAt, next, back, skip]
   );
 
   return (
@@ -122,12 +143,14 @@ export const TutorialProvider: React.FC<TutorialProviderProps> = ({
       <TutorialOverlay
         isActive={isActive}
         step={currentStep}
-        stepIndex={stepIndex}
-        stepCount={tutorialSteps.length}
+        stepIndex={singleStep ? 0 : stepIndex}
+        stepCount={stepCount}
         datasetEmpty={datasetEmpty}
         onNext={next}
         onBack={back}
         onSkip={skip}
+        hideBack={singleStep}
+        nextLabel={singleStep || stepIndex >= tutorialSteps.length - 1 ? 'Done' : 'Next'}
       />
     </TutorialContext.Provider>
   );

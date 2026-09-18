@@ -112,8 +112,56 @@ service cloud.firestore {
       return (storageBaseGb(companyId) + storageAddonGb(companyId)) * 1024 * 1024 * 1024;
     }
 
+    // Warehouse / client portal logins share companyId but are not team seats.
+    // Keep them out of canAccessCompany so the catch-all subcollection rule
+    // cannot list every company trip/invoice.
+    function isClientPortalUser() {
+      return signedIn()
+        && exists(userPath())
+        && userData().keys().hasAny(['clientId'])
+        && userData().clientId is string
+        && userData().clientId.size() > 0
+        && (
+          (
+            userData().keys().hasAny(['kind'])
+            && userData().kind is string
+            && userData().kind.lower() == 'client_portal'
+          )
+          || (
+            userData().role is string
+            && userData().role.lower() == 'client'
+          )
+        );
+    }
+
+    // Trip list for portal: query must be where('clientId' == user.clientId).
+    function portalMayReadTrip(companyId) {
+      return signedIn()
+        && exists(userPath())
+        && userData().companyId == companyId
+        && userData().keys().hasAny(['clientId'])
+        && userData().clientId is string
+        && userData().clientId.size() > 0
+        && resource.data.keys().hasAny(['clientId'])
+        && resource.data.clientId is string
+        && resource.data.clientId == userData().clientId
+        && (
+          (
+            userData().keys().hasAny(['kind'])
+            && userData().kind is string
+            && userData().kind.lower() == 'client_portal'
+          )
+          || (
+            userData().role is string
+            && userData().role.lower() == 'client'
+          )
+        );
+    }
+
     function canAccessCompany(companyId) {
-      return inCompany(companyId) || stillOwnsCreatedCompany(companyId) || isPlatformAdmin();
+      return (inCompany(companyId) && !isClientPortalUser())
+        || stillOwnsCreatedCompany(companyId)
+        || isPlatformAdmin();
     }
 
     function isOwnerLike() {
@@ -138,6 +186,24 @@ service cloud.firestore {
 
     function inviteRole() {
       return get(/databases/$(database)/documents/invites/$(authEmail())).data.role;
+    }
+
+    function inviteKind() {
+      return get(/databases/$(database)/documents/invites/$(authEmail())).data.keys().hasAny(['kind'])
+        ? get(/databases/$(database)/documents/invites/$(authEmail())).data.kind
+        : 'team';
+    }
+
+    function inviteClientId() {
+      return get(/databases/$(database)/documents/invites/$(authEmail())).data.clientId;
+    }
+
+    function isClientPortalFor(companyId) {
+      return isClientPortalUser() && userData().companyId == companyId;
+    }
+
+    function portalClientId() {
+      return userData().clientId;
     }
 
     function roleDoc(companyId) {
@@ -188,6 +254,27 @@ service cloud.firestore {
         || isAssignedTripDriver(companyId, tripId);
     }
 
+    function isFieldDriverMember() {
+      return signedIn()
+        && exists(userPath())
+        && userData().role is string
+        && userData().role.lower() == 'driver';
+    }
+
+    function canReadAllCompanyTrips(companyId) {
+      return isPlatformAdmin()
+        || isCompanyOwner(companyId)
+        || hasPerm(companyId, 'trips.create')
+        || hasPerm(companyId, 'trips.edit')
+        || hasPerm(companyId, 'trips.reassign_fleet')
+        || hasPerm(companyId, 'invoices.create')
+        || hasPerm(companyId, 'ledger.view')
+        || hasPerm(companyId, 'dashboard.view')
+        || hasPerm(companyId, 'fleet.view')
+        || hasPerm(companyId, 'drivers.approve')
+        || hasPerm(companyId, 'ratecards.manage');
+    }
+
     function currentStorageUsed() {
       return resource.data.keys().hasAny(['storageUsedBytes']) && resource.data.storageUsedBytes is number
         ? int(resource.data.storageUsedBytes)
@@ -219,8 +306,22 @@ service cloud.firestore {
           || (
             matchingInvite(request.resource.data.companyId)
             && !isFreePlan(request.resource.data.companyId)
+            && inviteKind() != 'client_portal'
+            && !(inviteRole() is string && inviteRole().lower() == 'client')
             && request.resource.data.role == inviteRole()
             && request.resource.data.role.lower() != 'owner'
+          )
+          || (
+            matchingInvite(request.resource.data.companyId)
+            && !isFreePlan(request.resource.data.companyId)
+            && (
+              inviteKind() == 'client_portal'
+              || (inviteRole() is string && inviteRole().lower() == 'client')
+            )
+            && request.resource.data.kind == 'client_portal'
+            && request.resource.data.role == 'Client'
+            && request.resource.data.clientId is string
+            && request.resource.data.clientId == inviteClientId()
           )
         );
 
@@ -266,7 +367,11 @@ service cloud.firestore {
         && request.resource.data.id == companyId
         && request.resource.data.subscriptionTier == 'Free'
         && request.resource.data.subscription.plan_id == 'plan_free';
-      allow read: if canAccessCompany(companyId);
+      // Invitees need company read while claiming a seat (before members/{uid} exists).
+      // Client portal users need company read for trip queries after join.
+      allow read: if canAccessCompany(companyId)
+        || matchingInvite(companyId)
+        || isClientPortalFor(companyId);
       allow update: if isPlatformAdmin()
         || (
           canAccessCompany(companyId)
@@ -289,6 +394,8 @@ service cloud.firestore {
             && request.auth.uid == memberId
             && matchingInvite(companyId)
             && !isFreePlan(companyId)
+            && inviteKind() != 'client_portal'
+            && !(inviteRole() is string && inviteRole().lower() == 'client')
             && request.resource.data.role == inviteRole()
             && request.resource.data.role.lower() != 'owner'
           );
@@ -310,10 +417,26 @@ service cloud.firestore {
       }
 
       match /trips/{tripId} {
-        allow read: if canAccessCompany(companyId);
+        allow read: if portalMayReadTrip(companyId)
+          || (
+            canAccessCompany(companyId)
+            && (
+              canReadAllCompanyTrips(companyId)
+              || (!isFieldDriverMember() && hasPerm(companyId, 'trips.view'))
+              || isAssignedTripDriver(companyId, tripId)
+            )
+          );
         allow create: if hasPerm(companyId, 'trips.create')
           && (isPlatformAdmin() || !isFreePlan(companyId) || tripId.matches('^slot-trip-[0-9]$'));
-        allow update: if canWriteTrip(companyId, tripId);
+        allow update: if canWriteTrip(companyId, tripId)
+          || (
+            isClientPortalFor(companyId)
+            && resource.data.clientId == portalClientId()
+            && request.resource.data.clientId == resource.data.clientId
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['pod', 'status', 'actualDelivery', 'timeline'])
+            && request.resource.data.status == 'Delivered'
+          );
         allow delete: if hasPerm(companyId, 'trips.delete');
       }
 
@@ -343,12 +466,53 @@ service cloud.firestore {
 
       match /drivers/{docId} {
         allow read: if canAccessCompany(companyId);
-        allow write: if hasPerm(companyId, 'drivers.crud');
+        allow create, update: if hasPerm(companyId, 'drivers.crud')
+          || (
+            inCompany(companyId)
+            && request.resource.data.email is string
+            && request.resource.data.email.lower() == authEmail()
+            && (
+              !request.resource.data.keys().hasAny(['userId'])
+              || request.resource.data.userId == request.auth.uid
+            )
+            && (
+              !('crewRole' in request.resource.data)
+              || request.resource.data.crewRole == 'driver'
+            )
+          );
+        allow delete: if hasPerm(companyId, 'drivers.crud');
       }
 
       match /clients/{docId} {
-        allow read: if canAccessCompany(companyId);
-        allow write: if hasPerm(companyId, 'ratecards.manage') || hasPerm(companyId, 'settings.manage');
+        allow read: if canAccessCompany(companyId)
+          || (
+            isClientPortalFor(companyId)
+            && docId == portalClientId()
+          );
+        allow create: if hasPerm(companyId, 'ratecards.manage') || hasPerm(companyId, 'settings.manage');
+        allow update: if hasPerm(companyId, 'ratecards.manage') || hasPerm(companyId, 'settings.manage')
+          || (
+            signedIn()
+            && matchingInvite(companyId)
+            && (
+              inviteKind() == 'client_portal'
+              || (inviteRole() is string && inviteRole().lower() == 'client')
+            )
+            && inviteClientId() == docId
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['portalUserId', 'portalStatus', 'portalEmail', 'portalInvitedAt', 'portalAgents'])
+            && request.resource.data.portalUserId == request.auth.uid
+            && request.resource.data.portalStatus == 'active'
+          )
+          || (
+            isClientPortalFor(companyId)
+            && docId == portalClientId()
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['portalUserId', 'portalStatus', 'portalEmail', 'portalInvitedAt', 'portalAgents'])
+            && request.resource.data.portalUserId == request.auth.uid
+            && request.resource.data.portalStatus == 'active'
+          );
+        allow delete: if hasPerm(companyId, 'ratecards.manage') || hasPerm(companyId, 'settings.manage');
       }
 
       match /rateCards/{docId} {
@@ -362,17 +526,57 @@ service cloud.firestore {
       }
 
       match /fieldEvents/{docId} {
-        allow read: if canAccessCompany(companyId);
+        allow read: if (
+            canAccessCompany(companyId)
+            && (
+              canReadAllCompanyTrips(companyId)
+              || (!isFieldDriverMember() && hasPerm(companyId, 'trips.view'))
+              || (
+                resource.data.tripId is string
+                && isAssignedTripDriver(companyId, resource.data.tripId)
+              )
+            )
+          )
+          || (
+            isClientPortalFor(companyId)
+            && resource.data.keys().hasAny(['clientId'])
+            && resource.data.clientId == portalClientId()
+          )
+          || (
+            isClientPortalFor(companyId)
+            && resource.data.tripId is string
+            && exists(tripPath(companyId, resource.data.tripId))
+            && get(tripPath(companyId, resource.data.tripId)).data.clientId == portalClientId()
+          );
         allow create, update: if request.resource.data.tripId is string
           && (
             canWriteTrip(companyId, request.resource.data.tripId)
             || isAssignedTripDriver(companyId, request.resource.data.tripId)
+            || (
+              isClientPortalFor(companyId)
+              && exists(tripPath(companyId, request.resource.data.tripId))
+              && get(tripPath(companyId, request.resource.data.tripId)).data.clientId == portalClientId()
+              && request.resource.data.kind in ['pod_signature', 'delivery_geo']
+              && request.resource.data.clientId == portalClientId()
+            )
           );
         allow delete: if isCompanyOwner(companyId);
       }
 
       match /liveTracking/{tripId} {
-        allow read: if canAccessCompany(companyId);
+        allow read: if (
+            canAccessCompany(companyId)
+            && (
+              canReadAllCompanyTrips(companyId)
+              || (!isFieldDriverMember() && hasPerm(companyId, 'trips.view'))
+              || isAssignedTripDriver(companyId, tripId)
+            )
+          )
+          || (
+            isClientPortalFor(companyId)
+            && exists(tripPath(companyId, tripId))
+            && get(tripPath(companyId, tripId)).data.clientId == portalClientId()
+          );
         allow create, update: if isAssignedTripDriver(companyId, tripId)
           || hasPerm(companyId, 'trips.edit');
         allow delete: if isCompanyOwner(companyId);
@@ -390,7 +594,9 @@ service cloud.firestore {
       }
 
       match /{subcol}/{docId} {
-        allow read: if canAccessCompany(companyId);
+        // Never use this catch-all for warehouse portal — they must use
+        // collection-specific rules (trips/clients/fieldEvents/liveTracking).
+        allow read: if canAccessCompany(companyId) && !isClientPortalUser();
         allow write: if false;
       }
     }

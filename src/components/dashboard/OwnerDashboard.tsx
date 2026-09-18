@@ -33,7 +33,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
   const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year'>('month');
 
   // KPI Calculations
-  const activeShipmentsCount = trips.filter(t => t.status === 'In Transit' || t.status === 'Loaded').length;
+  const activeShipmentsCount = trips.filter(t => t.status === 'In Transit' || t.status === 'Inbound' || t.status === 'Loaded').length;
   const delayedOrDemurrageCount = trips.filter(t => t.demurrageHours > 0 || t.isOverweight).length;
   
   const totalRevenue = invoices.reduce((sum, inv) => sum + inv.grandTotalPhp, 0);

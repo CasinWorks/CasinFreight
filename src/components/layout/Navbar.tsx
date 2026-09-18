@@ -50,6 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     subscriptionUsage,
     subscription,
     resetCurrentPlanToFree,
+    canManageBilling,
+    canManageCompanyBilling,
   } = useFreight();
   const { startTutorial } = useTutorial();
 
@@ -62,6 +64,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     subscription.billing_cycle === 'annual' ? 'annual' : 'monthly',
     subscription
   );
+
+  const openBilling = () => {
+    if (!canManageCompanyBilling) {
+      window.alert('Only the company Owner can manage the subscription. Ask them to upgrade or renew.');
+      return;
+    }
+    setIsUpgradeModalOpen(true);
+  };
 
   return (
     <>
@@ -110,14 +120,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         <button
           type="button"
           data-tutorial="plan-badge"
-          onClick={() => setIsUpgradeModalOpen(true)}
+          onClick={openBilling}
+          title={canManageCompanyBilling ? undefined : 'Only the Owner can manage billing'}
           className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border ${
             activePlan.id === 'plan_free'
               ? 'bg-amber-50 text-amber-800 border-amber-200'
               : activePlan.id === 'plan_promo'
                 ? 'bg-violet-50 text-violet-800 border-violet-200'
                 : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-          }`}
+          } ${canManageCompanyBilling ? '' : 'cursor-default opacity-90'}`}
         >
           {activePlan.name}
           <span className="font-mono font-medium text-[10px] opacity-80">
@@ -256,17 +267,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     Replay tutorial
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      setIsUpgradeModalOpen(true);
-                    }}
-                    className="w-full p-2 rounded-lg hover:bg-slate-50 text-left text-xs font-semibold text-slate-700"
-                  >
-                    {activePlan.id === 'plan_free' ? 'Upgrade to Founding' : 'Manage subscription'}
-                  </button>
-                  {activePlan.id !== 'plan_free' && (
+                  {canManageCompanyBilling && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        setIsUpgradeModalOpen(true);
+                      }}
+                      className="w-full p-2 rounded-lg hover:bg-slate-50 text-left text-xs font-semibold text-slate-700"
+                    >
+                      {activePlan.id === 'plan_free' ? 'Upgrade to Founding' : 'Manage subscription'}
+                    </button>
+                  )}
+                  {canManageCompanyBilling && activePlan.id !== 'plan_free' && (
                     <button
                       type="button"
                       onClick={() => {
@@ -308,21 +321,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         <span>
           {activePlan.id === 'plan_free'
             ? subscriptionUsage.isFreeTrialExpired
-              ? `Your 1-month Free trial has ended. Subscribe to ${paidName} to keep using this workspace.`
-              : `Free trial ends ${formatPhDate(subscription.current_period_end)}. Then this workspace locks until you subscribe.`
+              ? `Your 1-month Free trial has ended. ${canManageCompanyBilling ? `Subscribe to ${paidName} to keep using this workspace.` : 'Ask the Owner to subscribe so the team can keep working.'}`
+              : `Free trial ends ${formatPhDate(subscription.current_period_end)}. Then this workspace locks until the Owner subscribes.`
             : activePlan.id === 'plan_promo'
-            ? `Promo access ends ${formatPhDate(subscription.current_period_end)}. Then this workspace returns to Free unless you subscribe.`
+            ? `Promo access ends ${formatPhDate(subscription.current_period_end)}. Then this workspace returns to Free unless the Owner subscribes.`
             : subscription.cancel_at_period_end
-            ? `${paidName} ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless you pay ${formatPhp(renewalPrice.chargePhp)} again.`
+            ? `${paidName} ends ${formatPhDate(subscription.current_period_end)}. This workspace returns to Free unless the Owner pays ${formatPhp(renewalPrice.chargePhp)} again.`
             : `${paidName} renews ${formatPhDate(subscription.current_period_end)} — ${formatPhp(renewalPrice.monthlyTotal)}/month for ${renewalPrice.truckCount} truck${renewalPrice.truckCount === 1 ? '' : 's'}.`}
         </span>
-        <button
-          type="button"
-          onClick={() => setIsUpgradeModalOpen(true)}
-          className="self-start sm:self-auto font-bold text-amber-900 underline underline-offset-2"
-        >
-          {activePlan.id === 'plan_free' || activePlan.id === 'plan_promo' ? 'Subscribe' : 'Pay now'}
-        </button>
+        {canManageCompanyBilling ? (
+          <button
+            type="button"
+            onClick={() => setIsUpgradeModalOpen(true)}
+            className="self-start sm:self-auto font-bold text-amber-900 underline underline-offset-2"
+          >
+            {activePlan.id === 'plan_free' || activePlan.id === 'plan_promo' ? 'Subscribe' : 'Pay now'}
+          </button>
+        ) : (
+          <span className="self-start sm:self-auto font-semibold text-amber-800/80">
+            Owner manages billing
+          </span>
+        )}
       </div>
     )}
     </>

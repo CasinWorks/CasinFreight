@@ -26,7 +26,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'help',
     target: '[data-tutorial="nav-help"]',
     title: 'How to is always here',
-    body: 'Open How to any time for step-by-step on every screen. Each page also has a How to panel under the title.',
+    body: 'Open How to any time for step-by-step on every screen. Tap “Open this tool” on a guide to jump there with this highlight.',
     placement: 'right',
     tab: 'help',
   },
@@ -41,7 +41,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'clients',
     target: '[data-tutorial="nav-clients"]',
     title: 'Shippers',
-    body: 'Add each client with TIN and payment terms before you book.',
+    body: 'Add each client with TIN and payment terms before you book. Warehouse e-POD is signed on the driver’s phone at delivery — no separate warehouse login.',
     placement: 'right',
     tab: 'clients',
   },
@@ -57,7 +57,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'drivers',
     target: '[data-tutorial="nav-drivers"]',
     title: 'Drivers & helpers',
-    body: 'Licensed drivers use the phone app (same email as the invite). Helpers / pahinante stay on the roster and do not log in.',
+    body: 'Licensed drivers use the phone app (same email as the invite). After Inbound they hand the phone to the warehouse officer for e-POD. Helpers / pahinante stay on the roster and do not log in.',
     placement: 'right',
     tab: 'drivers',
     requires: 'drivers',
@@ -100,7 +100,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'trip-board',
     target: '[data-tutorial="nav-board"]',
     title: 'Trip Board',
-    body: 'Pending → Loaded → In Transit → Delivered → Invoiced. Open a card for seal, POD, and the waybill.',
+    body: 'Pending → Loaded → In Transit → Inbound → Delivered → Invoiced. Open a card for seal, waybill, and office e-POD if needed.',
     placement: 'right',
     tab: 'board',
     requires: 'trips',
@@ -109,6 +109,14 @@ export const tutorialSteps: TutorialStep[] = [
       body: 'Nothing is booked yet — that is normal. Tap New Load after the truck and shipper exist.',
       target: '[data-tutorial="trip-board"]',
     },
+  },
+  {
+    id: 'epod',
+    target: '[data-tutorial="nav-board"]',
+    title: 'Warehouse e-POD',
+    body: 'Driver taps I have arrived (Inbound), then hands the phone to the warehouse officer for signature, name, and role. Office can still stamp e-POD from a trip card on the web.',
+    placement: 'right',
+    tab: 'board',
   },
   {
     id: 'exceptions',
@@ -174,9 +182,14 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'ready',
     target: '[data-tutorial="new-load-btn"]',
     title: 'You are ready',
-    body: 'Tap New Load to book, or Finish and use How to whenever you get stuck.',
+    body: 'Tap New Load to book, or Finish and use How to whenever you get stuck. Each How to guide can open that screen with this highlight.',
     placement: 'bottom',
     tab: 'board',
     finishOnClick: true,
   },
 ];
+
+export function tutorialStepIndexById(stepId: string): number {
+  const index = tutorialSteps.findIndex((step) => step.id === stepId);
+  return index >= 0 ? index : 0;
+}

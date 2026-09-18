@@ -138,7 +138,8 @@ async function loadOwnedCompany(db, caller) {
   if (!userSnap.exists) {
     throw Object.assign(new Error('No company is linked to this login.'), { status: 403 });
   }
-  const companyId = String(userSnap.data().companyId || '');
+  const userData = userSnap.data() || {};
+  const companyId = String(userData.companyId || '');
   if (!companyId) {
     throw Object.assign(new Error('No company is linked to this login.'), { status: 403 });
   }
@@ -148,8 +149,10 @@ async function loadOwnedCompany(db, caller) {
   }
   const company = companySnap.data() || {};
   const createdBy = String(company.createdBy || '');
-  if (createdBy !== caller.uid && !isPlatformAdmin(caller)) {
-    throw Object.assign(new Error('Only the company owner can change billing.'), { status: 403 });
+  const role = String(userData.role || '');
+  const isOwnerRole = role === 'Owner' || role.toLowerCase().includes('owner');
+  if (createdBy !== caller.uid && !isOwnerRole && !isPlatformAdmin(caller)) {
+    throw Object.assign(new Error('Only the company Owner can change billing.'), { status: 403 });
   }
   return { companyId, company };
 }
@@ -350,5 +353,6 @@ module.exports = {
   stampAdminSession,
   grantFounding,
   setCancelFlag,
+  loadOwnedCompany,
   rolloverAllCompanies,
 };

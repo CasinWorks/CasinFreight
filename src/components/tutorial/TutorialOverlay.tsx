@@ -13,6 +13,8 @@ interface TutorialOverlayProps {
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
+  hideBack?: boolean;
+  nextLabel?: string;
 }
 
 const TOOLTIP_WIDTH = 320;
@@ -26,6 +28,8 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
   onNext,
   onBack,
   onSkip,
+  hideBack = false,
+  nextLabel,
 }) => {
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [hole, setHole] = useState<Rect | null>(null);
@@ -226,21 +230,25 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
               </div>
 
               <div className="flex items-center justify-between gap-2 mt-4">
-                <button
-                  type="button"
-                  onClick={onBack}
-                  disabled={stepIndex === 0}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-500 disabled:opacity-30"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Back
-                </button>
+                {hideBack ? (
+                  <span />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    disabled={stepIndex === 0}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-500 disabled:opacity-30"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Back
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onNext}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm"
                 >
-                  <span>{isLast ? 'Finish' : 'Next'}</span>
+                  <span>{nextLabel || (isLast ? 'Finish' : 'Next')}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>

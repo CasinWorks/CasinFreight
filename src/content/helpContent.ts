@@ -38,7 +38,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'marketplace',
     question: 'Is this a marketplace where shippers post loads?',
     answer:
-      'No. It is for one fleet and that fleet’s clients. Shippers do not get a self-serve portal.',
+      'No. It is for one fleet and that fleet’s clients (billing / shipper records). Warehouse e-POD is signed on the driver’s phone at delivery — not a public load board.',
   },
   {
     id: 'trial',
@@ -55,13 +55,19 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'helper-app',
     question: 'Does the helper use the phone app?',
     answer:
-      'No. Only the licensed driver invited as role Driver, with matching roster email, uses the CasinFreight Driver app.',
+      'No. Only the licensed driver invited as role Driver uses the CasinFreight Driver app.',
   },
   {
     id: 'driver-login',
     question: 'How does the driver log in?',
     answer:
-      'Invite them under Company with role Driver, put the same email on the Driver Roster, then they sign in on the CasinFreight Driver app with email and password. There is no Google login.',
+      'Invite them under Company with role Driver. CasinFreight adds or links them on the Driver Roster with that email. They sign in on the CasinFreight Driver app with email and password. There is no Google login.',
+  },
+  {
+    id: 'client-portal',
+    question: 'How does the shipper / warehouse sign e-POD?',
+    answer:
+      'The driver taps I have arrived (Inbound) at the gate, then hands the phone to the warehouse officer. They sign on the pad and type their full name and role. Office staff can also stamp e-POD on the website. There is no separate warehouse login.',
   },
   {
     id: 'tolls',
@@ -109,7 +115,7 @@ export const FAQ_ITEMS: FaqItem[] = [
 export const FEATURE_HIGHLIGHTS: { title: string; body: string }[] = [
   {
     title: 'Trip Board',
-    body: 'Kanban of loads: Pending → Loaded → In Transit → Delivered → Invoiced, plus On Hold / Cancelled.',
+    body: 'Kanban of loads: Pending → Loaded → In Transit → Inbound → Delivered → Invoiced, plus On Hold / Cancelled.',
   },
   {
     title: 'New Load / Load Calculator',
@@ -117,7 +123,7 @@ export const FEATURE_HIGHLIGHTS: { title: string; body: string }[] = [
   },
   {
     title: 'Trip file & e-POD',
-    body: 'Waybill, seal, custody signatures, demurrage, accessorials, status rollback for Owner / GM.',
+    body: 'Waybill, seal, custody signatures. After Inbound, warehouse signs e-POD on the driver phone (or office stamps it on the web).',
   },
   {
     title: 'Invoices & ledger',
@@ -147,7 +153,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       'Export CSV from the board when you need a dispatch list.',
     ],
     tips: [
-      'Statuses: Pending → Loaded → In Transit → Delivered → Invoiced.',
+      'Statuses: Pending → Loaded → In Transit → Inbound (driver arrived) → Delivered → Invoiced.',
       'Holds and cancellations leave this board and live on Exceptions.',
     ],
   },
@@ -174,13 +180,15 @@ export const HELP_GUIDES: HelpGuide[] = [
     summary: 'Run one load: status, seals, signatures, accessorials, invoice.',
     steps: [
       'Open a trip from the board.',
-      'Advance status only when the next gate is ready (seal, POD).',
+      'Advance status when each gate is ready (seal → yard release → In Transit).',
+      'Driver taps I have arrived (Inbound). Then warehouse signs e-POD on the driver phone (name + role), or office stamps it here.',
       'Add accessorials (demurrage, overweight, helper crew, overnight, etc.) if they apply.',
       'Print or share the delivery note / waybill.',
       'When Delivered, create the invoice from this file or from Invoices.',
     ],
     tips: [
       'Owner / GM can request a status rollback if a stage was marked too early.',
+      'There is no separate warehouse portal login — e-POD is on the driver phone or the web trip file.',
     ],
   },
   {
@@ -234,7 +242,8 @@ export const HELP_GUIDES: HelpGuide[] = [
     ],
     tips: [
       'Helpers do not log in to the driver app.',
-      'Invite the driver under Company with role Driver so they can sign in.',
+      'Invite the driver under Company with role Driver — the roster row is created or linked automatically.',
+      'On web and phone, Drivers only see trips assigned to them on the roster.',
     ],
   },
   {
@@ -242,10 +251,10 @@ export const HELP_GUIDES: HelpGuide[] = [
     title: 'Driver phone app',
     summary: 'Seal photos and e-POD for the assigned driver only.',
     steps: [
-      'Invite the person under Company → role Driver.',
-      'Put that exact email on Drivers & Helpers.',
+      'Invite the person under Company → role Driver (roster syncs automatically).',
       'They install CasinFreight Driver and sign in with email and password.',
-      'They only see assigned open trips. They take the seal photo and collect signatures.',
+      'They only see trips assigned to them. They take seal photos, sign cargo handoff, and collect warehouse e-POD on the same phone after Inbound (hand the phone to the warehouse officer for name + role + signature).',
+      'Office staff can also stamp e-POD on the website if needed.',
     ],
   },
   {
@@ -271,11 +280,12 @@ export const HELP_GUIDES: HelpGuide[] = [
   {
     id: 'clients',
     title: 'Shippers & Clients',
-    summary: 'Client master used on trips and invoices.',
+    summary: 'Client master for billing and invoices.',
     steps: [
       'Add the shipper: legal name, TIN, billing address, contacts, payment terms.',
       'Pick that shipper on New Load.',
       'Invoices pull TIN and terms from this record.',
+      'Warehouse e-POD is signed on the driver’s phone at delivery (or by office on the web).',
     ],
   },
   {
@@ -378,4 +388,83 @@ export const HELP_GUIDES: HelpGuide[] = [
 
 export function guideById(id: string): HelpGuide | undefined {
   return HELP_GUIDES.find((guide) => guide.id === id);
+}
+
+/** Sidebar tabs How to can jump into (matches NavTab except help). */
+export type HelpNavTab =
+  | 'board'
+  | 'exceptions'
+  | 'calculator'
+  | 'invoices'
+  | 'ledger'
+  | 'trucks'
+  | 'drivers'
+  | 'clients'
+  | 'ratecards'
+  | 'truckbans'
+  | 'dashboard'
+  | 'rbac'
+  | 'orgsetup'
+  | 'admin';
+
+export type HelpToolAction = 'profile' | 'notifications' | 'backup' | 'billing';
+
+export type HelpToolDestination =
+  | { kind: 'tab'; tab: HelpNavTab }
+  | { kind: 'action'; action: HelpToolAction };
+
+/**
+ * Where “Open this tool” goes from How to use CasinFreight.
+ * tripfile → Trip Board (needs a specific trip). driverapp highlights e-POD on the board.
+ */
+const HELP_TOOL_DESTINATIONS: Record<string, HelpToolDestination> = {
+  board: { kind: 'tab', tab: 'board' },
+  tripfile: { kind: 'tab', tab: 'board' },
+  exceptions: { kind: 'tab', tab: 'exceptions' },
+  calculator: { kind: 'tab', tab: 'calculator' },
+  invoices: { kind: 'tab', tab: 'invoices' },
+  trucks: { kind: 'tab', tab: 'trucks' },
+  drivers: { kind: 'tab', tab: 'drivers' },
+  truckbans: { kind: 'tab', tab: 'truckbans' },
+  ratecards: { kind: 'tab', tab: 'ratecards' },
+  clients: { kind: 'tab', tab: 'clients' },
+  ledger: { kind: 'tab', tab: 'ledger' },
+  dashboard: { kind: 'tab', tab: 'dashboard' },
+  rbac: { kind: 'tab', tab: 'rbac' },
+  orgsetup: { kind: 'tab', tab: 'orgsetup' },
+  driverapp: { kind: 'tab', tab: 'board' },
+  profile: { kind: 'action', action: 'profile' },
+  billing: { kind: 'action', action: 'billing' },
+  notifications: { kind: 'action', action: 'notifications' },
+  backup: { kind: 'action', action: 'backup' },
+};
+
+/** Map How-to guide ids → guided tour step ids for spotlight highlighting. */
+const GUIDE_TO_TUTORIAL_STEP: Record<string, string> = {
+  help: 'help',
+  board: 'trip-board',
+  tripfile: 'epod',
+  driverapp: 'epod',
+  exceptions: 'exceptions',
+  calculator: 'new-load',
+  invoices: 'invoices',
+  trucks: 'trucks',
+  drivers: 'drivers',
+  truckbans: 'bans',
+  ratecards: 'rates',
+  clients: 'clients',
+  ledger: 'ledger',
+  dashboard: 'dashboard',
+  rbac: 'rbac',
+  orgsetup: 'org',
+  notifications: 'notifications',
+  billing: 'plan',
+};
+
+export function helpToolDestination(guideId: string): HelpToolDestination | null {
+  return HELP_TOOL_DESTINATIONS[guideId] || null;
+}
+
+export function tutorialStepForGuide(guideId: string): string | null {
+  return GUIDE_TO_TUTORIAL_STEP[guideId] || null;
 }

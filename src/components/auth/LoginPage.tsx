@@ -62,7 +62,7 @@ export const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(
     isJoin && invitedEmail
-      ? `You were invited to an existing company. Enter your name, choose a password, and join. This does not create a new company.`
+      ? 'You were invited. Enter your name, choose a password, and join. This website is for fleet staff (office / dispatch).'
       : null
   );
   const [isLoading, setIsLoading] = useState(false);
@@ -118,22 +118,26 @@ export const LoginPage: React.FC = () => {
       return;
     }
     setErrorMessage(null);
+    setInfoMessage(null);
     if (mode !== 'login' && password.length < MIN_SIGNUP_PASSWORD_LENGTH) {
       setErrorMessage(`Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`);
       return;
     }
     setIsLoading(true);
-    const res = mode === 'login'
-      ? await login(email, password, { rememberMe })
-      : mode === 'join'
-      ? await joinTeam({ name, email, password })
-      : await signup({ name, email, password, companyName });
-    setIsLoading(false);
-    if (!res.success) {
-      setErrorMessage(res.error || 'Authentication failed.');
-      return;
+    try {
+      const res = mode === 'login'
+        ? await login(email, password, { rememberMe })
+        : mode === 'join'
+        ? await joinTeam({ name, email, password })
+        : await signup({ name, email, password, companyName });
+      if (!res.success) {
+        setErrorMessage(res.error || 'Authentication failed.');
+        return;
+      }
+      if (mode === 'login') writeSavedEmail(email, rememberMe);
+    } finally {
+      setIsLoading(false);
     }
-    if (mode === 'login') writeSavedEmail(email, rememberMe);
   };
 
   const submitLabel = mode === 'login' ? 'Sign in' : mode === 'join' ? 'Join company' : 'Start free';

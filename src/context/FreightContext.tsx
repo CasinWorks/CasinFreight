@@ -61,9 +61,13 @@ import {
   getInviteByEmail,
   getUserProfile,
   joinCompanyFromInvite,
+  ensureDriverRosterForLogin,
+  isClientPortalInvite,
   listCompanyDocuments,
   loadCollection,
+  loadCollectionWhere,
   listenCollection,
+  listenCollectionWhere,
   listenCompanyBilling,
   replaceCollection,
   upsertCollection,
@@ -104,7 +108,26 @@ import { refreshPlatformAdminClaim } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 import { isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
 import { timelineRetractionFromRequest } from '../lib/tripAudit';
-import { isHelperCrew } from '../lib/crew';
+import { isHelperCrew, isDriverSeatRole } from '../lib/crew';
+
+function isFieldDriverRole(role: string): boolean {
+  return isDriverSeatRole(role);
+}
+
+function resolveDriverRosterId(
+  roster: { id: string; email?: string; userId?: string; crewRole?: string }[],
+  uid: string,
+  email?: string
+): string | null {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const match = roster.find((d) => {
+    if (String(d.crewRole || 'driver').toLowerCase() === 'helper') return false;
+    const rowUid = String(d.userId || '');
+    const rowEmail = String(d.email || '').trim().toLowerCase();
+    return (uid && rowUid === uid) || (Boolean(cleanEmail) && rowEmail === cleanEmail);
+  });
+  return match?.id || null;
+}
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
   switch (type) {
@@ -142,14 +165,15 @@ interface FreightContextType {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   isFirebaseReady: boolean;
-  login: (email: string, password?: string, options?: { rememberMe?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password?: string, options?: { rememberMe?: boolean }) => Promise<{ success: boolean; error?: string; clientPortal?: boolean }>;
   signup: (payload: { name: string; email: string; password: string; companyName: string }) => Promise<{ success: boolean; error?: string }>;
-  joinTeam: (payload: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
+  joinTeam: (payload: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string; clientPortal?: boolean }>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   switchUserAccount: (userId: string) => void;
   switchUserRole: (role: UserRole) => void;
   addUser: (user: Omit<User, 'id' | 'companyId'>) => Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }>;
+  inviteClientPortal: (clientId: string, email: string, contactName?: string) => Promise<{ success: boolean; error?: string; inviteUrl?: string }>;
   removeUserFromCompany: (userId: string) => Promise<{ success: boolean; error?: string }>;
   tiedCompanyLogins: User[];
   refreshTiedCompanyLogins: () => Promise<void>;
@@ -348,6 +372,8 @@ interface FreightContextType {
   markTutorialSeen: () => void;
   isPlatformAdmin: boolean;
   canManageBilling: boolean;
+  /** Company Owner only — Manage subscription / Reset to Free in the account menu. */
+  canManageCompanyBilling: boolean;
   listPlatformSubscriptions: () => Promise<CompanyDocument[]>;
   setCompanyPlanByAdmin: (companyId: string, planId: string, grant?: AdminPlanGrant) => Promise<void>;
   resetCurrentPlanToFree: () => Promise<void>;
@@ -595,7 +621,6 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       loadedClients,
       loadedRateCards,
       loadedTruckBans,
-      loadedTrips,
       loadedInvoices,
       loadedFuelLogs,
       loadedJournal,
@@ -609,13 +634,26 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       loadCollection<Client>(companyId, 'clients'),
       loadCollection<RateCard>(companyId, 'rateCards'),
       loadCollection<TruckBan>(companyId, 'truckBans'),
-      loadCollection<Trip>(companyId, 'trips'),
       loadCollection<Invoice>(companyId, 'invoices'),
       loadCollection<FuelLog>(companyId, 'fuelLogs'),
       loadCollection<JournalEntry>(companyId, 'journalEntries'),
       loadCollection<AppNotification>(companyId, 'notifications'),
       loadCollection<RbacAuditEntry>(companyId, 'auditLogs'),
     ]);
+
+    const memberRole = String(
+      (profile?.role as string) ||
+        loadedMembers.find((m) => m.id === uid)?.role ||
+        ''
+    );
+    const driverRosterId = isFieldDriverRole(memberRole)
+      ? resolveDriverRosterId(loadedDrivers, uid, profile?.email)
+      : null;
+    const loadedTrips = isFieldDriverRole(memberRole)
+      ? driverRosterId
+        ? await loadCollectionWhere<Trip>(companyId, 'trips', 'driverId', driverRosterId)
+        : []
+      : await loadCollection<Trip>(companyId, 'trips');
 
     const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, createdBy, ...companyFields } = companyDoc;
     companyCreatedByRef.current = createdBy || uid;
@@ -662,10 +700,51 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       markTutorialSeenLocally(uid);
     }
 
+    // Backfill Drivers & Helpers when a Driver / Field Operator seat has no roster row yet.
+    let driversForWorkspace = loadedDrivers;
+    const canBackfillRoster =
+      createdBy === uid
+      || memberRole === 'Owner'
+      || memberRole.toLowerCase().includes('owner')
+      || checkPermission(memberRole, 'drivers.crud', nextRoles);
+    if (canBackfillRoster) {
+      const rosterEmails = new Set(
+        loadedDrivers.map((d) => String(d.email || '').trim().toLowerCase()).filter(Boolean)
+      );
+      const missingDriverSeats = uniqueMembers.filter((member) => {
+        if (!isDriverSeatRole(String(member.role || ''), nextRoles)) return false;
+        const email = String(member.email || '').trim().toLowerCase();
+        return Boolean(email) && !rosterEmails.has(email);
+      });
+      if (missingDriverSeats.length > 0) {
+        for (const member of missingDriverSeats) {
+          try {
+            const linkedUid =
+              member.status === 'invited' || String(member.id).startsWith('invite-')
+                ? undefined
+                : member.id;
+            await ensureDriverRosterForLogin({
+              companyId,
+              email: member.email,
+              name: member.name || member.email.split('@')[0],
+              uid: linkedUid,
+            });
+          } catch (error) {
+            console.error('Could not backfill Driver Roster for', member.email, error);
+          }
+        }
+        try {
+          driversForWorkspace = await loadCollection<Driver>(companyId, 'drivers');
+        } catch (error) {
+          console.error('Could not reload drivers after roster backfill', error);
+        }
+      }
+    }
+
     snapshotCollection('roles', loadedRoles);
     snapshotCollection('members', uniqueMembers);
     snapshotCollection('trucks', loadedTrucks);
-    snapshotCollection('drivers', loadedDrivers);
+    snapshotCollection('drivers', driversForWorkspace);
     snapshotCollection('clients', loadedClients);
     snapshotCollection('rateCards', loadedRateCards);
     snapshotCollection('truckBans', loadedTruckBans);
@@ -684,7 +763,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRoles(nextRoles);
     setUsers(uniqueMembers);
     setTrucks(loadedTrucks);
-    setDrivers(loadedDrivers);
+    setDrivers(driversForWorkspace);
     setClients(loadedClients);
     setRateCards(loadedRateCards);
     setTruckBans(loadedTruckBans);
@@ -707,14 +786,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (!isAuthenticated || !company.id) return;
+    const role = String(currentRole || '');
+    const memberEmail = users.find((u) => u.id === currentUserId)?.email || '';
+    const driverOnly = isFieldDriverRole(role);
+    const rosterId = driverOnly
+      ? resolveDriverRosterId(drivers, currentUserId, memberEmail)
+      : null;
+
     workspaceUnsubsRef.current.forEach((unsub) => unsub());
-    workspaceUnsubsRef.current = [
-      listenCollection<LiveTracking>(company.id, 'liveTracking', setLiveTracking),
-      listenCollection<FieldEvent>(company.id, 'fieldEvents', setFieldEvents),
-      listenCollection<Trip>(company.id, 'trips', (remote) => {
-        if (tripsDirtyRef.current) return;
-        setTrips(remote);
-      }),
+    const unsubs: Array<() => void> = [
       listenCompanyBilling(company.id, (billing) => {
         if (billing.subscription) setSubscription(billing.subscription);
         setCompany((prev) => {
@@ -731,11 +811,39 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       }),
     ];
+
+    if (driverOnly) {
+      if (!rosterId) {
+        setTrips([]);
+        setLiveTracking([]);
+        setFieldEvents([]);
+      } else {
+        unsubs.push(
+          listenCollectionWhere<Trip>(company.id, 'trips', 'driverId', rosterId, (remote) => {
+            if (tripsDirtyRef.current) return;
+            setTrips(remote);
+          }),
+          listenCollectionWhere<LiveTracking>(company.id, 'liveTracking', 'driverId', rosterId, setLiveTracking)
+        );
+        setFieldEvents([]);
+      }
+    } else {
+      unsubs.push(
+        listenCollection<LiveTracking>(company.id, 'liveTracking', setLiveTracking),
+        listenCollection<FieldEvent>(company.id, 'fieldEvents', setFieldEvents),
+        listenCollection<Trip>(company.id, 'trips', (remote) => {
+          if (tripsDirtyRef.current) return;
+          setTrips(remote);
+        })
+      );
+    }
+
+    workspaceUnsubsRef.current = unsubs;
     return () => {
       workspaceUnsubsRef.current.forEach((unsub) => unsub());
       workspaceUnsubsRef.current = [];
     };
-  }, [isAuthenticated, company.id]);
+  }, [isAuthenticated, company.id, currentRole, currentUserId, users, drivers]);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -753,7 +861,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       try {
         setIsPlatformAdmin(await refreshPlatformAdminClaim(fbUser));
-        for (let wait = 0; wait < 40 && seedingRef.current; wait += 1) {
+        // Wait out join/signup seeding so we never signOut mid client-portal claim.
+        for (let wait = 0; wait < 200 && seedingRef.current; wait += 1) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
         let profile = await getUserProfile(fbUser.uid);
@@ -762,6 +871,17 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           profile = await getUserProfile(fbUser.uid);
         }
         if (!profile?.companyId) {
+          resetWorkspace();
+          setIsAuthenticated(false);
+          setIsAuthLoading(false);
+          return;
+        }
+        // Client portal is phone-app only. Never tear down Firebase Auth while join/login
+        // is still writing the profile / invite (that caused endless Join spinners).
+        if (profile.kind === 'client_portal') {
+          if (!seedingRef.current) {
+            await signOut(getFirebaseAuth());
+          }
           resetWorkspace();
           setIsAuthenticated(false);
           setIsAuthLoading(false);
@@ -1025,6 +1145,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     role: currentRole,
     companyId: company.id,
     }),
+    role: (currentRole || foundUser?.role || 'Owner') as UserRole,
     email: foundUser?.email || authEmail || '',
     has_seen_tutorial: Boolean(foundUser?.has_seen_tutorial) || hasSeenTutorialLocally(currentUserId),
   };
@@ -1139,14 +1260,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsAuthenticated(false);
   };
 
-  const canManageBilling = isPlatformAdmin
-    || currentUser.role === 'Owner'
-    || currentUser.role.toLowerCase().includes('owner');
+  const canManageCompanyBilling =
+    currentUser.role === 'Owner'
+    || String(currentUser.role || '').toLowerCase().includes('owner');
+  /** Platform admin console + company Owner billing. */
+  const canManageBilling = isPlatformAdmin || canManageCompanyBilling;
 
   useEffect(() => {
-    if (!isAuthenticated || isPlatformAdmin) return;
+    if (!isAuthenticated || isPlatformAdmin || !canManageCompanyBilling) return;
     if (isFreeTrialExpired(subscription)) setIsUpgradeModalOpen(true);
-  }, [isAuthenticated, isPlatformAdmin, subscription.plan_id, subscription.current_period_end, subscription.created_at]);
+  }, [isAuthenticated, isPlatformAdmin, canManageCompanyBilling, subscription.plan_id, subscription.current_period_end, subscription.created_at]);
 
   const listPlatformSubscriptions = async () => {
     if (!isPlatformAdmin) {
@@ -1229,6 +1352,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const resetCurrentPlanToFree = async () => {
+    if (!canManageCompanyBilling) {
+      throw new Error('Only the company Owner can change the subscription.');
+    }
     if (!company.id) {
       throw new Error('No company workspace is loaded.');
     }
@@ -1408,7 +1534,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const requireUpgrade = (blocked: boolean) => {
     if (blocked) {
-      setIsUpgradeModalOpen(true);
+      if (canManageCompanyBilling) {
+        setIsUpgradeModalOpen(true);
+      }
       return true;
     }
     return false;
@@ -1440,7 +1568,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     email: string,
     password?: string,
     options?: { rememberMe?: boolean }
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; clientPortal?: boolean }> => {
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
@@ -1448,6 +1576,14 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await setAuthRememberMe(options?.rememberMe !== false);
       const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
       const profile = await getUserProfile(cred.user.uid);
+      if (profile?.kind === 'client_portal') {
+        await signOut(getFirebaseAuth());
+        return {
+          success: false,
+          error:
+            'Warehouse portal logins are discontinued. e-POD is signed on the driver’s phone at delivery (hand the phone to the warehouse officer). Ask the fleet office if you need anything else.',
+        };
+      }
       if (profile?.companyId) return { success: true };
 
       const invite = await getInviteByEmail(email.trim());
@@ -1455,6 +1591,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return {
           success: false,
           error: 'This login exists, but the company workspace was never created. Open Create company and submit again with the same details.',
+        };
+      }
+
+      if (isClientPortalInvite(invite)) {
+        await signOut(getFirebaseAuth());
+        return {
+          success: false,
+          error:
+            'Warehouse portal invites are discontinued. e-POD is collected on the driver’s phone after Inbound — no separate warehouse login.',
         };
       }
 
@@ -1558,7 +1703,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     name: string;
     email: string;
     password: string;
-  }): Promise<{ success: boolean; error?: string }> => {
+  }): Promise<{ success: boolean; error?: string; clientPortal?: boolean }> => {
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
@@ -1593,6 +1738,14 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (existing?.companyId) {
         if (invite && existing.companyId === invite.companyId) {
+          if (isClientPortalInvite(invite)) {
+            await signOut(getFirebaseAuth());
+            return {
+              success: false,
+              error:
+                'Warehouse portal invites are discontinued. e-POD is signed on the driver’s phone at delivery.',
+            };
+          }
           await joinCompanyFromInvite({ uid, email, name, invite });
           return { success: true };
         }
@@ -1603,6 +1756,14 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
             error: 'This login is still tied to another company. Ask that owner to Untie login on Roles & permissions, then open this join link again.',
           };
         }
+        if (existing.kind === 'client_portal') {
+          await signOut(getFirebaseAuth());
+          return {
+            success: false,
+            error:
+              'Warehouse portal logins are discontinued. e-POD is signed on the driver’s phone at delivery.',
+          };
+        }
         return { success: true };
       }
 
@@ -1611,6 +1772,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return {
           success: false,
           error: 'No company invite was found for this email. Ask the owner to invite you again and send the new join link.',
+        };
+      }
+
+      if (isClientPortalInvite(invite)) {
+        await signOut(getFirebaseAuth());
+        return {
+          success: false,
+          error:
+            'Warehouse portal invites are discontinued. e-POD is signed on the driver’s phone after Inbound — no separate warehouse account.',
         };
       }
 
@@ -1655,6 +1825,21 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         role: newRole,
         status: member.status || 'active',
       }).catch(console.error);
+    }
+    if (company.id && targetUser?.email && isDriverSeatRole(newRole, roles)) {
+      const linkedUid = userId.startsWith('invite-') ? undefined : userId;
+      ensureDriverRosterForLogin({
+        companyId: company.id,
+        email: targetUser.email,
+        name: targetUser.name || targetUser.email.split('@')[0],
+        uid: linkedUid,
+      })
+        .then(async () => {
+          const refreshed = await loadCollection<Driver>(company.id, 'drivers');
+          snapshotCollection('drivers', refreshed);
+          setDrivers(refreshed);
+        })
+        .catch((error) => console.error('Could not sync Driver Roster after role change', error));
     }
   };
 
@@ -1810,12 +1995,62 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           invitedBy: currentUserId,
           createdAt: new Date().toISOString(),
         });
+        if (isDriverSeatRole(userData.role, roles)) {
+          try {
+            await ensureDriverRosterForLogin({
+              companyId: company.id,
+              email: userData.email,
+              name: userData.name.trim() || userData.email.split('@')[0],
+            });
+            const refreshed = await loadCollection<Driver>(company.id, 'drivers');
+            snapshotCollection('drivers', refreshed);
+            setDrivers(refreshed);
+          } catch (error) {
+            console.error('Could not sync Driver Roster for invite', error);
+            // Fallback: keep a local roster row so the Owner still sees them in Drivers & Helpers.
+            const email = userData.email.trim().toLowerCase();
+            const existingRoster = drivers.find(
+              (d) => (d.email || '').trim().toLowerCase() === email
+            );
+            if (!existingRoster) {
+              addDriver({
+                name: userData.name.trim() || userData.email.split('@')[0],
+                phone: '',
+                crewRole: 'driver',
+                licenseNo: '',
+                licenseRestrictions: '',
+                licenseExpiry: '',
+                email,
+                status: 'Available',
+                emergencyContact: '',
+              });
+            } else {
+              updateDriver(existingRoster.id, {
+                email,
+                name: userData.name || existingRoster.name,
+                crewRole: 'driver',
+              });
+            }
+          }
+        }
       } catch (error) {
         return { success: false, error: mapAuthError(error) };
       }
     }
     pushAudit('USER_ROLE_ASSIGNED', `Invited ${userData.name} (${userData.email}) as ${userData.role}.`, userData.role, userData.name);
     return { success: true, emailed: false, inviteUrl };
+  };
+
+  const inviteClientPortal = async (
+    _clientId: string,
+    _email: string,
+    _contactName?: string
+  ): Promise<{ success: boolean; error?: string; inviteUrl?: string }> => {
+    return {
+      success: false,
+      error:
+        'Warehouse portal accounts are discontinued. After the driver taps I have arrived, hand the driver phone to the warehouse officer to sign e-POD (name + role).',
+    };
   };
 
   const removeUserFromCompany = async (userId: string): Promise<{ success: boolean; error?: string }> => {
@@ -2610,6 +2845,17 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const submitPOD = (tripId: string, podData: Omit<POD, 'id' | 'tripId' | 'signedAt'>) => {
+    if (isFieldDriverRole(currentUser.role)) {
+      window.alert(
+        'On the website, drivers cannot stamp warehouse e-POD. Use the Driver phone app after Inbound (hand the phone to the warehouse officer), or have office staff stamp it here.'
+      );
+      return;
+    }
+    const current = trips.find((t) => t.id === tripId);
+    if (current && current.status !== 'Inbound' && current.status !== 'Delivered' && current.status !== 'Invoiced') {
+      window.alert('Mark the trip Inbound first (driver taps “I have arrived” at the warehouse), then capture e-POD.');
+      return;
+    }
     tripsDirtyRef.current = true;
     const pod: POD = {
       ...podData,
@@ -3722,6 +3968,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     billingCycle: 'monthly' | 'annual' = 'monthly',
     truckCount = trucks.length
   ) => {
+    if (!canManageCompanyBilling) {
+      throw new Error('Only the company Owner can manage the subscription.');
+    }
     const successUrl = `${window.location.origin}/?billing=success`;
     const cancelUrl = `${window.location.origin}/?billing=cancel`;
     sessionStorage.setItem(PENDING_FOUNDING_KEY, planId);
@@ -3767,6 +4016,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     billingCycle: 'monthly' | 'annual' = 'monthly',
     truckCount = trucks.length
   ) => {
+    if (!canManageCompanyBilling) {
+      throw new Error('Only the company Owner can manage the subscription.');
+    }
     const checkoutWindow = window.open('about:blank', `casinfreight-paymongo-${Date.now()}`);
     try {
       const result = await createPayMongoCheckout(PLAN_FOUNDING_ID, billingCycle, truckCount);
@@ -3906,6 +4158,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [isAuthenticated, company.id, subscription.plan_id, isWaitingForPayMongo]);
 
   const persistSubscriptionFlags = async (cancelAtPeriodEnd: boolean) => {
+    if (!canManageCompanyBilling) {
+      throw new Error('Only the company Owner can manage the subscription.');
+    }
     if (!company.id) return;
     const response = await fetch('/api/paymongo', {
       method: 'POST',
@@ -3952,6 +4207,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       switchUserAccount,
       switchUserRole,
       addUser,
+      inviteClientPortal,
       removeUserFromCompany,
       tiedCompanyLogins,
       refreshTiedCompanyLogins,
@@ -4077,6 +4333,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       markTutorialSeen,
       isPlatformAdmin,
       canManageBilling,
+      canManageCompanyBilling,
       listPlatformSubscriptions,
       setCompanyPlanByAdmin,
       resetCurrentPlanToFree,

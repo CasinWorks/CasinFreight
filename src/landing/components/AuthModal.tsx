@@ -64,7 +64,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setErrorMessage(null);
     setInfoMessage(
       initialMode === 'join' && invitedEmail
-        ? 'You were invited to an existing company. Enter your name, choose a password, and join. This does not create a new company.'
+        ? 'You were invited. Enter your name, choose a password, and join. This website is for fleet staff (office / dispatch).'
         : null
     );
     setPassword('');
@@ -99,23 +99,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
     setErrorMessage(null);
+    setInfoMessage(null);
     if (mode !== 'signin' && password.length < MIN_SIGNUP_PASSWORD_LENGTH) {
       setErrorMessage(`Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`);
       return;
     }
     setIsLoading(true);
-    const res =
-      mode === 'signin'
-        ? await login(email, password, { rememberMe })
-        : mode === 'join'
-          ? await joinTeam({ name, email, password })
-          : await signup({ name, email, password, companyName });
-    setIsLoading(false);
-    if (!res.success) {
-      setErrorMessage(res.error || 'Authentication failed.');
-      return;
+    try {
+      const res =
+        mode === 'signin'
+          ? await login(email, password, { rememberMe })
+          : mode === 'join'
+            ? await joinTeam({ name, email, password })
+            : await signup({ name, email, password, companyName });
+      if (!res.success) {
+        setErrorMessage(res.error || 'Authentication failed.');
+        return;
+      }
+      if (mode === 'signin') writeSavedEmail(email, rememberMe);
+    } finally {
+      setIsLoading(false);
     }
-    if (mode === 'signin') writeSavedEmail(email, rememberMe);
   };
 
   const isLarge = textScale === 'large';
@@ -147,9 +151,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="p-6 sm:p-8 space-y-6">
           {mode === 'join' ? (
             <div className="text-left">
-              <h4 className="font-extrabold text-slate-900 text-lg">Join your company</h4>
+              <h4 className="font-extrabold text-slate-900 text-lg">Finish your invite</h4>
               <p className="text-sm text-slate-500 mt-1">
-                New hire setup. Choose a password, then tap Join company.
+                Choose a password, then tap Join. Fleet staff open the website after this; warehouse / client portal contacts use the CasinFreight Driver app on the phone.
               </p>
             </div>
           ) : (

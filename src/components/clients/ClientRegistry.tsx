@@ -5,7 +5,6 @@ import {
   Search,
   Phone,
   Mail,
-  FileText,
   Edit3,
   Trash2,
   X,
@@ -100,7 +99,7 @@ export const ClientRegistry: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Billing names, TIN, payment terms, and contacts used when you book a trip and create a freight bill.
+              Billing names, TIN, and payment terms for your shippers. Warehouse e-POD is signed on the driver phone at delivery.
             </p>
             <div className="mt-3 max-w-xl">
               <FeatureHowTo feature="clients" />
@@ -113,47 +112,39 @@ export const ClientRegistry: React.FC = () => {
               onClick={handleOpenAdd}
               className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95"
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Add Client</span>
+              <Plus className="w-3.5 h-3.5" />
+              Add client
             </button>
           )}
         </div>
 
-        <div className="mt-4 max-w-sm">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search company, TIN, contact..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-blue-500"
-            />
-          </div>
+        <div className="mt-4 relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search shipper, TIN, contact…"
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:bg-white focus:outline-none focus:border-blue-500"
+          />
         </div>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="max-w-sm text-center space-y-3">
-            <div className="w-12 h-12 mx-auto rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-blue-600" />
-            </div>
-            <h2 className="text-sm font-bold text-slate-900">No shippers yet</h2>
-            <p className="text-xs text-slate-500">
-              Add the companies you haul for. A trip cannot be booked until at least one client is on file.
-            </p>
-            {canManage && (
-              <button
-                type="button"
-                onClick={handleOpenAdd}
-                className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold"
-              >
-                <Plus className="w-4 h-4" />
-                Add first client
-              </button>
-            )}
-          </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <Building2 className="w-10 h-10 text-slate-300 mb-3" />
+          <p className="text-sm font-semibold text-slate-700">
+            {search ? 'No clients match that search.' : 'No shippers yet.'}
+          </p>
+          {!search && canManage && (
+            <button
+              type="button"
+              onClick={handleOpenAdd}
+              className="mt-4 flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add your first client
+            </button>
+          )}
         </div>
       ) : (
         <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -199,7 +190,7 @@ export const ClientRegistry: React.FC = () => {
               </div>
 
               {canManage && (
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-1.5">
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-1.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(client)}
@@ -275,11 +266,10 @@ export const ClientRegistry: React.FC = () => {
                 </label>
               </div>
               <label className="block">
-                <span className="font-semibold text-slate-700">Contact person</span>
+                <span className="font-semibold text-slate-700">Main contact person</span>
                 <input
                   value={form.contactPerson}
                   onChange={(e) => setForm((prev) => ({ ...prev, contactPerson: e.target.value }))}
-                  placeholder="Logistics lead / AP"
                   className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500"
                 />
               </label>
@@ -298,7 +288,6 @@ export const ClientRegistry: React.FC = () => {
                     type="email"
                     value={form.email}
                     onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                    placeholder="billing@client.ph"
                     className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500"
                   />
                 </label>
@@ -309,24 +298,15 @@ export const ClientRegistry: React.FC = () => {
                   value={form.billingAddress}
                   onChange={(e) => setForm((prev) => ({ ...prev, billingAddress: e.target.value }))}
                   rows={2}
-                  placeholder="Plant, warehouse, or billing office"
                   className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500"
                 />
               </label>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold"
-                >
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  {editingId ? 'Save client' : 'Add client'}
+                <button type="submit" className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold">
+                  {editingId ? 'Save changes' : 'Add client'}
                 </button>
               </div>
             </form>

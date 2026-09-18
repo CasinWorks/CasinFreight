@@ -17,6 +17,8 @@ class DriverProfile {
     required this.name,
     required this.email,
     this.role = 'Driver',
+    this.kind,
+    this.clientId,
     this.rosterId,
   });
 
@@ -25,7 +27,12 @@ class DriverProfile {
   final String name;
   final String email;
   final String role;
+  final String? kind;
+  final String? clientId;
   final String? rosterId;
+
+  bool get isClientPortal =>
+      kind?.toLowerCase() == 'client_portal' || role.toLowerCase() == 'client';
 }
 
 class DriverSession extends ChangeNotifier {
@@ -46,13 +53,14 @@ class DriverSession extends ChangeNotifier {
   DateTime? _lastPingAt;
 
   bool get signedIn => _auth.currentUser != null && profile != null;
+  bool get isClientPortal => profile?.isClientPortal ?? false;
   bool get gpsOk => gpsEnabled && !gpsMocked;
 
   Future<void> bootstrap() async {
     final user = _auth.currentUser;
     if (user == null) return;
     await _loadProfile(user);
-    await _startGpsWatch();
+    if (!isClientPortal) await _startGpsWatch();
   }
 
   Future<bool> login(String email, String password) async {
@@ -65,7 +73,7 @@ class DriverSession extends ChangeNotifier {
         password: password,
       );
       await _loadProfile(cred.user!);
-      await _startGpsWatch();
+      if (!isClientPortal) await _startGpsWatch();
       return profile != null;
     } on FirebaseAuthException catch (e) {
       error = e.message ?? 'Sign-in failed.';
@@ -91,7 +99,8 @@ class DriverSession extends ChangeNotifier {
   Future<void> _loadProfile(User user) async {
     final userSnap = await _db.collection('users').doc(user.uid).get();
     if (!userSnap.exists) {
-      error = 'This login is not on a CasinFreight company. Ask the owner to invite you under Company & Team as Driver.';
+      error =
+          'This login is not on a CasinFreight company. Ask the owner to invite you under Company & Team as Driver.';
       profile = null;
       notifyListeners();
       return;
@@ -99,16 +108,27 @@ class DriverSession extends ChangeNotifier {
     final data = userSnap.data()!;
     final companyId = (data['companyId'] ?? '') as String;
     final email = (user.email ?? data['email'] ?? '').toString().toLowerCase();
+    final role = (data['role'] ?? 'Driver').toString();
+    final kind = data['kind']?.toString();
+    final isClient =
+        kind?.toLowerCase() == 'client_portal' ||
+        role.toLowerCase() == 'client';
 
     String? rosterId;
-    final drivers = await _db.collection('companies').doc(companyId).collection('drivers').get();
-    for (final doc in drivers.docs) {
-      final row = doc.data();
-      final rowEmail = (row['email'] ?? '').toString().toLowerCase();
-      final rowUid = (row['userId'] ?? '').toString();
-      if (rowEmail == email || rowUid == user.uid) {
-        rosterId = doc.id;
-        break;
+    if (!isClient) {
+      final drivers = await _db
+          .collection('companies')
+          .doc(companyId)
+          .collection('drivers')
+          .get();
+      for (final doc in drivers.docs) {
+        final row = doc.data();
+        final rowEmail = (row['email'] ?? '').toString().toLowerCase();
+        final rowUid = (row['userId'] ?? '').toString();
+        if (rowEmail == email || rowUid == user.uid) {
+          rosterId = doc.id;
+          break;
+        }
       }
     }
 
@@ -117,9 +137,19 @@ class DriverSession extends ChangeNotifier {
       companyId: companyId,
       name: (data['name'] ?? user.email ?? 'Driver').toString(),
       email: email,
-      role: (data['role'] ?? 'Driver').toString(),
+      role: role,
+      kind: kind,
+      clientId: data['clientId']?.toString(),
       rosterId: rosterId,
     );
+    if (profile!.isClientPortal) {
+      error =
+          'Warehouse portal logins are discontinued. e-POD is signed on the driver’s phone at delivery. Ask the fleet office for a Driver invite if you drive for them.';
+      profile = null;
+      await _auth.signOut();
+      notifyListeners();
+      return;
+    }
     notifyListeners();
   }
 
@@ -131,7 +161,14 @@ class DriverSession extends ChangeNotifier {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> fieldEventsStream(String tripId) {
-    return _companyDoc.collection('fieldEvents').where('tripId', isEqualTo: tripId).snapshots();
+    final query = _companyDoc
+        .collection('fieldEvents')
+        .where('tripId', isEqualTo: tripId);
+    final clientId = profile?.clientId;
+    if (isClientPortal && clientId != null && clientId.isNotEmpty) {
+      return query.where('clientId', isEqualTo: clientId).snapshots();
+    }
+    return query.snapshots();
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> tripsStream() {
@@ -141,6 +178,19 @@ class DriverSession extends ChangeNotifier {
       return query.where('driverId', isEqualTo: '__none__').snapshots();
     }
     return query.where('driverId', isEqualTo: rosterId).snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> clientTripsStream() {
+    final clientId = profile?.clientId;
+    final query = _companyDoc.collection('trips');
+    if (clientId == null || clientId.isEmpty) {
+      return query.where('clientId', isEqualTo: '__none__').snapshots();
+    }
+    return query.where('clientId', isEqualTo: clientId).snapshots();
+  }
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>> liveTrackingStream(String tripId) {
+    return _companyDoc.collection('liveTracking').doc(tripId).snapshots();
   }
 
   Future<void> _startGpsWatch() async {
@@ -155,7 +205,8 @@ class DriverSession extends ChangeNotifier {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    gpsEnabled = service &&
+    gpsEnabled =
+        service &&
         permission != LocationPermission.denied &&
         permission != LocationPermission.deniedForever;
     if (!gpsEnabled) {
@@ -166,7 +217,9 @@ class DriverSession extends ChangeNotifier {
     }
     try {
       lastFix = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       gpsMocked = lastFix?.isMocked ?? false;
     } catch (_) {
@@ -183,18 +236,19 @@ class DriverSession extends ChangeNotifier {
     trackingTripId = tripId;
     await refreshGps();
     await _positionSub?.cancel();
-    _positionSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 40,
-      ),
-    ).listen((pos) {
-      lastFix = pos;
-      gpsMocked = pos.isMocked;
-      gpsEnabled = true;
-      notifyListeners();
-      _pushPing();
-    });
+    _positionSub =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 40,
+          ),
+        ).listen((pos) {
+          lastFix = pos;
+          gpsMocked = pos.isMocked;
+          gpsEnabled = true;
+          notifyListeners();
+          _pushPing();
+        });
     notifyListeners();
   }
 
@@ -243,7 +297,8 @@ class DriverSession extends ChangeNotifier {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
       'gpsEnabled': gpsEnabled,
       'isMocked': gpsMocked,
-      if (!gpsEnabled) 'gpsDisabledAt': DateTime.now().toUtc().toIso8601String(),
+      if (!gpsEnabled)
+        'gpsDisabledAt': DateTime.now().toUtc().toIso8601String(),
     }, SetOptions(merge: true));
     if (!gpsEnabled || gpsMocked) {
       if (_lastGpsOk) {
@@ -259,13 +314,26 @@ class DriverSession extends ChangeNotifier {
     _lastGpsOk = gpsEnabled && !gpsMocked;
   }
 
+  Future<void> _assertClientTrip(String tripId) async {
+    final clientId = profile?.clientId;
+    if (clientId == null || clientId.isEmpty) {
+      throw StateError('This login is not linked to a client account.');
+    }
+    final snap = await _companyDoc.collection('trips').doc(tripId).get();
+    final rowClient = (snap.data()?['clientId'] ?? '').toString();
+    if (rowClient != clientId) {
+      throw StateError('This shipment is not for your company.');
+    }
+  }
+
   Future<void> _assertWorkspaceActive() async {
     final snap = await _companyDoc.get();
     final sub = snap.data()?['subscription'];
     if (sub is! Map) return;
     final planId = (sub['plan_id'] ?? '').toString();
     if (planId != 'plan_free') return;
-    final endRaw = (sub['current_period_end'] ?? sub['created_at'] ?? '').toString();
+    final endRaw = (sub['current_period_end'] ?? sub['created_at'] ?? '')
+        .toString();
     final end = DateTime.tryParse(endRaw);
     if (end != null && end.isBefore(DateTime.now())) {
       throw Exception(
@@ -283,13 +351,24 @@ class DriverSession extends ChangeNotifier {
   }) async {
     final p = profile;
     if (p == null) return;
-    await _assertAssignedTrip(tripId);
+    if (isClientPortal) {
+      await _assertClientTrip(tripId);
+    } else {
+      await _assertAssignedTrip(tripId);
+    }
     final pos = lastFix;
     final id = 'fe-${DateTime.now().millisecondsSinceEpoch}';
+    String? clientId = p.clientId;
+    if (clientId == null || clientId.isEmpty) {
+      final tripSnap = await _companyDoc.collection('trips').doc(tripId).get();
+      final fromTrip = (tripSnap.data()?['clientId'] ?? '').toString();
+      if (fromTrip.isNotEmpty) clientId = fromTrip;
+    }
     await _companyDoc.collection('fieldEvents').doc(id).set({
       'id': id,
       'companyId': p.companyId,
       'tripId': tripId,
+      if (clientId != null && clientId.isNotEmpty) 'clientId': clientId,
       'kind': kind,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'actorUid': p.id,
@@ -358,7 +437,10 @@ class DriverSession extends ChangeNotifier {
 
   Future<Uint8List> _shrinkSignaturePng(Uint8List pngBytes) async {
     const maxWidth = 900;
-    final codec = await ui.instantiateImageCodec(pngBytes, targetWidth: maxWidth);
+    final codec = await ui.instantiateImageCodec(
+      pngBytes,
+      targetWidth: maxWidth,
+    );
     final frame = await codec.getNextFrame();
     final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
     frame.image.dispose();
@@ -375,13 +457,33 @@ class DriverSession extends ChangeNotifier {
     Map<String, dynamic>? tripPatch,
     String? note,
   }) async {
+    if (isClientPortal) {
+      await saveClientPod(
+        tripId: tripId,
+        pngBytes: pngBytes,
+        tripPatch: tripPatch,
+        note: note,
+      );
+      return;
+    }
     await _assertAssignedTrip(tripId);
-    final current = (await _companyDoc.collection('trips').doc(tripId).get()).data() ?? {};
+    final current =
+        (await _companyDoc.collection('trips').doc(tripId).get()).data() ?? {};
+    final status = (current['status'] ?? tripStatus).toString();
     final dispatcherSigned = _hasInk(current['dispatcherSignoff']);
     final driverSigned = _hasInk(current['driverSignoff']);
 
-    if (kind == 'pod_signature' && !driverSigned) {
-      throw StateError('Sign dispatch first. The driver must accept the cargo before warehouse POD.');
+    if (kind == 'pod_signature') {
+      if (status != 'Inbound') {
+        throw StateError(
+          'Mark I have arrived (Inbound) before the warehouse signs e-POD on this phone.',
+        );
+      }
+      if (!driverSigned) {
+        throw StateError(
+          'Sign dispatch first. The driver must accept the cargo before warehouse POD.',
+        );
+      }
     }
 
     final compact = await _shrinkSignaturePng(pngBytes);
@@ -412,21 +514,120 @@ class DriverSession extends ChangeNotifier {
           'signatureDataUrl': dataUrl,
           'photoUrls': tripPatch?['photoUrls'] ?? [],
           'conditionStatus': tripPatch?['conditionStatus'] ?? 'Good Condition',
+          'collectedByDriver': true,
         },
     };
     if (kind == 'dispatch_signature' && dispatcherSigned) {
       patch['status'] = 'In Transit';
     }
     if (kind == 'pod_signature') {
+      final timeline = <Map<String, dynamic>>[];
+      final rawTimeline = current['timeline'];
+      if (rawTimeline is List) {
+        for (final item in rawTimeline) {
+          if (item is Map) {
+            timeline.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+      final receiverName = (tripPatch?['receiverName'] ?? 'Consignee').toString();
+      final receiverRole =
+          (tripPatch?['receiverRole'] ?? 'Receiving officer').toString();
+      timeline.add({
+        'id': 'tl-$signedAt',
+        'tripId': tripId,
+        'status': 'Delivered',
+        'timestamp': signedAt,
+        'note':
+            'e-POD signed on driver phone by $receiverName ($receiverRole).',
+        'updatedBy': '${profile!.name} (Driver phone)',
+      });
       patch['status'] = 'Delivered';
       patch['actualDelivery'] = signedAt;
+      patch['timeline'] = timeline;
+      // tripPatch may carry receiver fields that are not trip columns
+      patch.remove('receiverName');
+      patch.remove('receiverRole');
+      patch.remove('conditionStatus');
+      patch.remove('photoUrls');
     }
     await _assertWorkspaceActive();
-    await _companyDoc.collection('trips').doc(tripId).set(patch, SetOptions(merge: true));
+    await _companyDoc
+        .collection('trips')
+        .doc(tripId)
+        .set(patch, SetOptions(merge: true));
     await addFieldEvent(
       tripId: tripId,
       kind: kind == 'pod_signature' ? 'delivery_geo' : 'pickup_geo',
-      note: kind == 'pod_signature' ? 'GPS stamp at consignee' : 'GPS stamp at origin',
+      note: kind == 'pod_signature'
+          ? 'GPS stamp at consignee (warehouse signed on driver phone)'
+          : 'GPS stamp at origin',
+    );
+  }
+
+  Future<void> saveClientPod({
+    required String tripId,
+    required Uint8List pngBytes,
+    Map<String, dynamic>? tripPatch,
+    String? note,
+  }) async {
+    await _assertClientTrip(tripId);
+    await refreshGps();
+    final snap = await _companyDoc.collection('trips').doc(tripId).get();
+    final current = snap.data() ?? {};
+    final status = (current['status'] ?? '').toString();
+    if (status != 'Inbound') {
+      throw StateError(
+        'Waiting for the driver to tap “I have arrived” (Inbound) before you can sign e-POD. Current status: $status',
+      );
+    }
+    final compact = await _shrinkSignaturePng(pngBytes);
+    final dataUrl = 'data:image/png;base64,${base64Encode(compact)}';
+    final signedAt = DateTime.now().toUtc().toIso8601String();
+    await addFieldEvent(
+      tripId: tripId,
+      kind: 'pod_signature',
+      signatureDataUrl: dataUrl,
+      note: note ?? 'POD signed by client portal',
+    );
+    final timeline = <Map<String, dynamic>>[];
+    final rawTimeline = current['timeline'];
+    if (rawTimeline is List) {
+      for (final item in rawTimeline) {
+        if (item is Map) {
+          timeline.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+    timeline.add({
+      'id': 'tl-$signedAt',
+      'tripId': tripId,
+      'status': 'Delivered',
+      'timestamp': signedAt,
+      'note':
+          'e-POD signed by warehouse portal (${tripPatch?['receiverName'] ?? profile!.name}).',
+      'updatedBy': '${profile!.name} (Client portal)',
+    });
+    await _assertWorkspaceActive();
+    await _companyDoc.collection('trips').doc(tripId).set({
+      'pod': {
+        'id': 'pod-$tripId',
+        'tripId': tripId,
+        'receiverName': tripPatch?['receiverName'] ?? profile!.name,
+        'receiverRole': tripPatch?['receiverRole'] ?? 'Receiving officer',
+        'signedAt': signedAt,
+        'signatureDataUrl': dataUrl,
+        'photoUrls': tripPatch?['photoUrls'] ?? [],
+        'conditionStatus': tripPatch?['conditionStatus'] ?? 'Good Condition',
+      },
+      'status': 'Delivered',
+      'actualDelivery': signedAt,
+      'timeline': timeline,
+    }, SetOptions(merge: true));
+    await addFieldEvent(
+      tripId: tripId,
+      kind: 'delivery_geo',
+      note: 'GPS stamp at consignee (client portal)',
     );
   }
 
@@ -443,5 +644,102 @@ class DriverSession extends ChangeNotifier {
       throw StateError('Turn on GPS before stamping this location.');
     }
     await addFieldEvent(tripId: tripId, kind: kind, note: note);
+    await _appendTripTimeline(
+      tripId: tripId,
+      status: null,
+      note: note,
+      location: lastFix == null
+          ? null
+          : '${lastFix!.latitude.toStringAsFixed(5)}, ${lastFix!.longitude.toStringAsFixed(5)}',
+    );
+  }
+
+  Future<void> _appendTripTimeline({
+    required String tripId,
+    required String? status,
+    required String note,
+    String? location,
+  }) async {
+    final snap = await _companyDoc.collection('trips').doc(tripId).get();
+    final current = snap.data() ?? {};
+    final when = DateTime.now().toUtc().toIso8601String();
+    final timeline = <Map<String, dynamic>>[];
+    final rawTimeline = current['timeline'];
+    if (rawTimeline is List) {
+      for (final item in rawTimeline) {
+        if (item is Map) {
+          timeline.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+    timeline.add({
+      'id': 'tl-$when',
+      'tripId': tripId,
+      'status': status ?? (current['status'] ?? 'Pending').toString(),
+      'timestamp': when,
+      'note': note,
+      'updatedBy': '${profile!.name} (Driver)',
+      if (location != null && location.isNotEmpty) 'location': location,
+    });
+    await _companyDoc.collection('trips').doc(tripId).set({
+      'timeline': timeline,
+    }, SetOptions(merge: true));
+  }
+
+  /// Driver arrives at warehouse / consignee — unlocks warehouse e-POD on this phone.
+  Future<void> markArrivedAtConsignee(String tripId) async {
+    await _assertAssignedTrip(tripId);
+    await refreshGps();
+    if (!gpsOk) {
+      throw StateError('Turn on GPS before tapping I have arrived.');
+    }
+    final snap = await _companyDoc.collection('trips').doc(tripId).get();
+    final current = snap.data() ?? {};
+    final status = (current['status'] ?? '').toString();
+    if (status == 'Inbound') {
+      await addFieldEvent(
+        tripId: tripId,
+        kind: 'delivery_geo',
+        note: 'Arrived at consignee (Inbound confirmed again)',
+      );
+      return;
+    }
+    if (status != 'In Transit') {
+      throw StateError(
+        'Trip must be In Transit before you can mark arrival. Current status: $status',
+      );
+    }
+    final when = DateTime.now().toUtc().toIso8601String();
+    final timeline = <Map<String, dynamic>>[];
+    final rawTimeline = current['timeline'];
+    if (rawTimeline is List) {
+      for (final item in rawTimeline) {
+        if (item is Map) {
+          timeline.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+    timeline.add({
+      'id': 'tl-$when',
+      'tripId': tripId,
+      'status': 'Inbound',
+      'timestamp': when,
+      'note':
+          'Driver tapped I have arrived at the warehouse / consignee gate.',
+      'updatedBy': '${profile!.name} (Driver)',
+      if (lastFix != null)
+        'location':
+            '${lastFix!.latitude.toStringAsFixed(5)}, ${lastFix!.longitude.toStringAsFixed(5)}',
+    });
+    await _assertWorkspaceActive();
+    await _companyDoc.collection('trips').doc(tripId).set({
+      'status': 'Inbound',
+      'timeline': timeline,
+    }, SetOptions(merge: true));
+    await addFieldEvent(
+      tripId: tripId,
+      kind: 'delivery_geo',
+      note: 'Driver arrived at consignee — status Inbound',
+    );
   }
 }

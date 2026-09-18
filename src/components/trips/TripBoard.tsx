@@ -57,6 +57,7 @@ const COLUMNS: { id: TripStatus; label: string; countColor: string; headerBorder
   { id: 'Pending', label: 'Pending', countColor: 'bg-slate-100 text-slate-700 border-slate-200', headerBorder: 'border-l-slate-400', desc: 'Booked & waiting for loading dock' },
   { id: 'Loaded', label: 'Loaded', countColor: 'bg-blue-50 text-blue-700 border-blue-200', headerBorder: 'border-l-blue-500', desc: 'Container mounted / seal confirmed' },
   { id: 'In Transit', label: 'In Transit', countColor: 'bg-amber-50 text-amber-700 border-amber-200', headerBorder: 'border-l-amber-500', desc: 'Linehaul moving along expressway' },
+  { id: 'Inbound', label: 'Inbound', countColor: 'bg-cyan-50 text-cyan-800 border-cyan-200', headerBorder: 'border-l-cyan-500', desc: 'Driver arrived — warehouse can sign e-POD' },
   { id: 'Delivered', label: 'Delivered', countColor: 'bg-emerald-50 text-emerald-700 border-emerald-200', headerBorder: 'border-l-emerald-500', desc: 'Consignee received / POD verified' },
   { id: 'Invoiced', label: 'Invoiced', countColor: 'bg-purple-50 text-purple-700 border-purple-200', headerBorder: 'border-l-purple-500', desc: 'Itemized billing transmitted' },
 ];
@@ -272,7 +273,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
 
     if (trip.status === 'On Hold') {
       const from = resumeTarget(trip);
-      const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Delivered', 'Invoiced'];
+      const stages: TripStatus[] = ['Pending', 'Loaded', 'In Transit', 'Inbound', 'Delivered', 'Invoiced'];
       if (stages.indexOf(targetStatus) <= stages.indexOf(from)) {
         updateTripStatus(trip.id, targetStatus, 'Resumed from hold.');
         return;
@@ -305,6 +306,10 @@ export const TripBoard: React.FC<TripBoardProps> = ({
         setPrerequisiteTargetStatus('In Transit');
         break;
       case 'In Transit':
+        setPrerequisiteTrip(trip);
+        setPrerequisiteTargetStatus('Inbound');
+        break;
+      case 'Inbound':
         setPrerequisiteTrip(trip);
         setPrerequisiteTargetStatus('Delivered');
         break;
@@ -394,6 +399,18 @@ export const TripBoard: React.FC<TripBoardProps> = ({
       setPrerequisiteTrip(null);
       setPrerequisiteTargetStatus(null);
     }
+  };
+
+  const handleSavePrerequisiteWithoutAdvance = (updates: Partial<Trip>, _note?: string) => {
+    if (!prerequisiteTrip) return;
+    updateTrip(prerequisiteTrip.id, {
+      ...updates,
+      deliveryNoteNumber: updates.deliveryNoteNumber || prerequisiteTrip.deliveryNoteNumber,
+      securitySealNumber: updates.securitySealNumber || prerequisiteTrip.securitySealNumber,
+      gatePassNumber: updates.gatePassNumber || prerequisiteTrip.gatePassNumber,
+    });
+    setPrerequisiteTrip(null);
+    setPrerequisiteTargetStatus(null);
   };
 
   const selectedClientObj = clients.find(c => c.id === selectedClientId);
@@ -992,6 +1009,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                 <option value="Pending">Pending</option>
                 <option value="Loaded">Loaded</option>
                 <option value="In Transit">In Transit</option>
+                <option value="Inbound">Inbound</option>
                 <option value="Delivered">Delivered</option>
                 <option value="Invoiced">Invoiced</option>
                 <option value="On Hold">On Hold</option>
@@ -1292,6 +1310,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                               <option value="Pending">Pending</option>
                               <option value="Loaded">Loaded</option>
                               <option value="In Transit">In Transit</option>
+                              <option value="Inbound">Inbound</option>
                               <option value="Delivered">Delivered</option>
                               <option value="Invoiced">Invoiced</option>
                               <option value="On Hold">On Hold</option>
@@ -1315,7 +1334,8 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                                 const nextTarget: TripStatus =
                                   trip.status === 'Pending' ? 'Loaded' :
                                   trip.status === 'Loaded' ? 'In Transit' :
-                                  trip.status === 'In Transit' ? 'Delivered' :
+                                  trip.status === 'In Transit' ? 'Inbound' :
+                                  trip.status === 'Inbound' ? 'Delivered' :
                                   trip.status === 'Delivered' ? 'Invoiced' :
                                   trip.status === 'On Hold' ? resumeTarget(trip) :
                                   'Invoiced';
@@ -1341,6 +1361,8 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                                         : trip.status === 'Loaded'
                                         ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                                         : trip.status === 'In Transit'
+                                        ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                                        : trip.status === 'Inbound'
                                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                         : trip.status === 'Delivered'
                                         ? 'bg-purple-600 hover:bg-purple-700 text-white'
@@ -1356,7 +1378,8 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                                     <span>
                                       {trip.status === 'Pending' && 'Load'}
                                       {trip.status === 'Loaded' && 'Dispatch'}
-                                      {trip.status === 'In Transit' && 'Deliver'}
+                                      {trip.status === 'In Transit' && 'Arrived'}
+                                      {trip.status === 'Inbound' && 'POD'}
                                       {trip.status === 'Delivered' && 'Invoice'}
                                       {trip.status === 'Invoiced' && 'View'}
                                       {trip.status === 'On Hold' && 'Resume'}
@@ -1393,6 +1416,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
           driver={drivers.find(d => d.id === prerequisiteTrip.driverId)}
           client={clients.find(c => c.id === prerequisiteTrip.clientId)}
           onConfirmAdvance={handleConfirmPrerequisiteAdvance}
+          onSaveWithoutAdvance={handleSavePrerequisiteWithoutAdvance}
           onOpenDeliveryNote={() => {
             const t = prerequisiteTrip;
             setDeliveryNoteTrip(t);
