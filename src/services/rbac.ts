@@ -182,6 +182,7 @@ export const DEFAULT_RBAC_ROLES: RbacRole[] = [
     isSystem: false,
     permissions: [
       'trips.view',
+      'trips.status_in_transit',
       'trips.status_delivered',
       'fuel.log',
     ],

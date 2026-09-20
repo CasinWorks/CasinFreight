@@ -225,7 +225,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
     } else if (targetStatus === 'Delivered') {
       const isDriverLogin = String(currentUser.role || '').toLowerCase() === 'driver';
       if (isDriverLogin) {
-        window.alert('On the website, drivers cannot stamp warehouse e-POD. Use the Driver phone app after Inbound (hand the phone to the warehouse officer), or have office staff stamp it here.');
+        window.alert('Drivers cannot stamp warehouse e-POD. Sign your cargo receipt in Driver mode, then after Inbound hand the Driver phone app to the warehouse officer — or have office stamp e-POD on the web.');
         return;
       }
       if (trip.status !== 'Inbound' && trip.status !== 'Delivered') {

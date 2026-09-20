@@ -106,7 +106,7 @@ import { nextSlotId, TRIP_SLOT_PREFIX, TRUCK_SLOT_PREFIX } from '../lib/planSlot
 import { uploadCompanyFile } from '../lib/uploads';
 import { refreshPlatformAdminClaim } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
-import { isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
+import { hasSignedInk, isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
 import { timelineRetractionFromRequest } from '../lib/tripAudit';
 import { isHelperCrew, isDriverSeatRole } from '../lib/crew';
 
@@ -219,6 +219,18 @@ interface FreightContextType {
   addAccessorialToTrip: (tripId: string, accessorial: Omit<TripAccessorial, 'id' | 'tripId'>) => void;
   removeAccessorialFromTrip: (tripId: string, accessorialId: string) => void;
   submitPOD: (tripId: string, podData: Omit<POD, 'id' | 'tripId' | 'signedAt'>) => void;
+  /** Field driver browser/app actions on assigned trips only. */
+  isFieldDriverSession: boolean;
+  assignedDriverRosterId: string | null;
+  saveAssignedDriverSignoff: (tripId: string, signatureDataUrl: string) => Promise<void>;
+  markAssignedDriverArrived: (tripId: string) => Promise<void>;
+  addAssignedDriverFieldEvent: (params: {
+    tripId: string;
+    kind: FieldEvent['kind'];
+    note?: string;
+    photoUrl?: string;
+    signatureDataUrl?: string;
+  }) => Promise<FieldEvent>;
   requestTripStatusRetraction: (tripId: string, toStatus: TripStatus, reasonCategory: TripRetractionReasonCategory, detailedReason: string) => void;
   applyOwnTripStatusRetraction: (tripId: string, toStatus: TripStatus, reasonCategory: TripRetractionReasonCategory, detailedReason: string) => void;
   approveTripStatusRetraction: (tripId: string, reviewNote: string) => void;
@@ -825,7 +837,6 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }),
           listenCollectionWhere<LiveTracking>(company.id, 'liveTracking', 'driverId', rosterId, setLiveTracking)
         );
-        setFieldEvents([]);
       }
     } else {
       unsubs.push(
@@ -844,6 +855,30 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       workspaceUnsubsRef.current = [];
     };
   }, [isAuthenticated, company.id, currentRole, currentUserId, users, drivers]);
+
+  // Drivers may only read fieldEvents for their assigned trips (rules), so listen per tripId.
+  const driverTripIdsKey = isFieldDriverRole(currentRole || '')
+    ? trips.map((t) => t.id).filter(Boolean).sort().join('|')
+    : '';
+
+  useEffect(() => {
+    if (!isAuthenticated || !company.id || !driverTripIdsKey) {
+      if (isFieldDriverRole(currentRole || '')) setFieldEvents([]);
+      return;
+    }
+    const tripIds = driverTripIdsKey.split('|');
+    const unsubs = tripIds.map((tripId) =>
+      listenCollectionWhere<FieldEvent>(company.id, 'fieldEvents', 'tripId', tripId, (remote) => {
+        setFieldEvents((prev) => {
+          const others = prev.filter((e) => e.tripId !== tripId);
+          return [...others, ...remote];
+        });
+      })
+    );
+    return () => {
+      unsubs.forEach((unsub) => unsub());
+    };
+  }, [isAuthenticated, company.id, currentRole, driverTripIdsKey]);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -2847,7 +2882,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const submitPOD = (tripId: string, podData: Omit<POD, 'id' | 'tripId' | 'signedAt'>) => {
     if (isFieldDriverRole(currentUser.role)) {
       window.alert(
-        'On the website, drivers cannot stamp warehouse e-POD. Use the Driver phone app after Inbound (hand the phone to the warehouse officer), or have office staff stamp it here.'
+        'Drivers cannot stamp warehouse e-POD in the browser. Use the CasinFreight Driver phone app after Inbound (hand the phone to the warehouse officer), or have office staff stamp it here.'
       );
       return;
     }
@@ -2884,6 +2919,146 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return trip;
     }));
+  };
+
+  const assignedDriverRosterId = isFieldDriverRole(currentUser.role)
+    ? resolveDriverRosterId(
+        drivers,
+        currentUserId,
+        users.find((u) => u.id === currentUserId)?.email || currentUser.email
+      )
+    : null;
+  const isFieldDriverSession = isFieldDriverRole(currentUser.role);
+
+  const assertAssignedDriverTrip = (tripId: string): Trip => {
+    if (!isFieldDriverSession) {
+      throw new Error('Only the assigned driver can use field actions.');
+    }
+    if (!assignedDriverRosterId) {
+      throw new Error('Your login is not linked to a Driver Roster row. Ask dispatch to save your email on your driver record.');
+    }
+    const trip = trips.find((t) => t.id === tripId);
+    if (!trip || trip.driverId !== assignedDriverRosterId) {
+      throw new Error('This trip is not assigned to you.');
+    }
+    return trip;
+  };
+
+  const addAssignedDriverFieldEvent = async (params: {
+    tripId: string;
+    kind: FieldEvent['kind'];
+    note?: string;
+    photoUrl?: string;
+    signatureDataUrl?: string;
+  }): Promise<FieldEvent> => {
+    const trip = assertAssignedDriverTrip(params.tripId);
+    if (!company.id) throw new Error('Company workspace is missing.');
+    const event: FieldEvent = {
+      id: `fe-${Date.now()}`,
+      companyId: company.id,
+      tripId: params.tripId,
+      kind: params.kind,
+      createdAt: new Date().toISOString(),
+      actorUid: currentUserId,
+      actorName: currentUser.name || currentUser.email,
+      photoUrl: params.photoUrl,
+      signatureDataUrl: params.signatureDataUrl,
+      note: params.note,
+      gpsEnabled: true,
+      isMocked: false,
+    };
+    await upsertCollection(company.id, 'fieldEvents', [
+      trip.clientId ? ({ ...event, clientId: trip.clientId } as FieldEvent & { clientId: string }) : event,
+    ]);
+    setFieldEvents((prev) => {
+      if (prev.some((row) => row.id === event.id)) return prev;
+      return [...prev, event];
+    });
+    return event;
+  };
+
+  const saveAssignedDriverSignoff = async (tripId: string, signatureDataUrl: string) => {
+    const trip = assertAssignedDriverTrip(tripId);
+    if (!signatureDataUrl.startsWith('data:image') || signatureDataUrl.length < 120) {
+      throw new Error('Sign on the pad first.');
+    }
+    const sealed =
+      Boolean(trip.securitySealNumber?.trim()) ||
+      trip.status === 'Loaded' ||
+      trip.status === 'In Transit' ||
+      trip.status === 'Inbound' ||
+      fieldEvents.some((e) => e.tripId === tripId && e.kind === 'seal_photo');
+    if (!sealed) {
+      throw new Error('Take a seal photo first (or wait until dispatch posts the seal number).');
+    }
+    const signedAt = new Date().toISOString();
+    const driverSignoff = {
+      name: currentUser.name || currentUser.email || 'Driver',
+      role: 'Driver',
+      signedAt,
+      signatureDataUrl,
+    };
+    const dispatcherSigned = hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl);
+    const shouldGoInTransit = dispatcherSigned && (trip.status === 'Loaded' || trip.status === 'Pending');
+
+    await addAssignedDriverFieldEvent({
+      tripId,
+      kind: 'dispatch_signature',
+      signatureDataUrl,
+      note: 'Driver cargo receipt signed in browser',
+    });
+
+    if (shouldGoInTransit) {
+      updateTripStatus(
+        tripId,
+        'In Transit',
+        'Driver signed cargo receipt. Dispatcher yard release already on file — trip is In Transit.',
+        undefined,
+        { driverSignoff }
+      );
+    } else {
+      tripsDirtyRef.current = true;
+      setTrips((prev) =>
+        prev.map((row) => {
+          if (row.id !== tripId) return row;
+          return {
+            ...row,
+            driverSignoff,
+            timeline: [
+              ...row.timeline,
+              {
+                id: `tl-${Date.now()}`,
+                tripId,
+                status: row.status,
+                timestamp: signedAt,
+                note: 'Driver signed received sealed cargo (browser).',
+                updatedBy: `${currentUser.name} (Driver)`,
+              },
+            ],
+          };
+        })
+      );
+    }
+  };
+
+  const markAssignedDriverArrived = async (tripId: string) => {
+    const trip = assertAssignedDriverTrip(tripId);
+    if (trip.status !== 'In Transit' && trip.status !== 'Inbound') {
+      throw new Error('Trip must be In Transit before you can mark arrival.');
+    }
+    if (!hasSignedInk(trip.driverSignoff?.signatureDataUrl) || !hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl)) {
+      throw new Error('Dispatcher and driver signatures must both be on file before arrival.');
+    }
+    await addAssignedDriverFieldEvent({
+      tripId,
+      kind: 'delivery_geo',
+      note: 'I have arrived (Inbound) — browser',
+    });
+    updateTripStatus(
+      tripId,
+      'Inbound',
+      'Driver marked I have arrived at the warehouse (Inbound). Warehouse e-POD can be signed on the Driver phone app or by office on the web.'
+    );
   };
 
   const createInvoiceForTrip = (tripId: string): Invoice => {
@@ -3749,6 +3924,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         requiredPerm = 'trips.status_in_transit';
         label = 'dispatch shipments and issue official Delivery Notes';
         break;
+      case 'Inbound':
+        requiredPerm = 'trips.status_in_transit';
+        label = 'mark arrival at the warehouse (Inbound)';
+        break;
       case 'Delivered':
         requiredPerm = 'trips.status_delivered';
         label = 'receive shipments and capture digital e-POD signature';
@@ -3768,6 +3947,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       default:
         requiredPerm = 'trips.edit';
         label = 'manipulate shipment status';
+    }
+
+    // Field drivers may mark Inbound on their assigned trips (browser or phone).
+    if (targetStatus === 'Inbound' && isFieldDriverRole(role)) {
+      return { allowed: true, allowedRoles: getAllowedRolesForPermission(requiredPerm, roles) };
     }
 
     const allowedRoles = getAllowedRolesForPermission(requiredPerm, roles);
@@ -4252,6 +4436,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       addAccessorialToTrip,
       removeAccessorialFromTrip,
       submitPOD,
+      isFieldDriverSession,
+      assignedDriverRosterId,
+      saveAssignedDriverSignoff,
+      markAssignedDriverArrived,
+      addAssignedDriverFieldEvent,
       invoices,
       createInvoiceForTrip,
       updateInvoice,

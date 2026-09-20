@@ -34,6 +34,7 @@ import { PlatformNoticeGate, MaintenanceLockScreen } from './components/notices/
 import { TutorialProvider, useTutorial } from './components/tutorial';
 import { HowToPage } from './components/help/HowToPage';
 import { WorkspaceBackupModal } from './components/onboarding/WorkspaceBackupModal';
+import { DriverFieldApp } from './components/driver/DriverFieldApp';
 import { helpToolDestination } from './content/helpContent';
 import { Analytics } from '@vercel/analytics/react';
 
@@ -377,7 +378,7 @@ function TutorialUpgradeGate() {
 }
 
 function AppContent() {
-  const { isAuthenticated, isAuthLoading, isPlatformAdmin, activeDowntime } = useFreight();
+  const { isAuthenticated, isAuthLoading, isPlatformAdmin, activeDowntime, isFieldDriverSession } = useFreight();
 
   if (isAuthLoading) {
     return <BootSplash />;
@@ -397,6 +398,15 @@ function AppContent() {
           </div>
         )}
         <LandingPage />
+      </>
+    );
+  }
+
+  if (isFieldDriverSession) {
+    return (
+      <>
+        <PlatformNoticeGate />
+        <DriverFieldApp />
       </>
     );
   }
