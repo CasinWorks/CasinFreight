@@ -40,6 +40,25 @@
   }
 }
 
+/* Driver field app — phone-first: no rubber-band scroll stealing taps, taller signature pads. */
+html.driver-mobile-shell,
+html.driver-mobile-shell body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html.driver-mobile-shell body {
+  /* Prefer dynamic viewport height on mobile browsers with toolbars. */
+  min-height: 100dvh;
+}
+
+@media (max-width: 767px) {
+  html.driver-mobile-shell [data-signature-pad-frame] {
+    min-height: 11rem;
+  }
+}
+
 /* Custom Scrollbars for Sleek Interface feel */
 ::-webkit-scrollbar {
   width: 6px;

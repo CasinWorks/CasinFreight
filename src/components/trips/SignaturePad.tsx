@@ -224,7 +224,8 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
       {hint && <p className="text-xs sm:text-[11px] text-slate-500 mb-1.5">{hint}</p>}
       <div
         ref={wrapRef}
-        className="border-2 border-slate-300 rounded-xl bg-white overflow-hidden shadow-inner relative h-44 sm:h-28"
+        data-signature-pad-frame
+        className="border-2 border-slate-300 rounded-xl bg-white overflow-hidden shadow-inner relative h-52 sm:h-28"
       >
         {/* Fallback preview while canvas paints / if canvas redraw lags */}
         {(committedUrl || existingUrl) && (

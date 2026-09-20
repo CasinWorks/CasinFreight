@@ -1,8 +1,10 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Camera,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   FileText,
   LogOut,
   MapPin,
@@ -29,7 +31,7 @@ function StatusPill({ status }: { status: string }) {
             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
             : 'bg-slate-100 text-slate-700 border-slate-200';
   return (
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${color}`}>
+    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${color}`}>
       {status}
     </span>
   );
@@ -37,8 +39,8 @@ function StatusPill({ status }: { status: string }) {
 
 function GateRow({ done, label }: { done: boolean; label: string }) {
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-700">
-      <CheckCircle2 className={`w-4 h-4 shrink-0 ${done ? 'text-emerald-600' : 'text-slate-300'}`} />
+    <div className="flex items-center gap-2.5 text-sm text-slate-700 py-0.5">
+      <CheckCircle2 className={`w-5 h-5 shrink-0 ${done ? 'text-emerald-600' : 'text-slate-300'}`} />
       <span className={done ? 'font-semibold text-slate-900' : ''}>{label}</span>
     </div>
   );
@@ -47,13 +49,51 @@ function GateRow({ done, label }: { done: boolean; label: string }) {
 function DocRow({ label, value }: { label: string; value: string }) {
   const missing = !value || value === '—' || value.toLowerCase().includes('not issued');
   return (
-    <div className="flex items-start justify-between gap-3 text-xs">
+    <div className="flex items-start justify-between gap-3 text-sm py-1">
       <span className="text-slate-500 shrink-0">{label}</span>
       <span className={`font-mono font-semibold text-right break-all ${missing ? 'text-amber-700' : 'text-slate-900'}`}>
         {value}
       </span>
     </div>
   );
+}
+
+function Section({
+  title,
+  icon,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-4 py-3.5 text-left active:bg-slate-50"
+      >
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          {icon}
+          {title}
+        </span>
+        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+      </button>
+      {open && <div className="px-4 pb-4 space-y-2.5 border-t border-slate-100 pt-3">{children}</div>}
+    </section>
+  );
+}
+
+function shellClass(extra = '') {
+  return `min-h-[100dvh] bg-slate-100 text-slate-900 flex flex-col font-sans antialiased ${extra}`;
+}
+
+function primaryBtn(extra = '') {
+  return `w-full min-h-14 rounded-2xl text-base font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-transform touch-manipulation ${extra}`;
 }
 
 export const DriverFieldApp: React.FC = () => {
@@ -84,6 +124,11 @@ export const DriverFieldApp: React.FC = () => {
   const warehousePadRef = useRef<SignaturePadHandle>(null);
   const sealInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    document.documentElement.classList.add('driver-mobile-shell');
+    return () => document.documentElement.classList.remove('driver-mobile-shell');
+  }, []);
+
   const myTrips = useMemo(
     () =>
       trips
@@ -105,7 +150,7 @@ export const DriverFieldApp: React.FC = () => {
 
   const flash = (text: string) => {
     setMessage(text);
-    window.setTimeout(() => setMessage(null), 4000);
+    window.setTimeout(() => setMessage(null), 4500);
   };
 
   const run = async (action: () => Promise<void>, okMessage: string) => {
@@ -122,18 +167,26 @@ export const DriverFieldApp: React.FC = () => {
 
   if (!assignedDriverRosterId) {
     return (
-      <div className="min-h-[100dvh] bg-slate-50 text-slate-900 flex flex-col">
-        <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+      <div
+        className={shellClass()}
+        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <header className="bg-white border-b border-slate-200 px-4 py-4 flex items-center justify-between">
           <div>
-            <div className="text-sm font-extrabold">CasinFreight Driver</div>
-            <div className="text-[11px] text-slate-500">{currentUser.name || currentUser.email}</div>
+            <div className="text-base font-extrabold">CasinFreight Driver</div>
+            <div className="text-xs text-slate-500">{currentUser.name || currentUser.email}</div>
           </div>
-          <button type="button" onClick={() => logout()} className="p-2 text-slate-500 hover:text-slate-800">
-            <LogOut className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={() => logout()}
+            className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-slate-500 active:bg-slate-100"
+          >
+            <LogOut className="w-5 h-5" />
           </button>
         </header>
-        <div className="p-6 text-sm text-amber-800 bg-amber-50 border-b border-amber-200">
-          Your login works, but Driver Roster has no matching email. Ask dispatch to save your email on your driver record.
+        <div className="m-4 rounded-2xl p-4 text-sm text-amber-900 bg-amber-50 border border-amber-200 leading-relaxed">
+          Your login works, but Driver Roster has no matching email. Ask dispatch to save your email on your driver
+          record.
         </div>
       </div>
     );
@@ -239,62 +292,64 @@ export const DriverFieldApp: React.FC = () => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 flex flex-col">
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div>
-          <div className="text-base font-extrabold tracking-tight">My trips</div>
-          <div className="text-[11px] text-slate-500">{currentUser.name || currentUser.email} · Driver</div>
+    <div
+      className={shellClass('max-w-lg mx-auto w-full')}
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
+      <header className="bg-white/95 backdrop-blur border-b border-slate-200 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20">
+        <div className="min-w-0">
+          <div className="text-lg font-extrabold tracking-tight">My trips</div>
+          <div className="text-xs text-slate-500 truncate">
+            {currentUser.name || currentUser.email} · Driver
+          </div>
         </div>
         <button
           type="button"
           onClick={() => logout()}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg hover:bg-slate-100"
+          className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl text-sm font-semibold text-slate-600 active:bg-slate-100 touch-manipulation"
         >
-          <LogOut className="w-3.5 h-3.5" />
+          <LogOut className="w-4 h-4" />
           Sign out
         </button>
       </header>
 
       {message && (
-        <div className="mx-4 mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+        <div className="mx-4 mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           {message}
         </div>
       )}
 
-      <div className="mx-4 mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] text-slate-600 leading-relaxed">
-        Driver mode on the website matches the phone app: stamp GPS, seal photo, your cargo signature, arrival, and{' '}
-        <strong>warehouse e-POD</strong> (hand the screen to the receiving officer after Inbound).
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 space-y-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {myTrips.length === 0 ? (
-          <div className="text-center text-sm text-slate-500 py-16">No assigned trips yet.</div>
+          <div className="text-center text-base text-slate-500 py-20">No assigned trips yet.</div>
         ) : (
           myTrips.map((trip) => (
             <button
               key={trip.id}
               type="button"
               onClick={() => setSelectedTripId(trip.id)}
-              className="w-full text-left bg-white border border-slate-200 rounded-2xl p-4 shadow-xs hover:border-slate-300 transition-colors"
+              className="w-full text-left bg-white border border-slate-200 rounded-2xl p-4 active:scale-[0.99] active:border-slate-300 transition-transform touch-manipulation shadow-xs"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="font-extrabold text-sm text-slate-900">{trip.tripNumber || trip.id}</div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="font-extrabold text-base text-slate-900 leading-tight">
+                  {trip.tripNumber || trip.id}
+                </div>
                 <StatusPill status={trip.status} />
               </div>
-              <div className="mt-2 flex items-center gap-2 text-xs text-slate-700">
-                <Route className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>
+              <div className="mt-2.5 flex items-start gap-2 text-sm text-slate-700">
+                <Route className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">
                   {trip.originZone} → {trip.destinationZone}
                 </span>
               </div>
               {(trip.deliveryNoteNumber || trip.gatePassNumber) && (
-                <div className="mt-2 text-[11px] text-slate-500 font-mono">
+                <div className="mt-2 text-xs text-slate-500 font-mono">
                   {trip.deliveryNoteNumber ? `DN ${trip.deliveryNoteNumber}` : null}
                   {trip.deliveryNoteNumber && trip.gatePassNumber ? ' · ' : null}
                   {trip.gatePassNumber ? `GP ${trip.gatePassNumber}` : null}
                 </div>
               )}
-              <div className="mt-3 text-[11px] font-semibold text-blue-700">Open trip →</div>
+              <div className="mt-3 text-sm font-bold text-blue-700">Open trip →</div>
             </button>
           ))
         )}
@@ -347,6 +402,7 @@ function DriverTripDetail({
   onSaveWarehousePod: () => void;
 }) {
   const { trucks } = useFreight();
+  const actionRef = useRef<HTMLDivElement | null>(null);
   const next = driverNextStepForTrip(trip, eventKinds);
   const driverSigned = hasSignedInk(trip.driverSignoff?.signatureDataUrl);
   const dispatcherSigned = hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl);
@@ -364,7 +420,6 @@ function DriverTripDetail({
     trip.status === 'Loaded' ||
     trip.status === 'In Transit' ||
     trip.status === 'Inbound';
-  // Always allow the save tap so the driver gets a clear error instead of a dead button.
   const canSignDispatch = !driverSigned;
   const truck = trucks.find((t) => t.id === trip.truckId);
   const dnLabel = trip.deliveryNoteNumber?.trim() || 'Not issued yet';
@@ -372,44 +427,257 @@ function DriverTripDetail({
   const sealLabel = trip.securitySealNumber?.trim() || 'Not posted yet';
   const plateLabel = truck?.plateNumber || trip.truckId || '—';
 
+  const stickyAction = (() => {
+    if (next.done) return null;
+    if (!pickupStamped) {
+      return {
+        label: 'Stamp pickup GPS',
+        onClick: onStampPickup,
+        className: 'bg-slate-900 text-white',
+        disabled: busy,
+      };
+    }
+    if (!driverSigned && !sealPhoto && !hasOfficialDocs && trip.status === 'Pending') {
+      return {
+        label: 'Take seal photo',
+        onClick: () => sealInputRef.current?.click(),
+        className: 'bg-slate-900 text-white',
+        disabled: busy,
+      };
+    }
+    if (!driverSigned) {
+      return {
+        label: 'Save my cargo signature',
+        onClick: onSaveDriverSign,
+        className: 'bg-blue-600 text-white',
+        disabled: busy || !canSignDispatch,
+      };
+    }
+    if (trip.status === 'In Transit') {
+      return {
+        label: 'I have arrived (Inbound)',
+        onClick: onArrived,
+        className: 'bg-cyan-700 text-white',
+        disabled: busy || !canMoveCargo,
+      };
+    }
+    if (trip.status === 'Inbound' && !podSigned) {
+      return {
+        label: 'Save warehouse e-POD',
+        onClick: onSaveWarehousePod,
+        className: 'bg-teal-700 text-white',
+        disabled: busy,
+      };
+    }
+    return null;
+  })();
+
+  useEffect(() => {
+    if (!stickyAction) return;
+    const t = window.setTimeout(() => {
+      actionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [trip.status, driverSigned, pickupStamped, podSigned]);
+
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 flex flex-col">
-      <header className="bg-white border-b border-slate-200 px-3 py-2.5 flex items-center gap-2 sticky top-0 z-10">
-        <button type="button" onClick={onBack} className="p-2 rounded-lg hover:bg-slate-100 text-slate-600">
-          <ArrowLeft className="w-4 h-4" />
+    <div
+      className={shellClass('max-w-lg mx-auto w-full')}
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
+      <header className="bg-white/95 backdrop-blur border-b border-slate-200 px-2 py-2.5 flex items-center gap-1 sticky top-0 z-20">
+        <button
+          type="button"
+          onClick={onBack}
+          className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-slate-700 active:bg-slate-100 touch-manipulation"
+          aria-label="Back to trips"
+        >
+          <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-extrabold truncate">{trip.tripNumber || trip.id}</div>
-          <div className="text-[11px] text-slate-500 truncate">
+          <div className="text-base font-extrabold truncate leading-tight">{trip.tripNumber || trip.id}</div>
+          <div className="text-xs text-slate-500 truncate">
             {trip.originZone} → {trip.destinationZone}
           </div>
         </div>
         <StatusPill status={trip.status} />
-        <button type="button" onClick={onLogout} className="p-2 text-slate-500 hover:text-slate-800">
-          <LogOut className="w-4 h-4" />
+        <button
+          type="button"
+          onClick={onLogout}
+          className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-slate-500 active:bg-slate-100 touch-manipulation"
+          aria-label="Sign out"
+        >
+          <LogOut className="w-5 h-5" />
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-10">
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3"
+        style={{ paddingBottom: stickyAction ? 'calc(5.5rem + env(safe-area-inset-bottom))' : 'max(1.25rem, env(safe-area-inset-bottom))' }}
+      >
         {message && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">{message}</div>
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 font-medium">
+            {message}
+          </div>
         )}
 
         <div
           className={`rounded-2xl border p-4 ${
-            next.done ? 'border-emerald-200 bg-emerald-50/70' : 'border-blue-200 bg-blue-50/70'
+            next.done ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50'
           }`}
         >
-          <div className={`text-sm font-extrabold ${next.done ? 'text-emerald-800' : 'text-blue-800'}`}>
+          <div className={`text-base font-extrabold leading-snug ${next.done ? 'text-emerald-800' : 'text-blue-800'}`}>
             {next.title}
           </div>
-          <p className="text-xs text-slate-700 mt-1 leading-relaxed">{next.detail}</p>
+          <p className="text-sm text-slate-700 mt-1.5 leading-relaxed">{next.detail}</p>
         </div>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2.5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <FileText className="w-3.5 h-3.5" /> Vehicle & official documents
-          </div>
+        <div ref={actionRef} className="space-y-3">
+          {!pickupStamped && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5" /> Now
+              </div>
+              <button type="button" disabled={busy} onClick={onStampPickup} className={primaryBtn('bg-slate-900 text-white')}>
+                Stamp pickup GPS
+              </button>
+            </section>
+          )}
+
+          {!driverSigned && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5" /> Your cargo signature
+              </div>
+              <input
+                ref={sealInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onSealPhoto(file);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => sealInputRef.current?.click()}
+                className={primaryBtn('border border-slate-200 bg-white text-slate-900')}
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Camera className="w-5 h-5" />
+                  {sealPhoto ? 'Seal photo ✓ / retake' : 'Seal photo *'}
+                </span>
+              </button>
+              <SignaturePad
+                ref={driverPadRef}
+                label="Sign that you received sealed cargo *"
+                hint="Tap Sign full screen — easiest with your finger."
+                existingUrl={trip.driverSignoff?.signatureDataUrl}
+              />
+              <button
+                type="button"
+                disabled={busy || !canSignDispatch}
+                onClick={onSaveDriverSign}
+                className={primaryBtn('bg-blue-600 text-white')}
+              >
+                Save my cargo signature
+              </button>
+              {!sealedEnough && (
+                <p className="text-sm text-amber-700">
+                  Take a seal photo first, or wait for dispatch to post the seal / DN and gate pass.
+                </p>
+              )}
+            </section>
+          )}
+
+          {driverSigned && trip.status === 'In Transit' && (
+            <section className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-700 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5" /> At the gate
+              </div>
+              <button
+                type="button"
+                disabled={busy || !canMoveCargo}
+                onClick={onArrived}
+                className={primaryBtn('bg-cyan-700 text-white')}
+              >
+                I have arrived (Inbound)
+              </button>
+              <button
+                type="button"
+                disabled={busy || !canMoveCargo || deliveryStamped}
+                onClick={onStampDelivery}
+                className={primaryBtn(
+                  deliveryStamped
+                    ? 'bg-slate-200 text-slate-500'
+                    : 'bg-white text-slate-800 border border-slate-200'
+                )}
+              >
+                {deliveryStamped ? 'Delivery GPS stamped ✓' : 'Stamp delivery GPS only'}
+              </button>
+            </section>
+          )}
+
+          {trip.status === 'Inbound' && !podSigned && (
+            <section className="rounded-2xl border border-teal-200 bg-teal-50/80 p-4 space-y-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-teal-800 flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5" /> Warehouse e-POD
+              </div>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                Hand this phone to the warehouse officer. They sign, then type name and role.
+              </p>
+              <label className="block text-xs font-bold text-slate-500 uppercase">
+                Full name *
+                <input
+                  type="text"
+                  value={warehouseName}
+                  onChange={(e) => setWarehouseName(e.target.value)}
+                  placeholder="e.g. Juan Dela Cruz"
+                  autoComplete="name"
+                  enterKeyHint="next"
+                  className="mt-1.5 w-full min-h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 normal-case"
+                />
+              </label>
+              <label className="block text-xs font-bold text-slate-500 uppercase">
+                Role / title *
+                <input
+                  type="text"
+                  value={warehouseRole}
+                  onChange={(e) => setWarehouseRole(e.target.value)}
+                  placeholder="Warehouse receiving officer"
+                  className="mt-1.5 w-full min-h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 normal-case"
+                />
+              </label>
+              <SignaturePad
+                ref={warehousePadRef}
+                label="Warehouse signature *"
+                hint="Tap Sign full screen for a finger signature."
+                existingUrl={trip.pod?.signatureDataUrl}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onSaveWarehousePod}
+                className={primaryBtn('bg-teal-700 text-white')}
+              >
+                Save warehouse e-POD
+              </button>
+            </section>
+          )}
+
+          {podSigned && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 font-semibold">
+              Proof of delivery signed ✓ — {trip.pod?.receiverName}
+              {trip.pod?.receiverRole ? ` · ${trip.pod.receiverRole}` : ''}
+            </div>
+          )}
+        </div>
+
+        <Section title="Vehicle & documents" icon={<FileText className="w-3.5 h-3.5" />} defaultOpen={false}>
           <DocRow label="Vehicle" value={plateLabel} />
           <DocRow label="Seal" value={sealLabel} />
           <DocRow label="Delivery Note" value={dnLabel} />
@@ -417,41 +685,37 @@ function DriverTripDetail({
           <button
             type="button"
             onClick={onOpenDeliveryNote}
-            className="w-full min-h-11 mt-1 rounded-xl bg-blue-600 text-white text-xs font-bold inline-flex items-center justify-center gap-2"
+            className={primaryBtn('bg-blue-600 text-white mt-1')}
           >
-            <FileText className="w-3.5 h-3.5" />
-            View official Delivery Note
+            <span className="inline-flex items-center justify-center gap-2">
+              <FileText className="w-5 h-5" />
+              View official Delivery Note
+            </span>
           </button>
-        </section>
+        </Section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Checklist</div>
+        <Section title="Checklist" defaultOpen={false}>
           <GateRow done={pickupStamped} label="Pickup GPS stamped" />
-          <GateRow done={dispatcherSigned} label="Dispatcher signed yard release (web)" />
-          <GateRow done={Boolean(trip.deliveryNoteNumber?.trim())} label="Official Delivery Note on file" />
-          <GateRow done={Boolean(trip.gatePassNumber?.trim())} label="Gate Pass on file" />
-          <GateRow done={sealPhoto} label="Seal photo / seal number on file" />
+          <GateRow done={dispatcherSigned} label="Dispatcher signed yard release" />
+          <GateRow done={Boolean(trip.deliveryNoteNumber?.trim())} label="Official Delivery Note" />
+          <GateRow done={Boolean(trip.gatePassNumber?.trim())} label="Gate Pass" />
+          <GateRow done={sealPhoto} label="Seal photo / seal number" />
           <GateRow done={driverSigned} label="Driver received sealed cargo" />
           <GateRow
             done={deliveryStamped || trip.status === 'Inbound' || trip.status === 'Delivered'}
             label="Arrival / delivery GPS"
           />
-          <GateRow done={podSigned} label="Warehouse / consignee signed POD" />
-        </section>
+          <GateRow done={podSigned} label="Warehouse / consignee POD" />
+        </Section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5" /> Location stamps
-          </div>
+        <Section title="More location / photos" icon={<MapPin className="w-3.5 h-3.5" />} defaultOpen={false}>
           <button
             type="button"
             disabled={busy || pickupStamped}
             onClick={onStampPickup}
-            className={`w-full min-h-11 rounded-xl text-xs font-bold disabled:cursor-not-allowed ${
-              pickupStamped
-                ? 'bg-slate-200 text-slate-500 border border-slate-200'
-                : 'bg-slate-900 text-white disabled:opacity-50'
-            }`}
+            className={primaryBtn(
+              pickupStamped ? 'bg-slate-200 text-slate-500' : 'bg-slate-900 text-white'
+            )}
           >
             {pickupStamped ? 'Pickup GPS stamped ✓' : 'Stamp pickup GPS'}
           </button>
@@ -459,40 +723,20 @@ function DriverTripDetail({
             type="button"
             disabled={busy || !canMoveCargo || deliveryStamped}
             onClick={onStampDelivery}
-            className={`w-full min-h-11 rounded-xl text-xs font-bold disabled:cursor-not-allowed ${
+            className={primaryBtn(
               deliveryStamped
-                ? 'bg-slate-200 text-slate-500 border border-slate-200'
-                : 'bg-slate-100 text-slate-800 border border-slate-200 disabled:opacity-50'
-            }`}
+                ? 'bg-slate-200 text-slate-500'
+                : 'bg-white text-slate-800 border border-slate-200'
+            )}
           >
             {deliveryStamped ? 'Delivery GPS stamped ✓' : 'Stamp delivery GPS'}
           </button>
-          {(trip.status === 'In Transit' || trip.status === 'Inbound') && (
-            <button
-              type="button"
-              disabled={busy || !canMoveCargo || trip.status === 'Inbound'}
-              onClick={onArrived}
-              className={`w-full min-h-12 rounded-xl text-xs font-bold disabled:cursor-not-allowed ${
-                trip.status === 'Inbound'
-                  ? 'bg-slate-200 text-slate-500'
-                  : 'bg-cyan-700 text-white disabled:opacity-50'
-              }`}
-            >
-              {trip.status === 'Inbound' ? 'Arrived (Inbound) ✓' : 'I have arrived (Inbound)'}
-            </button>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <Camera className="w-3.5 h-3.5" /> Photos
-          </div>
           <input
-            ref={sealInputRef}
             type="file"
             accept="image/*"
             capture="environment"
             className="hidden"
+            id="driver-seal-again"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) onSealPhoto(file);
@@ -502,113 +746,31 @@ function DriverTripDetail({
           <button
             type="button"
             disabled={busy}
-            onClick={() => sealInputRef.current?.click()}
-            className="w-full min-h-11 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 disabled:opacity-50"
+            onClick={() => document.getElementById('driver-seal-again')?.click()}
+            className={primaryBtn('border border-slate-200 bg-white text-slate-900')}
           >
-            {sealPhoto ? 'Seal photo ✓ / take again' : 'Seal photo *'}
+            {sealPhoto ? 'Seal photo ✓ / retake' : 'Seal photo'}
           </button>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <Truck className="w-3.5 h-3.5" /> Your signature
-          </div>
-          {driverSigned ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 font-semibold">
-              Driver cargo receipt signed ✓
-            </div>
-          ) : (
-            <>
-              <SignaturePad
-                ref={driverPadRef}
-                label="Sign that you received sealed cargo *"
-                hint="Tap “Sign full screen”, sign with your finger, then “Use this signature”."
-                existingUrl={trip.driverSignoff?.signatureDataUrl}
-              />
-              <button
-                type="button"
-                disabled={busy || !canSignDispatch}
-                onClick={onSaveDriverSign}
-                className="w-full min-h-12 rounded-xl bg-blue-600 text-white text-xs font-bold disabled:opacity-50"
-              >
-                Save my cargo signature
-              </button>
-              {!sealedEnough && (
-                <p className="text-[11px] text-amber-700">
-                  Before this will save: take a seal photo, or wait for dispatch to post the seal number / official DN and gate pass.
-                </p>
-              )}
-              {sealedEnough && (
-                <p className="text-[11px] text-slate-500">
-                  After you sign, tap Save my cargo signature.
-                  {!dispatcherSigned ? ' In Transit unlocks after dispatch also signs on the web.' : ''}
-                </p>
-              )}
-            </>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-            <Navigation className="w-3.5 h-3.5" /> Warehouse e-POD
-          </div>
-          {podSigned ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 space-y-1">
-              <div className="font-semibold">Proof of delivery signed ✓</div>
-              <div>
-                {trip.pod?.receiverName}
-                {trip.pod?.receiverRole ? ` · ${trip.pod.receiverRole}` : ''}
-              </div>
-            </div>
-          ) : trip.status === 'Inbound' ? (
-            <>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Hand this screen to the warehouse / consignee officer. They sign, then type their full name and role.
-              </p>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase">
-                Warehouse signer full name *
-                <input
-                  type="text"
-                  value={warehouseName}
-                  onChange={(e) => setWarehouseName(e.target.value)}
-                  placeholder="e.g. Juan Dela Cruz"
-                  className="mt-1 w-full min-h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 normal-case"
-                />
-              </label>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase">
-                Role / title *
-                <input
-                  type="text"
-                  value={warehouseRole}
-                  onChange={(e) => setWarehouseRole(e.target.value)}
-                  placeholder="Warehouse receiving officer"
-                  className="mt-1 w-full min-h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 normal-case"
-                />
-              </label>
-              <SignaturePad
-                ref={warehousePadRef}
-                label="Warehouse / consignee signature *"
-                hint="Tap “Sign full screen” so they can sign with a finger."
-                existingUrl={trip.pod?.signatureDataUrl}
-              />
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onSaveWarehousePod}
-                className="w-full min-h-12 rounded-xl bg-teal-700 text-white text-xs font-bold disabled:opacity-50"
-              >
-                Save warehouse e-POD
-              </button>
-            </>
-          ) : (
-            <p className="text-xs text-slate-600 leading-relaxed">
-              {canMoveCargo
-                ? 'After you tap I have arrived (Inbound), hand this screen to the warehouse officer to sign e-POD (name + role).'
-                : 'Warehouse e-POD opens after yard release signatures, then arrival (Inbound).'}
-            </p>
-          )}
-        </section>
+        </Section>
       </div>
+
+      {stickyAction && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 px-3 pt-2.5"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="max-w-lg mx-auto">
+            <button
+              type="button"
+              disabled={stickyAction.disabled}
+              onClick={stickyAction.onClick}
+              className={primaryBtn(stickyAction.className)}
+            >
+              {busy ? 'Saving…' : stickyAction.label}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
