@@ -789,9 +789,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.error('Could not persist subscription period or Founding rollover', error);
       }
     }
-    const nextRoles = nextSub.plan_id === PLAN_FREE_ID
-      ? (loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE])
-      : ensureDefaultSystemRoles(loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]);
+    const nextRoles = ensureDefaultSystemRoles(
+      loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]
+    );
     const seenTutorial = Boolean(profile?.has_seen_tutorial) || hasSeenTutorialLocally(uid);
     const uniqueMembers = Object.values(
       loadedMembers.reduce<Record<string, User>>((acc, member) => {
@@ -2115,7 +2115,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const addUser = async (userData: Omit<User, 'id' | 'companyId'>): Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }> => {
     if (requireUpgrade(!canAddAccount)) {
-      return { success: false, error: 'Free plan includes 1 company account. Subscribe to add team members.' };
+      return { success: false, error: 'Team seat limit reached (100 on Free trial). Remove unused invites or subscribe for unlimited seats.' };
     }
     if (String(userData.role || '').toLowerCase() === 'owner') {
       return { success: false, error: 'Invite a working role such as Dispatcher or Driver. Owner cannot be invited.' };

@@ -83,7 +83,7 @@ export const UpgradeModal: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Subscribe to unlock your fleet</h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Free is a {FREE_TRIAL_MONTHS}-month trial: up to {FREE_INCLUDED_TRUCKS} trucks, 1 account, and 10 trips. {foundingLockHeadline(hosted)} {foundingLockBody(hosted)}
+              Free is a {FREE_TRIAL_MONTHS}-month trial: up to {FREE_INCLUDED_TRUCKS} trucks, 100 team logins, and 10 trips. {foundingLockHeadline(hosted)} {foundingLockBody(hosted)}
             </p>
             <div className="mt-2">
               <FeatureHowTo feature="billing" compact />
@@ -331,7 +331,7 @@ export const UpgradeModal: React.FC = () => {
               type="button"
               disabled={isSubmitting}
               onClick={async () => {
-                if (!window.confirm(`Reset this workspace to the Free plan? Caps will apply again: ${FREE_INCLUDED_TRUCKS} trucks for ${FREE_TRIAL_MONTHS} month, 1 account, 10 trips.`)) return;
+                if (!window.confirm(`Reset this workspace to the Free plan? Caps will apply again: ${FREE_INCLUDED_TRUCKS} trucks for ${FREE_TRIAL_MONTHS} month, 100 team logins, 10 trips.`)) return;
                 setIsSubmitting(true);
                 setError(null);
                 try {

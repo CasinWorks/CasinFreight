@@ -102,13 +102,13 @@ export const Hero: React.FC<HeroProps> = ({
             >
               {languageMode === 'en' ? (
                 <>
-                  Start free for 1 month: up to <strong>5 trucks, 1 account, 10 trips</strong>. ₱899/mo for your
+                  Start free for 1 month: up to <strong>5 trucks, 100 team logins, 10 trips</strong>. ₱899/mo for your
                   first year — includes 5 trucks. After year 1: ₱1,599/mo, and you keep your 5-truck allowance for
                   life. +₱150/truck beyond 5.
                 </>
               ) : (
                 <>
-                  Subukan ng 1 buwan nang libre: hanggang <strong>5 trucks, 1 account, 10 biyahe</strong>. ₱899/buwan
+                  Subukan ng 1 buwan nang libre: hanggang <strong>5 trucks, 100 logins, 10 biyahe</strong>. ₱899/buwan
                   sa unang taon. Pagkatapos ng Year 1: ₱1,599/buwan, panatilihin ang 5-truck allowance habambuhay.
                   +₱150/truck lampas 5.
                 </>

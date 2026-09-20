@@ -91,8 +91,8 @@ export interface PlanLimits {
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
   [PLAN_FREE_ID]: {
     maxTrucks: FREE_INCLUDED_TRUCKS,
-    maxAccounts: 1,
-    maxRoles: 1,
+    maxAccounts: 100,
+    maxRoles: null,
     maxTransactions: 10,
   },
   [PLAN_FOUNDING_ID]: {
@@ -122,7 +122,7 @@ export const SAAS_PLANS: Plan[] = [
     features: [
       `${FREE_TRIAL_MONTHS}-month trial of every module`,
       `Up to ${FREE_INCLUDED_TRUCKS} trucks`,
-      '1 company account / role',
+      'Up to 100 team logins (Owner, Dispatcher, Driver, …)',
       '10 transactions (trip bookings)',
       '2 GB photo / POD storage',
       'Subscribe before the month ends to keep operating',

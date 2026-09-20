@@ -175,7 +175,7 @@ export const tutorialSteps: TutorialStep[] = [
     id: 'plan',
     target: '[data-tutorial="plan-badge"]',
     title: 'Your plan',
-    body: `Free is a ${FREE_TRIAL_MONTHS}-month trial: up to ${FREE_INCLUDED_TRUCKS} trucks, 1 account, and 10 trips. Upgrade here when you need more.`,
+    body: `Free is a ${FREE_TRIAL_MONTHS}-month trial: up to ${FREE_INCLUDED_TRUCKS} trucks, 100 team logins, and 10 trips. Upgrade here when you need more.`,
     placement: 'bottom',
   },
   {

@@ -91,7 +91,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'free-seats',
     question: 'How many people can log in on Free?',
     answer:
-      'One account and one role (Owner). Subscribe to invite dispatchers, billing, and drivers.',
+      'Invite teammates under Company & Team (Free trial allows up to 100 logins). Drivers need role Driver plus matching email on Driver Roster.',
   },
   {
     id: 'founding-year2',

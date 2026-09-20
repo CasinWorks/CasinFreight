@@ -625,7 +625,7 @@ export const AdminSubscriptionsView: React.FC = () => {
               />
             </label>
             <p className="text-[11px] text-slate-500 mt-2">
-              On that date this company returns to Free: {FREE_INCLUDED_TRUCKS} trucks for {FREE_TRIAL_MONTHS} month, 1 account, 10 trips.
+              On that date this company returns to Free: {FREE_INCLUDED_TRUCKS} trucks for {FREE_TRIAL_MONTHS} month, 100 team logins, 10 trips.
             </p>
             <button
               type="button"

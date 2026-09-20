@@ -193,7 +193,7 @@ export const LoginPage: React.FC = () => {
             <p className="text-sm text-slate-400 leading-relaxed">
               {mode === 'join'
                 ? 'This link is for a new hire. Choose a password here. You are joining the company that invited you — you are not opening a new CasinFreight workspace.'
-                : `Start free for 1 month: up to ${FREE_INCLUDED_TRUCKS} trucks, 1 account, 10 trips. ${foundingLockHeadline(hostedPreview)} ${foundingLockBody(hostedPreview)}`}
+                : `Start free for 1 month: up to ${FREE_INCLUDED_TRUCKS} trucks, 100 team logins, 10 trips. ${foundingLockHeadline(hostedPreview)} ${foundingLockBody(hostedPreview)}`}
             </p>
             <FunTruck className="max-w-md" durationSec={6.5} />
             <div className="grid grid-cols-2 gap-3 pt-2">

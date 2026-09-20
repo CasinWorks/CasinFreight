@@ -684,7 +684,7 @@ export const RbacManagementView: React.FC = () => {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Registered Team Members & Operators</h3>
                 <p className="text-xs text-slate-500">
-                  Invite teammates by email. Free plans include 1 account — subscribe to add seats. Owner can remove a person from this company; they lose access but their login is not deleted.
+                  Invite teammates by email. Free trial allows up to 100 logins. Owner can remove a person from this company; they lose access but their login is not deleted.
                 </p>
               </div>
 
