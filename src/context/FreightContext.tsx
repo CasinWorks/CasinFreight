@@ -996,6 +996,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return;
       }
 
+      setIsAuthLoading(true);
       try {
         setIsPlatformAdmin(await refreshPlatformAdminClaim(fbUser));
         // Wait out join/signup seeding so we never signOut mid client-portal claim.
@@ -1717,12 +1718,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
+    // Keep BootSplash up through hydrate so the Sign In button does not look idle mid-login.
+    setIsAuthLoading(true);
     try {
       await setAuthRememberMe(options?.rememberMe !== false);
       const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
       const profile = await getUserProfile(cred.user.uid);
       if (profile?.kind === 'client_portal') {
         await signOut(getFirebaseAuth());
+        setIsAuthLoading(false);
         return {
           success: false,
           error:
@@ -1733,6 +1737,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const invite = await getInviteByEmail(email.trim());
       if (!invite) {
+        setIsAuthLoading(false);
         return {
           success: false,
           error: 'This login exists, but the company workspace was never created. Open Create company and submit again with the same details.',
@@ -1741,6 +1746,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (isClientPortalInvite(invite)) {
         await signOut(getFirebaseAuth());
+        setIsAuthLoading(false);
         return {
           success: false,
           error:
@@ -1759,8 +1765,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } finally {
         seedingRef.current = false;
       }
-    return { success: true };
+      return { success: true };
     } catch (error) {
+      setIsAuthLoading(false);
       return { success: false, error: mapAuthError(error) };
     }
   };

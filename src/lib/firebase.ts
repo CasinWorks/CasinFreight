@@ -42,13 +42,26 @@ export function getFirebaseAuth(): Auth {
   return auth;
 }
 
-/** Local = stay signed in on this device. Session = sign out when the browser closes. */
+/** Last persistence choice applied — skip redundant setPersistence (it races sign-in). */
+let appliedRememberMe: boolean | null = null;
+
+/**
+ * Local = stay signed in on this device. Session = sign out when the browser closes.
+ * Never throws: Firebase uses a blob worker for IndexedDB; if CSP/browser blocks it,
+ * sign-in must still proceed with the default persistence.
+ */
 export async function setAuthRememberMe(remember: boolean): Promise<void> {
   if (!isFirebaseConfigured()) return;
-  await setPersistence(
-    getFirebaseAuth(),
-    remember ? browserLocalPersistence : browserSessionPersistence
-  );
+  if (appliedRememberMe === remember) return;
+  try {
+    await setPersistence(
+      getFirebaseAuth(),
+      remember ? browserLocalPersistence : browserSessionPersistence
+    );
+    appliedRememberMe = remember;
+  } catch (error) {
+    console.warn('Auth persistence unavailable; continuing with browser default.', error);
+  }
 }
 
 export function getFirebaseDb(): Firestore {

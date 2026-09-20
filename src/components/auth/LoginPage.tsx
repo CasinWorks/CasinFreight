@@ -44,7 +44,7 @@ function writeSavedEmail(email: string, remember: boolean) {
 }
 
 export const LoginPage: React.FC = () => {
-  const { login, signup, joinTeam, requestPasswordReset } = useFreight();
+  const { login, signup, joinTeam, requestPasswordReset, isAuthenticated } = useFreight();
   const configured = isFirebaseConfigured();
 
   const params = new URLSearchParams(window.location.search);
@@ -75,6 +75,10 @@ export const LoginPage: React.FC = () => {
     window.addEventListener('hashchange', syncHash);
     return () => window.removeEventListener('hashchange', syncHash);
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) setIsLoading(false);
+  }, [isAuthenticated]);
 
   const openFaq = () => {
     window.location.hash = 'faq';
@@ -124,6 +128,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
     setIsLoading(true);
+    let ok = false;
     try {
       const res = mode === 'login'
         ? await login(email, password, { rememberMe })
@@ -134,9 +139,10 @@ export const LoginPage: React.FC = () => {
         setErrorMessage(res.error || 'Authentication failed.');
         return;
       }
+      ok = true;
       if (mode === 'login') writeSavedEmail(email, rememberMe);
     } finally {
-      setIsLoading(false);
+      if (!ok) setIsLoading(false);
     }
   };
 

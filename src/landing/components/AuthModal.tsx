@@ -41,7 +41,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   textScale,
   languageMode,
 }) => {
-  const { login, signup, joinTeam, requestPasswordReset } = useFreight();
+  const { login, signup, joinTeam, requestPasswordReset, isAuthenticated } = useFreight();
   const configured = isFirebaseConfigured();
   const params = new URLSearchParams(window.location.search);
   const invitedEmail = (params.get('email') || '').trim();
@@ -70,6 +70,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setPassword('');
     if (invitedEmail) setEmail(invitedEmail);
   }, [initialMode, isOpen, invitedEmail]);
+
+  useEffect(() => {
+    if (isAuthenticated) setIsLoading(false);
+  }, [isAuthenticated]);
 
   if (!isOpen) return null;
 
@@ -105,6 +109,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
     setIsLoading(true);
+    let ok = false;
     try {
       const res =
         mode === 'signin'
@@ -116,9 +121,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setErrorMessage(res.error || 'Authentication failed.');
         return;
       }
+      ok = true;
       if (mode === 'signin') writeSavedEmail(email, rememberMe);
+      // Keep spinner until isAuthenticated swaps the landing for the app (BootSplash covers it).
     } finally {
-      setIsLoading(false);
+      if (!ok) setIsLoading(false);
     }
   };
 
