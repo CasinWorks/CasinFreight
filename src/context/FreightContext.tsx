@@ -2982,14 +2982,19 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!signatureDataUrl.startsWith('data:image') || signatureDataUrl.length < 120) {
       throw new Error('Sign on the pad first.');
     }
+    const hasDocs =
+      Boolean(trip.deliveryNoteNumber?.trim()) && Boolean(trip.gatePassNumber?.trim());
     const sealed =
       Boolean(trip.securitySealNumber?.trim()) ||
+      hasDocs ||
       trip.status === 'Loaded' ||
       trip.status === 'In Transit' ||
       trip.status === 'Inbound' ||
       fieldEvents.some((e) => e.tripId === tripId && e.kind === 'seal_photo');
     if (!sealed) {
-      throw new Error('Take a seal photo first (or wait until dispatch posts the seal number).');
+      throw new Error(
+        'Take a seal photo first, or wait for dispatch to post the seal number / official DN and gate pass.'
+      );
     }
     const signedAt = new Date().toISOString();
     const driverSignoff = {
@@ -3008,37 +3013,33 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       note: 'Driver cargo receipt signed in browser',
     });
 
-    if (shouldGoInTransit) {
-      updateTripStatus(
-        tripId,
-        'In Transit',
-        'Driver signed cargo receipt. Dispatcher yard release already on file — trip is In Transit.',
-        undefined,
-        { driverSignoff }
-      );
-    } else {
-      tripsDirtyRef.current = true;
-      setTrips((prev) =>
-        prev.map((row) => {
-          if (row.id !== tripId) return row;
-          return {
-            ...row,
-            driverSignoff,
-            timeline: [
-              ...row.timeline,
-              {
-                id: `tl-${Date.now()}`,
-                tripId,
-                status: row.status,
-                timestamp: signedAt,
-                note: 'Driver signed received sealed cargo (browser).',
-                updatedBy: `${currentUser.name} (Driver)`,
-              },
-            ],
-          };
-        })
-      );
-    }
+    // Write signoff directly (same idea as the phone app) so a status-gate alert
+    // cannot block finishing "driver received sealed cargo".
+    tripsDirtyRef.current = true;
+    setTrips((prev) =>
+      prev.map((row) => {
+        if (row.id !== tripId) return row;
+        const nextStatus = shouldGoInTransit ? ('In Transit' as const) : row.status;
+        return {
+          ...row,
+          driverSignoff,
+          status: nextStatus,
+          timeline: [
+            ...row.timeline,
+            {
+              id: `tl-${Date.now()}`,
+              tripId,
+              status: nextStatus,
+              timestamp: signedAt,
+              note: shouldGoInTransit
+                ? 'Driver signed cargo receipt. Dispatcher yard release already on file — trip is In Transit.'
+                : 'Driver signed received sealed cargo (browser).',
+              updatedBy: `${currentUser.name} (Driver)`,
+            },
+          ],
+        };
+      })
+    );
   };
 
   const markAssignedDriverArrived = async (tripId: string) => {

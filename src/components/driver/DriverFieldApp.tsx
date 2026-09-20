@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Camera,
   CheckCircle2,
+  FileText,
   LogOut,
   MapPin,
   Navigation,
@@ -13,6 +14,7 @@ import { useFreight } from '../../context/FreightContext';
 import { driverNextStepForTrip } from '../../lib/driverNextStep';
 import { hasSignedInk } from '../../lib/stageGates';
 import { Trip } from '../../types';
+import { DeliveryNoteModal } from '../trips/DeliveryNoteModal';
 import { SignaturePad, SignaturePadHandle } from '../trips/SignaturePad';
 
 function StatusPill({ status }: { status: string }) {
@@ -42,10 +44,26 @@ function GateRow({ done, label }: { done: boolean; label: string }) {
   );
 }
 
+function DocRow({ label, value }: { label: string; value: string }) {
+  const missing = !value || value === '—' || value.toLowerCase().includes('not issued');
+  return (
+    <div className="flex items-start justify-between gap-3 text-xs">
+      <span className="text-slate-500 shrink-0">{label}</span>
+      <span className={`font-mono font-semibold text-right break-all ${missing ? 'text-amber-700' : 'text-slate-900'}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export const DriverFieldApp: React.FC = () => {
   const {
     currentUser,
+    company,
     trips,
+    trucks,
+    drivers,
+    clients,
     fieldEvents,
     assignedDriverRosterId,
     logout,
@@ -58,6 +76,7 @@ export const DriverFieldApp: React.FC = () => {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [dnOpen, setDnOpen] = useState(false);
   const driverPadRef = useRef<SignaturePadHandle>(null);
   const sealInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -118,59 +137,75 @@ export const DriverFieldApp: React.FC = () => {
 
   if (selectedTrip) {
     return (
-      <DriverTripDetail
-        trip={selectedTrip}
-        eventKinds={eventKinds}
-        busy={busy}
-        message={message}
-        driverPadRef={driverPadRef}
-        sealInputRef={sealInputRef}
-        onBack={() => setSelectedTripId(null)}
-        onLogout={() => logout()}
-        onStampPickup={() =>
-          run(
-            () =>
-              addAssignedDriverFieldEvent({
+      <>
+        <DriverTripDetail
+          trip={selectedTrip}
+          eventKinds={eventKinds}
+          busy={busy}
+          message={message}
+          driverPadRef={driverPadRef}
+          sealInputRef={sealInputRef}
+          onBack={() => setSelectedTripId(null)}
+          onLogout={() => logout()}
+          onOpenDeliveryNote={() => setDnOpen(true)}
+          onStampPickup={() =>
+            run(
+              () =>
+                addAssignedDriverFieldEvent({
+                  tripId: selectedTrip.id,
+                  kind: 'pickup_geo',
+                  note: 'Pickup GPS stamped (browser)',
+                }).then(() => undefined),
+              'Pickup GPS saved.'
+            )
+          }
+          onSealPhoto={async (file) => {
+            await run(async () => {
+              const uploaded = await uploadWorkspaceFile('field-photos', file);
+              await addAssignedDriverFieldEvent({
                 tripId: selectedTrip.id,
-                kind: 'pickup_geo',
-                note: 'Pickup GPS stamped (browser)',
-              }).then(() => undefined),
-            'Pickup GPS saved.'
-          )
-        }
-        onSealPhoto={async (file) => {
-          await run(async () => {
-            const uploaded = await uploadWorkspaceFile('field-photos', file);
-            await addAssignedDriverFieldEvent({
-              tripId: selectedTrip.id,
-              kind: 'seal_photo',
-              photoUrl: uploaded.url,
-              note: 'Seal photo (browser)',
-            });
-          }, 'Seal photo sent to the office.');
-        }}
-        onSaveDriverSign={() =>
-          run(async () => {
-            const ink = driverPadRef.current?.read(selectedTrip.driverSignoff?.signatureDataUrl);
-            if (!ink) throw new Error('Sign on the pad first.');
-            await saveAssignedDriverSignoff(selectedTrip.id, ink);
-          }, 'Cargo receipt signed.')
-        }
-        onStampDelivery={() =>
-          run(
-            () =>
-              addAssignedDriverFieldEvent({
-                tripId: selectedTrip.id,
-                kind: 'delivery_geo',
-                note: 'Delivery GPS stamped (browser)',
-              }).then(() => undefined),
-            'Delivery GPS saved. Tap I have arrived to set Inbound.'
-          )
-        }
-        onArrived={() =>
-          run(() => markAssignedDriverArrived(selectedTrip.id), 'Inbound set. Hand the Driver phone app to warehouse for e-POD.')
-        }
-      />
+                kind: 'seal_photo',
+                photoUrl: uploaded.url,
+                note: 'Seal photo (browser)',
+              });
+            }, 'Seal photo sent to the office.');
+          }}
+          onSaveDriverSign={() =>
+            run(async () => {
+              const ink = driverPadRef.current?.read(selectedTrip.driverSignoff?.signatureDataUrl);
+              if (!ink) throw new Error('Sign on the pad first.');
+              await saveAssignedDriverSignoff(selectedTrip.id, ink);
+            }, 'Cargo receipt signed.')
+          }
+          onStampDelivery={() =>
+            run(
+              () =>
+                addAssignedDriverFieldEvent({
+                  tripId: selectedTrip.id,
+                  kind: 'delivery_geo',
+                  note: 'Delivery GPS stamped (browser)',
+                }).then(() => undefined),
+              'Delivery GPS saved. Tap I have arrived to set Inbound.'
+            )
+          }
+          onArrived={() =>
+            run(
+              () => markAssignedDriverArrived(selectedTrip.id),
+              'Inbound set. Hand the Driver phone app to warehouse for e-POD.'
+            )
+          }
+        />
+        <DeliveryNoteModal
+          isOpen={dnOpen}
+          onClose={() => setDnOpen(false)}
+          trip={selectedTrip}
+          truck={trucks.find((t) => t.id === selectedTrip.truckId)}
+          driver={drivers.find((d) => d.id === selectedTrip.driverId)}
+          helper={drivers.find((d) => d.id === selectedTrip.helperId)}
+          client={clients.find((c) => c.id === selectedTrip.clientId)}
+          company={company}
+        />
+      </>
     );
   }
 
@@ -223,8 +258,12 @@ export const DriverFieldApp: React.FC = () => {
                   {trip.originZone} → {trip.destinationZone}
                 </span>
               </div>
-              {trip.cargoDescription && (
-                <div className="mt-1.5 text-[11px] text-slate-500 line-clamp-2">{trip.cargoDescription}</div>
+              {(trip.deliveryNoteNumber || trip.gatePassNumber) && (
+                <div className="mt-2 text-[11px] text-slate-500 font-mono">
+                  {trip.deliveryNoteNumber ? `DN ${trip.deliveryNoteNumber}` : null}
+                  {trip.deliveryNoteNumber && trip.gatePassNumber ? ' · ' : null}
+                  {trip.gatePassNumber ? `GP ${trip.gatePassNumber}` : null}
+                </div>
               )}
               <div className="mt-3 text-[11px] font-semibold text-blue-700">Open trip →</div>
             </button>
@@ -244,6 +283,7 @@ function DriverTripDetail({
   sealInputRef,
   onBack,
   onLogout,
+  onOpenDeliveryNote,
   onStampPickup,
   onSealPhoto,
   onSaveDriverSign,
@@ -258,26 +298,37 @@ function DriverTripDetail({
   sealInputRef: React.RefObject<HTMLInputElement | null>;
   onBack: () => void;
   onLogout: () => void;
+  onOpenDeliveryNote: () => void;
   onStampPickup: () => void;
   onSealPhoto: (file: File) => void;
   onSaveDriverSign: () => void;
   onStampDelivery: () => void;
   onArrived: () => void;
 }) {
+  const { trucks } = useFreight();
   const next = driverNextStepForTrip(trip, eventKinds);
   const driverSigned = hasSignedInk(trip.driverSignoff?.signatureDataUrl);
   const dispatcherSigned = hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl);
   const podSigned = hasSignedInk(trip.pod?.signatureDataUrl);
   const pickupStamped = eventKinds.has('pickup_geo');
-  const sealPhoto = eventKinds.has('seal_photo') || Boolean(trip.securitySealNumber?.trim());
+  const hasSealNumber = Boolean(trip.securitySealNumber?.trim());
+  const hasOfficialDocs =
+    Boolean(trip.deliveryNoteNumber?.trim()) && Boolean(trip.gatePassNumber?.trim());
+  const sealPhoto = eventKinds.has('seal_photo') || hasSealNumber;
   const deliveryStamped = eventKinds.has('delivery_geo');
   const canMoveCargo = driverSigned && dispatcherSigned;
   const sealedEnough =
     sealPhoto ||
+    hasOfficialDocs ||
     trip.status === 'Loaded' ||
     trip.status === 'In Transit' ||
     trip.status === 'Inbound';
   const canSignDispatch = !driverSigned && sealedEnough;
+  const truck = trucks.find((t) => t.id === trip.truckId);
+  const dnLabel = trip.deliveryNoteNumber?.trim() || 'Not issued yet';
+  const gpLabel = trip.gatePassNumber?.trim() || 'Not issued yet';
+  const sealLabel = trip.securitySealNumber?.trim() || 'Not posted yet';
+  const plateLabel = truck?.plateNumber || trip.truckId || '—';
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 text-slate-900 flex flex-col">
@@ -313,13 +364,36 @@ function DriverTripDetail({
           <p className="text-xs text-slate-700 mt-1 leading-relaxed">{next.detail}</p>
         </div>
 
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2.5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5" /> Vehicle & official documents
+          </div>
+          <DocRow label="Vehicle" value={plateLabel} />
+          <DocRow label="Seal" value={sealLabel} />
+          <DocRow label="Delivery Note" value={dnLabel} />
+          <DocRow label="Gate Pass" value={gpLabel} />
+          <button
+            type="button"
+            onClick={onOpenDeliveryNote}
+            className="w-full min-h-11 mt-1 rounded-xl bg-blue-600 text-white text-xs font-bold inline-flex items-center justify-center gap-2"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            View official Delivery Note
+          </button>
+        </section>
+
         <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Checklist</div>
           <GateRow done={pickupStamped} label="Pickup GPS stamped" />
           <GateRow done={dispatcherSigned} label="Dispatcher signed yard release (web)" />
+          <GateRow done={Boolean(trip.deliveryNoteNumber?.trim())} label="Official Delivery Note on file" />
+          <GateRow done={Boolean(trip.gatePassNumber?.trim())} label="Gate Pass on file" />
           <GateRow done={sealPhoto} label="Seal photo / seal number on file" />
           <GateRow done={driverSigned} label="Driver received sealed cargo" />
-          <GateRow done={deliveryStamped || trip.status === 'Inbound' || trip.status === 'Delivered'} label="Arrival / delivery GPS" />
+          <GateRow
+            done={deliveryStamped || trip.status === 'Inbound' || trip.status === 'Delivered'}
+            label="Arrival / delivery GPS"
+          />
           <GateRow done={podSigned} label="Warehouse / consignee signed POD" />
         </section>
 
@@ -329,27 +403,37 @@ function DriverTripDetail({
           </div>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || pickupStamped}
             onClick={onStampPickup}
-            className="w-full min-h-11 rounded-xl bg-slate-900 text-white text-xs font-bold disabled:opacity-50"
+            className={`w-full min-h-11 rounded-xl text-xs font-bold disabled:cursor-not-allowed ${
+              pickupStamped
+                ? 'bg-slate-200 text-slate-500 border border-slate-200'
+                : 'bg-slate-900 text-white disabled:opacity-50'
+            }`}
           >
-            {pickupStamped ? 'Stamp pickup GPS again' : 'Stamp pickup GPS'}
+            {pickupStamped ? 'Pickup GPS stamped ✓' : 'Stamp pickup GPS'}
           </button>
           <button
             type="button"
-            disabled={busy || !canMoveCargo}
+            disabled={busy || !canMoveCargo || deliveryStamped}
             onClick={onStampDelivery}
-            className="w-full min-h-11 rounded-xl bg-slate-100 text-slate-800 border border-slate-200 text-xs font-bold disabled:opacity-50"
+            className={`w-full min-h-11 rounded-xl text-xs font-bold disabled:cursor-not-allowed ${
+              deliveryStamped
+                ? 'bg-slate-200 text-slate-500 border border-slate-200'
+                : 'bg-slate-100 text-slate-800 border border-slate-200 disabled:opacity-50'
+            }`}
           >
-            {deliveryStamped ? 'Stamp delivery GPS again' : 'Stamp delivery GPS'}
+            {deliveryStamped ? 'Delivery GPS stamped ✓' : 'Stamp delivery GPS'}
           </button>
           {(trip.status === 'In Transit' || trip.status === 'Inbound') && (
             <button
               type="button"
-              disabled={busy || !canMoveCargo}
+              disabled={busy || !canMoveCargo || trip.status === 'Inbound'}
               onClick={onArrived}
-              className={`w-full min-h-12 rounded-xl text-white text-xs font-bold disabled:opacity-50 ${
-                trip.status === 'Inbound' ? 'bg-emerald-700' : 'bg-cyan-700'
+              className={`w-full min-h-12 rounded-xl text-xs font-bold disabled:cursor-not-allowed ${
+                trip.status === 'Inbound'
+                  ? 'bg-slate-200 text-slate-500'
+                  : 'bg-cyan-700 text-white disabled:opacity-50'
               }`}
             >
               {trip.status === 'Inbound' ? 'Arrived (Inbound) ✓' : 'I have arrived (Inbound)'}
@@ -408,7 +492,9 @@ function DriverTripDetail({
                 Save my cargo signature
               </button>
               {!sealedEnough && (
-                <p className="text-[11px] text-amber-700">Take a seal photo first (or wait for the seal number on the trip).</p>
+                <p className="text-[11px] text-amber-700">
+                  Take a seal photo, or wait for dispatch to post the seal number / official DN and gate pass.
+                </p>
               )}
               {!driverSigned && sealedEnough && !dispatcherSigned && (
                 <p className="text-[11px] text-slate-500">
@@ -428,7 +514,8 @@ function DriverTripDetail({
           ) : (
             <p className="text-xs text-slate-600 leading-relaxed">
               Browser driver login cannot sign as warehouse. After Inbound, open the{' '}
-              <strong>CasinFreight Driver phone app</strong> and use “Warehouse signs on this phone”, or ask office to stamp e-POD on the web.
+              <strong>CasinFreight Driver phone app</strong> and use “Warehouse signs on this phone”, or ask
+              office to stamp e-POD on the web.
             </p>
           )}
         </section>

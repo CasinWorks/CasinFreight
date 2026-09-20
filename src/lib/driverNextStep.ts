@@ -53,7 +53,7 @@ export function driverNextStepForTrip(
   if (status === 'Loaded') {
     return {
       title: 'Next: Sign received sealed cargo',
-      detail: 'Confirm the seal photo first, then sign that you received the cargo.',
+      detail: 'Sign that you received the sealed cargo. You can also open the official Delivery Note and gate pass above.',
     };
   }
 
@@ -64,10 +64,13 @@ export function driverNextStepForTrip(
     };
   }
 
-  if (!sealPhoto) {
+  const hasOfficialDocs =
+    Boolean(trip.deliveryNoteNumber?.trim()) && Boolean(trip.gatePassNumber?.trim());
+  if (!sealPhoto && !hasOfficialDocs) {
     return {
       title: 'Next: Take the seal photo',
-      detail: 'Capture a clear photo of the security seal before signing.',
+      detail:
+        'Capture a clear photo of the security seal before signing — or wait for dispatch to post the seal / official DN and gate pass.',
     };
   }
 
