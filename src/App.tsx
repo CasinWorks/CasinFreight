@@ -27,7 +27,7 @@ import { NotificationDrawer } from './components/notifications/NotificationDrawe
 import { LandingPage } from './landing/LandingPage';
 import { BootSplash } from './components/auth/BootSplash';
 import { Trip } from './types';
-import { KanbanSquare, PlusCircle, Receipt, Truck, LayoutDashboard, Menu } from 'lucide-react';
+import { KanbanSquare, PlusCircle, Receipt, LayoutDashboard, Menu } from 'lucide-react';
 import { AdminConsoleView } from './components/admin/AdminConsoleView';
 import { UpgradeModal } from './components/billing/UpgradeModal';
 import { PlatformNoticeGate, MaintenanceLockScreen } from './components/notices/PlatformNoticeGate';
