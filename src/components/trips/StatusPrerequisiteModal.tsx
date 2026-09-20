@@ -223,11 +223,6 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
       }
       logNote = 'Truck arrived at consignee / warehouse (Inbound). Driver can now collect warehouse e-POD on the phone.';
     } else if (targetStatus === 'Delivered') {
-      const isDriverLogin = String(currentUser.role || '').toLowerCase() === 'driver';
-      if (isDriverLogin) {
-        window.alert('Drivers cannot stamp warehouse e-POD. Sign your cargo receipt in Driver mode, then after Inbound hand the Driver phone app to the warehouse officer — or have office stamp e-POD on the web.');
-        return;
-      }
       if (trip.status !== 'Inbound' && trip.status !== 'Delivered') {
         window.alert('Mark the trip Inbound first (driver taps “I have arrived” at the gate), then capture warehouse e-POD.');
         return;
@@ -543,12 +538,9 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 </span>
               </div>
 
-              {String(currentUser.role || '').toLowerCase() === 'driver' ? (
-                <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 leading-relaxed">
-                  <strong className="text-slate-900">Drivers do not capture this signature.</strong>
-                  {' '}Consignee / warehouse e-POD is collected on the Driver phone after Inbound (hand the phone to the warehouse officer), or stamped here by office staff.
-                </div>
-              ) : (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600 leading-relaxed mb-2">
+                After Inbound, warehouse e-POD can be signed here by office, or on the Driver screen (hand the phone/browser to the receiving officer).
+              </div>
               <>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 <div>
@@ -644,7 +636,6 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                 </div>
               </div>
               </>
-              )}
             </div>
           )}
 

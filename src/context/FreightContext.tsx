@@ -225,6 +225,13 @@ interface FreightContextType {
   assignedDriverRosterId: string | null;
   saveAssignedDriverSignoff: (tripId: string, signatureDataUrl: string) => Promise<void>;
   markAssignedDriverArrived: (tripId: string) => Promise<void>;
+  saveAssignedDriverWarehousePod: (params: {
+    tripId: string;
+    signatureDataUrl: string;
+    receiverName: string;
+    receiverRole: string;
+    conditionStatus?: POD['conditionStatus'];
+  }) => Promise<void>;
   addAssignedDriverFieldEvent: (params: {
     tripId: string;
     kind: FieldEvent['kind'];
@@ -483,7 +490,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const tripsPersistTokenRef = useRef(0);
   /** Keeps driver status/signoff from being clobbered by a stale trips snapshot. */
   const pinnedTripPatchesRef = useRef<
-    Map<string, { status?: Trip['status']; driverSignoff?: Trip['driverSignoff']; until: number }>
+    Map<
+      string,
+      {
+        status?: Trip['status'];
+        driverSignoff?: Trip['driverSignoff'];
+        pod?: Trip['pod'];
+        actualDelivery?: string;
+        until: number;
+      }
+    >
   >(new Map());
   const workspaceUnsubsRef = useRef<Array<() => void>>([]);
   const [company, setCompany] = useState<Company>(BLANK_COMPANY);
@@ -572,7 +588,12 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const pinDriverTrip = (
     tripId: string,
-    patch: { status?: Trip['status']; driverSignoff?: Trip['driverSignoff'] },
+    patch: {
+      status?: Trip['status'];
+      driverSignoff?: Trip['driverSignoff'];
+      pod?: Trip['pod'];
+      actualDelivery?: string;
+    },
     holdMs = 12000
   ) => {
     pinnedTripPatchesRef.current.set(tripId, { ...patch, until: Date.now() + holdMs });
@@ -590,9 +611,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!pin) return trip;
       const statusCaughtUp = !pin.status || trip.status === pin.status;
       const signCaughtUp =
-        !pin.driverSignoff ||
-        hasSignedInk(trip.driverSignoff?.signatureDataUrl);
-      if (statusCaughtUp && signCaughtUp) {
+        !pin.driverSignoff || hasSignedInk(trip.driverSignoff?.signatureDataUrl);
+      const podCaughtUp = !pin.pod || hasSignedInk(trip.pod?.signatureDataUrl);
+      if (statusCaughtUp && signCaughtUp && podCaughtUp) {
         pins.delete(trip.id);
         return trip;
       }
@@ -600,6 +621,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...trip,
         ...(pin.status ? { status: pin.status } : {}),
         ...(pin.driverSignoff ? { driverSignoff: pin.driverSignoff } : {}),
+        ...(pin.pod ? { pod: pin.pod } : {}),
+        ...(pin.actualDelivery ? { actualDelivery: pin.actualDelivery } : {}),
       };
     });
   };
@@ -3214,6 +3237,105 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const saveAssignedDriverWarehousePod = async (params: {
+    tripId: string;
+    signatureDataUrl: string;
+    receiverName: string;
+    receiverRole: string;
+    conditionStatus?: POD['conditionStatus'];
+  }) => {
+    const trip = assertAssignedDriverTrip(params.tripId);
+    if (!company.id) throw new Error('Company workspace is missing.');
+    if (trip.status !== 'Inbound' && trip.status !== 'Delivered') {
+      throw new Error('Mark I have arrived (Inbound) before warehouse e-POD.');
+    }
+    if (!hasSignedInk(trip.driverSignoff?.signatureDataUrl)) {
+      throw new Error('Driver must sign cargo receipt before warehouse e-POD.');
+    }
+    const receiverName = params.receiverName.trim();
+    const receiverRole = params.receiverRole.trim() || 'Warehouse receiving officer';
+    if (!receiverName || receiverName.length < 2) {
+      throw new Error('Enter the warehouse signer’s full name.');
+    }
+    if (!params.signatureDataUrl.startsWith('data:image') || params.signatureDataUrl.length < 120) {
+      throw new Error('Warehouse must sign on the pad first.');
+    }
+
+    let compactSignature = params.signatureDataUrl;
+    try {
+      compactSignature = await shrinkSignatureDataUrl(compactSignature);
+    } catch {
+      // keep original
+    }
+    if (compactSignature.length > 220_000) {
+      compactSignature = await shrinkSignatureDataUrl(compactSignature, 560, 0.45);
+    }
+
+    const signedAt = new Date().toISOString();
+    const conditionStatus = params.conditionStatus || 'Good Condition';
+    const pod: POD = {
+      id: trip.pod?.id || `pod-${params.tripId}`,
+      tripId: params.tripId,
+      receiverName,
+      receiverRole,
+      signedAt,
+      signatureDataUrl: compactSignature,
+      photoUrls: trip.pod?.photoUrls || [],
+      conditionStatus,
+      notes: trip.pod?.notes,
+    };
+    const timelineEntry = {
+      id: `tl-${Date.now()}`,
+      tripId: params.tripId,
+      status: 'Delivered' as const,
+      timestamp: signedAt,
+      note: `e-POD signed on driver browser by ${receiverName} (${receiverRole}).`,
+      updatedBy: `${currentUser.name} (Driver)`,
+    };
+    const timeline = [...(trip.timeline || []), timelineEntry];
+    const patchedTrip: Trip = {
+      ...trip,
+      pod,
+      status: 'Delivered',
+      actualDelivery: trip.actualDelivery || signedAt,
+      timeline,
+    };
+
+    try {
+      await upsertCollection(company.id, 'trips', [
+        {
+          id: params.tripId,
+          pod,
+          status: 'Delivered',
+          actualDelivery: patchedTrip.actualDelivery,
+          timeline,
+        } as Trip,
+      ]);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not save warehouse e-POD. ${detail}`);
+    }
+
+    pinDriverTrip(params.tripId, {
+      status: 'Delivered',
+      pod,
+      actualDelivery: patchedTrip.actualDelivery,
+    });
+    tripsDirtyRef.current = true;
+    tripsPersistTokenRef.current += 1;
+    setTrips((prev) => prev.map((row) => (row.id === params.tripId ? patchedTrip : row)));
+
+    try {
+      await addAssignedDriverFieldEvent({
+        tripId: params.tripId,
+        kind: 'pod_signature',
+        note: `Warehouse e-POD by ${receiverName} (${receiverRole}) — browser`,
+      });
+    } catch (error) {
+      console.warn('Warehouse e-POD saved on trip; field event audit failed', error);
+    }
+  };
+
   const createInvoiceForTrip = (tripId: string): Invoice => {
     const trip = trips.find(t => t.id === tripId);
     if (!trip) throw new Error('Trip not found');
@@ -4102,8 +4224,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         label = 'manipulate shipment status';
     }
 
-    // Field drivers may mark Inbound on their assigned trips (browser or phone).
-    if (targetStatus === 'Inbound' && isFieldDriverRole(role)) {
+    // Field drivers may mark Inbound / Delivered (warehouse e-POD) on assigned trips.
+    if (
+      (targetStatus === 'Inbound' || targetStatus === 'Delivered') &&
+      isFieldDriverRole(role)
+    ) {
       return { allowed: true, allowedRoles: getAllowedRolesForPermission(requiredPerm, roles) };
     }
 
@@ -4593,6 +4718,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       assignedDriverRosterId,
       saveAssignedDriverSignoff,
       markAssignedDriverArrived,
+      saveAssignedDriverWarehousePod,
       addAssignedDriverFieldEvent,
       invoices,
       createInvoiceForTrip,

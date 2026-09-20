@@ -29,9 +29,9 @@ export function driverNextStepForTrip(
 
   if (status === 'Inbound') {
     return {
-      title: 'Waiting for warehouse e-POD',
+      title: 'Next: Warehouse signs e-POD',
       detail:
-        'You marked arrival. Hand your phone (Driver app) to the warehouse officer for e-POD, or wait for office to stamp it on the web. Browser driver login cannot sign as warehouse.',
+        'Hand this screen to the warehouse officer. They sign, then enter their full name and role.',
     };
   }
 
@@ -39,7 +39,7 @@ export function driverNextStepForTrip(
     return {
       title: 'Next: Tap I have arrived',
       detail:
-        'When you reach the consignee gate, tap I have arrived. That sets Inbound so warehouse can sign e-POD on the Driver phone app.',
+        'When you reach the consignee gate, tap I have arrived. That sets Inbound so warehouse can sign e-POD here.',
     };
   }
 

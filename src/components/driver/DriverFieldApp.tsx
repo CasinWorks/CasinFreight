@@ -70,6 +70,7 @@ export const DriverFieldApp: React.FC = () => {
     uploadWorkspaceFile,
     saveAssignedDriverSignoff,
     markAssignedDriverArrived,
+    saveAssignedDriverWarehousePod,
     addAssignedDriverFieldEvent,
   } = useFreight();
 
@@ -77,7 +78,10 @@ export const DriverFieldApp: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [dnOpen, setDnOpen] = useState(false);
+  const [warehouseName, setWarehouseName] = useState('');
+  const [warehouseRole, setWarehouseRole] = useState('Warehouse receiving officer');
   const driverPadRef = useRef<SignaturePadHandle>(null);
+  const warehousePadRef = useRef<SignaturePadHandle>(null);
   const sealInputRef = useRef<HTMLInputElement | null>(null);
 
   const myTrips = useMemo(
@@ -143,7 +147,12 @@ export const DriverFieldApp: React.FC = () => {
           eventKinds={eventKinds}
           busy={busy}
           message={message}
+          warehouseName={warehouseName}
+          warehouseRole={warehouseRole}
+          setWarehouseName={setWarehouseName}
+          setWarehouseRole={setWarehouseRole}
           driverPadRef={driverPadRef}
+          warehousePadRef={warehousePadRef}
           sealInputRef={sealInputRef}
           onBack={() => setSelectedTripId(null)}
           onLogout={() => logout()}
@@ -195,8 +204,24 @@ export const DriverFieldApp: React.FC = () => {
           onArrived={() =>
             run(
               () => markAssignedDriverArrived(selectedTrip.id),
-              'Inbound set. Hand the Driver phone app to warehouse for e-POD.'
+              'Inbound set. Hand this screen to the warehouse officer for e-POD.'
             )
+          }
+          onSaveWarehousePod={() =>
+            run(async () => {
+              const ink = warehousePadRef.current?.read(selectedTrip.pod?.signatureDataUrl);
+              if (!ink) {
+                throw new Error(
+                  'Warehouse must sign first — tap “Sign full screen”, then “Use this signature”.'
+                );
+              }
+              await saveAssignedDriverWarehousePod({
+                tripId: selectedTrip.id,
+                signatureDataUrl: ink,
+                receiverName: warehouseName,
+                receiverRole: warehouseRole,
+              });
+            }, 'Warehouse e-POD saved. Trip is Delivered.')
           }
         />
         <DeliveryNoteModal
@@ -237,8 +262,8 @@ export const DriverFieldApp: React.FC = () => {
       )}
 
       <div className="mx-4 mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] text-slate-600 leading-relaxed">
-        Browser driver mode matches the phone app for <strong>your</strong> cargo signature and arrival.
-        Warehouse e-POD stays on the Driver phone app (hand the phone) or office web — not this login.
+        Driver mode on the website matches the phone app: stamp GPS, seal photo, your cargo signature, arrival, and{' '}
+        <strong>warehouse e-POD</strong> (hand the screen to the receiving officer after Inbound).
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -283,7 +308,12 @@ function DriverTripDetail({
   eventKinds,
   busy,
   message,
+  warehouseName,
+  warehouseRole,
+  setWarehouseName,
+  setWarehouseRole,
   driverPadRef,
+  warehousePadRef,
   sealInputRef,
   onBack,
   onLogout,
@@ -293,12 +323,18 @@ function DriverTripDetail({
   onSaveDriverSign,
   onStampDelivery,
   onArrived,
+  onSaveWarehousePod,
 }: {
   trip: Trip;
   eventKinds: Set<string>;
   busy: boolean;
   message: string | null;
+  warehouseName: string;
+  warehouseRole: string;
+  setWarehouseName: (value: string) => void;
+  setWarehouseRole: (value: string) => void;
   driverPadRef: React.RefObject<SignaturePadHandle | null>;
+  warehousePadRef: React.RefObject<SignaturePadHandle | null>;
   sealInputRef: React.RefObject<HTMLInputElement | null>;
   onBack: () => void;
   onLogout: () => void;
@@ -308,6 +344,7 @@ function DriverTripDetail({
   onSaveDriverSign: () => void;
   onStampDelivery: () => void;
   onArrived: () => void;
+  onSaveWarehousePod: () => void;
 }) {
   const { trucks } = useFreight();
   const next = driverNextStepForTrip(trip, eventKinds);
@@ -511,17 +548,63 @@ function DriverTripDetail({
           )}
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-slate-100/80 p-4 space-y-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <Navigation className="w-3.5 h-3.5" /> Warehouse e-POD
           </div>
           {podSigned ? (
-            <p className="text-xs text-emerald-800 font-semibold">Proof of delivery signed ✓</p>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 space-y-1">
+              <div className="font-semibold">Proof of delivery signed ✓</div>
+              <div>
+                {trip.pod?.receiverName}
+                {trip.pod?.receiverRole ? ` · ${trip.pod.receiverRole}` : ''}
+              </div>
+            </div>
+          ) : trip.status === 'Inbound' ? (
+            <>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Hand this screen to the warehouse / consignee officer. They sign, then type their full name and role.
+              </p>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase">
+                Warehouse signer full name *
+                <input
+                  type="text"
+                  value={warehouseName}
+                  onChange={(e) => setWarehouseName(e.target.value)}
+                  placeholder="e.g. Juan Dela Cruz"
+                  className="mt-1 w-full min-h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 normal-case"
+                />
+              </label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase">
+                Role / title *
+                <input
+                  type="text"
+                  value={warehouseRole}
+                  onChange={(e) => setWarehouseRole(e.target.value)}
+                  placeholder="Warehouse receiving officer"
+                  className="mt-1 w-full min-h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 normal-case"
+                />
+              </label>
+              <SignaturePad
+                ref={warehousePadRef}
+                label="Warehouse / consignee signature *"
+                hint="Tap “Sign full screen” so they can sign with a finger."
+                existingUrl={trip.pod?.signatureDataUrl}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onSaveWarehousePod}
+                className="w-full min-h-12 rounded-xl bg-teal-700 text-white text-xs font-bold disabled:opacity-50"
+              >
+                Save warehouse e-POD
+              </button>
+            </>
           ) : (
             <p className="text-xs text-slate-600 leading-relaxed">
-              Browser driver login cannot sign as warehouse. After Inbound, open the{' '}
-              <strong>CasinFreight Driver phone app</strong> and use “Warehouse signs on this phone”, or ask
-              office to stamp e-POD on the web.
+              {canMoveCargo
+                ? 'After you tap I have arrived (Inbound), hand this screen to the warehouse officer to sign e-POD (name + role).'
+                : 'Warehouse e-POD opens after yard release signatures, then arrival (Inbound).'}
             </p>
           )}
         </section>
