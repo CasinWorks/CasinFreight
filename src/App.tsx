@@ -129,7 +129,7 @@ function MainLayout() {
       onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
       isBlocked={isOrgSetupOpen || isOnboardingOpen || isProfileOpen}
     >
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans antialiased selection:bg-blue-500 selection:text-white">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans antialiased selection:bg-blue-500 selection:text-white office-mobile-shell">
       {/* Top Navigation */}
       <Navbar
         onOpenNewTrip={() => {
@@ -159,7 +159,7 @@ function MainLayout() {
           onOpenProfile={() => setIsProfileOpen(true)}
         />
 
-        <main data-tutorial="main-workspace" className="flex-1 flex flex-col min-w-0 w-full overflow-hidden bg-[#F8FAFC] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <main data-tutorial="main-workspace" className="flex-1 flex flex-col min-w-0 w-full overflow-hidden bg-[#F8FAFC] pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:pb-0">
           {activeTab === 'help' && (
             <HowToPage onOpenTool={handleOpenHelpTool} />
           )}
@@ -232,87 +232,83 @@ function MainLayout() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar for rapid thumb access */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-lg">
-        <button
-          data-tutorial="nav-board"
-          onClick={() => handleTabChange('board')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
-            activeTab === 'board' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <KanbanSquare className="w-5 h-5" />
-          <span>Trips</span>
-        </button>
-
-        {canAccess('new_trip') && (
+      {/* Mobile Bottom Navigation — thumb-first, max 4 slots + Menu */}
+      <nav
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 pt-1 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]"
+        style={{ paddingBottom: 'max(0.35rem, env(safe-area-inset-bottom))' }}
+        aria-label="Primary"
+      >
+        <div className="flex items-stretch justify-around gap-0.5 max-w-lg mx-auto">
           <button
-            data-tutorial="new-load-btn"
-            onClick={() => {
-              if (!canCreateBooking) {
-                openUpgradeOrNotify();
-                return;
-              }
-              setIsNewTripOpen(true);
-            }}
-            className="flex flex-col items-center gap-0.5 py-1 px-2 text-blue-600 hover:text-blue-700 transition-colors"
-          >
-            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center -mt-3 shadow-md">
-              <PlusCircle className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-bold">New Load</span>
-          </button>
-        )}
-
-        {canAccess('invoice_manage') && (
-          <button
-            data-tutorial="nav-invoices"
-            onClick={() => handleTabChange('invoices')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
-              activeTab === 'invoices' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
+            type="button"
+            data-tutorial="nav-board"
+            onClick={() => handleTabChange('board')}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 rounded-xl text-[11px] font-semibold touch-manipulation active:bg-slate-50 ${
+              activeTab === 'board' ? 'text-blue-600' : 'text-slate-500'
             }`}
           >
-            <Receipt className="w-5 h-5" />
-            <span>Billing</span>
+            <KanbanSquare className="w-5 h-5" />
+            <span>Trips</span>
           </button>
-        )}
 
-        {canAccess('truck_crud') && (
+          {canAccess('new_trip') && (
+            <button
+              type="button"
+              data-tutorial="new-load-btn"
+              onClick={() => {
+                if (!canCreateBooking) {
+                  openUpgradeOrNotify();
+                  return;
+                }
+                setIsNewTripOpen(true);
+              }}
+              className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 rounded-xl text-[11px] font-bold text-blue-600 touch-manipulation active:bg-blue-50"
+            >
+              <div className="w-10 h-10 -mt-4 mb-0.5 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md ring-4 ring-white">
+                <PlusCircle className="w-5 h-5" />
+              </div>
+              <span>New</span>
+            </button>
+          )}
+
+          {canAccess('invoice_manage') ? (
+            <button
+              type="button"
+              data-tutorial="nav-invoices"
+              onClick={() => handleTabChange('invoices')}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 rounded-xl text-[11px] font-semibold touch-manipulation active:bg-slate-50 ${
+                activeTab === 'invoices' ? 'text-blue-600' : 'text-slate-500'
+              }`}
+            >
+              <Receipt className="w-5 h-5" />
+              <span>Billing</span>
+            </button>
+          ) : canAccess('dashboard') ? (
+            <button
+              type="button"
+              data-tutorial="nav-dashboard"
+              onClick={() => handleTabChange('dashboard')}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 rounded-xl text-[11px] font-semibold touch-manipulation active:bg-slate-50 ${
+                activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-500'
+              }`}
+            >
+              <LayoutDashboard className="w-5 h-5" />
+              <span>Home</span>
+            </button>
+          ) : null}
+
           <button
-            data-tutorial="nav-trucks"
-            onClick={() => handleTabChange('trucks')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
-              activeTab === 'trucks' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 rounded-xl text-[11px] font-semibold touch-manipulation active:bg-slate-50 ${
+              isMobileMenuOpen ? 'text-blue-600' : 'text-slate-500'
             }`}
           >
-            <Truck className="w-5 h-5" />
-            <span>Fleet</span>
+            <Menu className="w-5 h-5" />
+            <span>Menu</span>
           </button>
-        )}
-
-        {canAccess('dashboard') && (
-          <button
-            data-tutorial="nav-dashboard"
-            onClick={() => handleTabChange('dashboard')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
-              activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <LayoutDashboard className="w-5 h-5" />
-            <span>Dashboard</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => setIsMobileMenuOpen(true)}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg text-[10px] font-semibold transition-colors ${
-            isMobileMenuOpen ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Menu className="w-5 h-5" />
-          <span>Menu</span>
-        </button>
-      </div>
+        </div>
+      </nav>
 
       {/* Modal Overlays */}
       <NewTripModal

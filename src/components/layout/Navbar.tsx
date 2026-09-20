@@ -75,28 +75,33 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-    <header className="h-16 bg-white border-b border-slate-200 text-slate-800 px-3 md:px-6 flex items-center justify-between sticky top-0 z-30 select-none shadow-xs">
+    <header
+      className="bg-white border-b border-slate-200 text-slate-800 px-3 md:px-6 flex items-center justify-between sticky top-0 z-30 select-none shadow-xs"
+      style={{ paddingTop: 'env(safe-area-inset-top)', minHeight: 'calc(3.75rem + env(safe-area-inset-top))' }}
+    >
       {/* Brand & Mobile Hamburger Toggle */}
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
         {onToggleMobileMenu && (
           <button
+            type="button"
             onClick={onToggleMobileMenu}
-            className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            className="lg:hidden min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-slate-600 active:bg-slate-100 touch-manipulation"
             title="Toggle Navigation Menu"
+            aria-label="Open menu"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         )}
 
-        <CasinFreightLogo className="h-8 w-8 rounded-lg shadow-sm" />
+        <CasinFreightLogo className="h-8 w-8 rounded-lg shadow-sm shrink-0" />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="font-bold tracking-tight text-slate-900 text-sm md:text-base truncate">CasinFreight</span>
-            <span className="text-[9px] md:text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-mono font-medium border border-slate-200 shrink-0">
+            <span className="hidden xs:inline text-[9px] md:text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-mono font-medium border border-slate-200 shrink-0">
               PH v3.0
             </span>
           </div>
-          <div className="text-[11px] md:text-xs text-slate-500 font-medium truncate max-w-[120px] sm:max-w-[180px] md:max-w-[260px]">
+          <div className="text-[11px] md:text-xs text-slate-500 font-medium truncate max-w-[100px] sm:max-w-[180px] md:max-w-[260px]">
             {company.name}
           </div>
         </div>
@@ -144,16 +149,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </button>
 
-        {/* Quick Action: New Trip */}
+        {/* Quick Action: New Trip — desktop/tablet; phones use bottom nav */}
         {canAccess('new_trip') && (
           <button
             data-tutorial="new-load-btn"
             onClick={onOpenNewTrip}
-            className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2.5 md:px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm active:scale-95 shrink-0"
+            className="hidden sm:flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2.5 md:px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm active:scale-95 shrink-0"
           >
             <Plus className="w-3.5 h-3.5 md:w-4 md:h-4 stroke-[2.5]" />
             <span className="hidden sm:inline">New Load</span>
-            <span className="sm:hidden text-[11px]">New</span>
           </button>
         )}
 
@@ -174,7 +178,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={onOpenNotifications}
           title="Notifications & Operations Alerts"
           aria-label="View notifications"
-          className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-all shrink-0 active:scale-95 shadow-2xs group"
+          className="relative min-h-11 min-w-11 inline-flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl border border-slate-200 transition-all shrink-0 active:scale-95 shadow-2xs group touch-manipulation"
         >
           <Bell className="w-4 h-4 transition-transform group-hover:rotate-12" />
           

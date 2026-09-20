@@ -40,7 +40,7 @@
   }
 }
 
-/* Driver field app — phone-first: no rubber-band scroll stealing taps, taller signature pads. */
+/* Driver field app — phone-first */
 html.driver-mobile-shell,
 html.driver-mobile-shell body {
   overscroll-behavior-y: none;
@@ -49,13 +49,23 @@ html.driver-mobile-shell body {
 }
 
 html.driver-mobile-shell body {
-  /* Prefer dynamic viewport height on mobile browsers with toolbars. */
   min-height: 100dvh;
 }
 
 @media (max-width: 767px) {
   html.driver-mobile-shell [data-signature-pad-frame] {
     min-height: 11rem;
+  }
+}
+
+/* Office / admin shell on phones */
+.office-mobile-shell {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 1023px) {
+  .office-mobile-shell {
+    overscroll-behavior-y: contain;
   }
 }
 

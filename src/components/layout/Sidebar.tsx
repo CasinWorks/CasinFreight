@@ -284,11 +284,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           if (hasAccess) goTo(item.id);
         }}
         disabled={!hasAccess}
-        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all group relative text-left ${
+        className={`w-full flex items-center justify-between px-3 py-2.5 lg:py-2 min-h-11 lg:min-h-0 rounded-xl lg:rounded-lg text-sm font-medium transition-all group relative text-left touch-manipulation ${
           isActive
             ? 'bg-blue-50 text-blue-700 font-semibold'
             : hasAccess
-              ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100'
               : 'text-slate-400 cursor-not-allowed opacity-50'
         }`}
       >
@@ -465,23 +465,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
             onClick={onCloseMobileMenu}
           />
-          <div className="relative w-4/5 max-w-xs bg-white shadow-2xl flex flex-col h-full z-10 animate-in slide-in-from-left duration-200">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2.5">
-                <CasinFreightLogo className="h-7 w-7 rounded-lg" />
-                <div>
-                  <div className="font-bold text-slate-900 text-sm">CasinFreight Ops</div>
-                  <div className="text-[10px] text-slate-500">Navigation Menu</div>
+          <div
+            className="relative w-[min(88vw,20rem)] bg-white shadow-2xl flex flex-col h-full z-10 animate-in slide-in-from-left duration-200"
+            style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <CasinFreightLogo className="h-8 w-8 rounded-lg shrink-0" />
+                <div className="min-w-0">
+                  <div className="font-bold text-slate-900 text-sm truncate">CasinFreight</div>
+                  <div className="text-[11px] text-slate-500 truncate">Menu · {currentUser.role}</div>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onCloseMobileMenu}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+                className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-slate-500 active:bg-slate-200 touch-manipulation"
+                aria-label="Close menu"
               >
                 <X className="w-5 h-5 stroke-[1.75]" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto overscroll-contain">
               {sidebarContent}
             </div>
           </div>

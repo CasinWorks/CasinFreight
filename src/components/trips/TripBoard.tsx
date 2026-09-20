@@ -111,7 +111,10 @@ export const TripBoard: React.FC<TripBoardProps> = ({
   const [retractionTarget, setRetractionTarget] = useState<{ trip: Trip; toStatus: TripStatus } | null>(null);
 
   // View mode
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>(() => {
+    if (typeof window === 'undefined') return 'kanban';
+    return window.matchMedia('(max-width: 1023px)').matches ? 'list' : 'kanban';
+  });
 
   // Search & Filter States
   const [localSearch, setLocalSearch] = useState<string>(externalSearchQuery);
@@ -615,26 +618,29 @@ export const TripBoard: React.FC<TripBoardProps> = ({
   return (
     <div data-tutorial="trip-board" className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC] text-slate-900 overflow-hidden">
       {/* Top Banner & Action Bar */}
-      <div className="p-4 md:px-6 md:pt-5 md:pb-4 border-b border-slate-200 bg-white shadow-2xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="p-3 md:px-6 md:pt-5 md:pb-4 border-b border-slate-200 bg-white shadow-2xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 md:gap-4">
           <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">Shipment Operations & Dispatch</h1>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-lg md:text-xl font-bold tracking-tight text-slate-900">
+                <span className="md:hidden">Trips</span>
+                <span className="hidden md:inline">Shipment Operations & Dispatch</span>
+              </h1>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
-                {filteredTrips.length} of {trips.length} trips
+                {filteredTrips.length} of {trips.length}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="hidden md:block text-xs text-slate-500 mt-1">
               Live Luzon linehaul tracking, GVWR payload compliance, demurrage monitoring & POD invoicing.
             </p>
-            <div className="mt-3 max-w-xl">
+            <div className="mt-2 md:mt-3 max-w-xl hidden sm:block">
               <FeatureHowTo feature="board" />
             </div>
             {onOpenExceptions && (
               <button
                 type="button"
                 onClick={onOpenExceptions}
-                className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 hover:text-amber-950"
+                className="mt-2 inline-flex items-center gap-1.5 min-h-10 md:min-h-0 text-xs md:text-[11px] font-bold text-amber-800 hover:text-amber-950 touch-manipulation"
               >
                 <AlertTriangle className="w-3.5 h-3.5" />
                 {exceptionCount > 0 ? `${exceptionCount} exception${exceptionCount === 1 ? '' : 's'} — open page` : 'Holds & cancellations'}
@@ -643,32 +649,34 @@ export const TripBoard: React.FC<TripBoardProps> = ({
           </div>
 
           {/* Action Bar */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 md:gap-2.5">
             {/* View Mode Toggle */}
-            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1">
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1 w-full sm:w-auto">
               <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 min-h-10 px-3 rounded-lg text-xs font-semibold transition-colors touch-manipulation ${
+                  viewMode === 'list' 
+                    ? 'bg-white text-blue-600 shadow-2xs border border-slate-200' 
+                    : 'text-slate-500'
+                }`}
+                title="List view (best on phone)"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>List</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setViewMode('kanban')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 min-h-10 px-3 rounded-lg text-xs font-semibold transition-colors touch-manipulation ${
                   viewMode === 'kanban' 
                     ? 'bg-white text-blue-600 shadow-2xs border border-slate-200' 
-                    : 'text-slate-500 hover:text-slate-800'
+                    : 'text-slate-500'
                 }`}
                 title="Kanban Board View"
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Kanban Board</span>
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                  viewMode === 'list' 
-                    ? 'bg-white text-blue-600 shadow-2xs border border-slate-200' 
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Tabular List View"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>Shipment List</span>
+                <span>Board</span>
               </button>
             </div>
 
@@ -1181,14 +1189,14 @@ export const TripBoard: React.FC<TripBoardProps> = ({
       {/* Main Board Content */}
       <div className={`flex-1 min-h-0 p-3 md:p-4 flex flex-col ${viewMode === 'kanban' ? 'overflow-hidden' : 'overflow-auto'}`}>
         {viewMode === 'kanban' ? (
-          <div className="flex-1 min-h-0 overflow-x-auto">
-            <div className="flex gap-3 h-full min-w-[1100px] items-stretch">
+          <div className="flex-1 min-h-0 overflow-x-auto overscroll-x-contain snap-x snap-mandatory md:snap-none [-webkit-overflow-scrolling:touch]">
+            <div className="flex gap-3 h-full min-w-[1100px] md:min-w-[1100px] items-stretch px-0.5">
               {COLUMNS.map((column) => {
                 const columnTrips = filteredTrips.filter(t => t.status === column.id);
                 return (
                   <div
                     key={column.id}
-                    className="flex-1 min-w-[240px] max-w-[320px] bg-slate-100/70 border border-slate-200 rounded-xl flex flex-col h-full shadow-2xs overflow-hidden"
+                    className="flex-1 min-w-[85vw] max-w-[85vw] sm:min-w-[260px] sm:max-w-[320px] md:min-w-[240px] bg-slate-100/70 border border-slate-200 rounded-xl flex flex-col h-full shadow-2xs overflow-hidden snap-center"
                   >
                     <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-xl shrink-0">
                       <div className="flex items-center gap-2">
@@ -1222,8 +1230,84 @@ export const TripBoard: React.FC<TripBoardProps> = ({
             </div>
           </div>
         ) : (
-          /* Tabular List View */
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+          /* List — mobile cards + desktop table */
+          <>
+            <div className="md:hidden space-y-2.5 pb-2">
+              {filteredTrips.length === 0 ? (
+                <div data-tutorial="trip-board-empty" className="bg-white border border-slate-200 rounded-2xl py-12 px-4 text-center text-slate-400 text-sm">
+                  <p>{trips.length === 0 ? 'No trips yet. Tap New when you are ready to book one.' : 'No shipments match the selected filters.'}</p>
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="mt-3 min-h-11 px-4 rounded-xl bg-blue-50 text-blue-700 font-semibold text-sm border border-blue-200"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredTrips.map((trip) => {
+                  const trk = trucks.find((t) => t.id === trip.truckId);
+                  const drv = drivers.find((d) => d.id === trip.driverId);
+                  const clt = clients.find((c) => c.id === trip.clientId);
+                  const totalAcc = trip.accessorials.filter((a) => a.approved).reduce((sum, a) => sum + a.amountPhp, 0);
+                  return (
+                    <button
+                      key={trip.id}
+                      type="button"
+                      onClick={() => onSelectTrip(trip)}
+                      className="w-full text-left bg-white border border-slate-200 rounded-2xl p-4 active:scale-[0.99] active:border-slate-300 transition-transform touch-manipulation shadow-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-mono font-extrabold text-blue-700 text-sm">{trip.tripNumber}</div>
+                          <div className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{clt?.name || '—'}</div>
+                        </div>
+                        <span
+                          className={`shrink-0 text-[11px] font-bold px-2 py-1 rounded-full border ${
+                            trip.status === 'Pending'
+                              ? 'bg-slate-100 text-slate-700 border-slate-200'
+                              : trip.status === 'Loaded'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : trip.status === 'In Transit'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                  : trip.status === 'Inbound'
+                                    ? 'bg-cyan-50 text-cyan-800 border-cyan-200'
+                                    : trip.status === 'Delivered'
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                      : trip.status === 'On Hold'
+                                        ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                        : trip.status === 'Cancelled'
+                                          ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                          : 'bg-purple-50 text-purple-800 border-purple-200'
+                          }`}
+                        >
+                          {trip.status}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1.5 text-sm text-slate-700">
+                        <span className="truncate">{trip.originZone}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{trip.destinationZone}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                        <span className="font-mono truncate">
+                          {trk?.plateNumber || '—'}
+                          {drv?.name ? ` · ${drv.name.split(' ')[0]}` : ''}
+                        </span>
+                        <span className="font-mono font-bold text-slate-800 shrink-0">
+                          ₱{(trip.baseRatePhp + totalAcc).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="mt-2.5 text-xs font-bold text-blue-700">Open trip →</div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="hidden md:block bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-200">
@@ -1398,7 +1482,8 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                 </tbody>
               </table>
             </div>
-          </div>
+            </div>
+          </>
         )}
       </div>
 
