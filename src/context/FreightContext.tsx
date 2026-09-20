@@ -480,6 +480,11 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const seedingRef = useRef(false);
   const companyCreatedByRef = useRef('');
   const tripsDirtyRef = useRef(false);
+  const tripsPersistTokenRef = useRef(0);
+  /** Keeps driver status/signoff from being clobbered by a stale trips snapshot. */
+  const pinnedTripPatchesRef = useRef<
+    Map<string, { status?: Trip['status']; driverSignoff?: Trip['driverSignoff']; until: number }>
+  >(new Map());
   const workspaceUnsubsRef = useRef<Array<() => void>>([]);
   const [company, setCompany] = useState<Company>(BLANK_COMPANY);
   const [users, setUsers] = useState<User[]>([]);
@@ -520,6 +525,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     persistDocHashRef.current = {};
     companyCreatedByRef.current = '';
     tripsDirtyRef.current = false;
+    tripsPersistTokenRef.current += 1;
+    pinnedTripPatchesRef.current.clear();
     workspaceUnsubsRef.current.forEach((unsub) => unsub());
     workspaceUnsubsRef.current = [];
     setCompany(BLANK_COMPANY);
@@ -563,6 +570,40 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  const pinDriverTrip = (
+    tripId: string,
+    patch: { status?: Trip['status']; driverSignoff?: Trip['driverSignoff'] },
+    holdMs = 12000
+  ) => {
+    pinnedTripPatchesRef.current.set(tripId, { ...patch, until: Date.now() + holdMs });
+  };
+
+  const applyPinnedTrips = (remote: Trip[]): Trip[] => {
+    const now = Date.now();
+    const pins = pinnedTripPatchesRef.current;
+    for (const [id, pin] of [...pins.entries()]) {
+      if (pin.until <= now) pins.delete(id);
+    }
+    if (pins.size === 0) return remote;
+    return remote.map((trip) => {
+      const pin = pins.get(trip.id);
+      if (!pin) return trip;
+      const statusCaughtUp = !pin.status || trip.status === pin.status;
+      const signCaughtUp =
+        !pin.driverSignoff ||
+        hasSignedInk(trip.driverSignoff?.signatureDataUrl);
+      if (statusCaughtUp && signCaughtUp) {
+        pins.delete(trip.id);
+        return trip;
+      }
+      return {
+        ...trip,
+        ...(pin.status ? { status: pin.status } : {}),
+        ...(pin.driverSignoff ? { driverSignoff: pin.driverSignoff } : {}),
+      };
+    });
+  };
+
   const persistWorkspaceCollection = <T extends { id: string }>(
     name: WorkspaceCollection,
     items: T[],
@@ -600,6 +641,43 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       persistIdsRef.current[name] = previousIds;
       persistDocHashRef.current[name] = previousDocHashes;
       console.error(error);
+    });
+  };
+
+  const persistTripsNow = (items: Trip[]): Promise<void> => {
+    if (!persistReadyRef.current || !company.id) return Promise.resolve();
+    const hash = JSON.stringify(items);
+    if (persistHashRef.current.trips === hash) return Promise.resolve();
+
+    const previousCollectionHash = persistHashRef.current.trips || '';
+    const previousIds = persistIdsRef.current.trips || [];
+    const previousDocHashes = persistDocHashRef.current.trips || {};
+    const nextIds = items.map((item) => item.id).filter(Boolean);
+    const nextDocHashes: Record<string, string> = {};
+    const dirty: Trip[] = [];
+    items.forEach((item) => {
+      if (!item.id) return;
+      const { password: _password, ...rest } = item as Trip & { password?: string };
+      const itemHash = JSON.stringify(rest);
+      nextDocHashes[item.id] = itemHash;
+      if (previousDocHashes[item.id] !== itemHash) dirty.push(item);
+    });
+    const deleted = previousIds.filter((id) => !nextDocHashes[id]);
+    persistHashRef.current.trips = hash;
+    persistIdsRef.current.trips = nextIds;
+    persistDocHashRef.current.trips = nextDocHashes;
+    if (dirty.length === 0 && deleted.length === 0) return Promise.resolve();
+
+    return replaceCollection(company.id, 'trips', dirty, {
+      merge: true,
+      previousIds,
+      incomingIds: nextIds,
+    }).catch((error) => {
+      persistHashRef.current.trips = previousCollectionHash;
+      persistIdsRef.current.trips = previousIds;
+      persistDocHashRef.current.trips = previousDocHashes;
+      console.error(error);
+      throw error;
     });
   };
 
@@ -834,7 +912,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         unsubs.push(
           listenCollectionWhere<Trip>(company.id, 'trips', 'driverId', rosterId, (remote) => {
             if (tripsDirtyRef.current) return;
-            setTrips(remote);
+            setTrips(applyPinnedTrips(remote));
           }),
           listenCollectionWhere<LiveTracking>(company.id, 'liveTracking', 'driverId', rosterId, setLiveTracking)
         );
@@ -845,7 +923,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         listenCollection<FieldEvent>(company.id, 'fieldEvents', setFieldEvents),
         listenCollection<Trip>(company.id, 'trips', (remote) => {
           if (tripsDirtyRef.current) return;
-          setTrips(remote);
+          setTrips(applyPinnedTrips(remote));
         })
       );
     }
@@ -1018,9 +1096,17 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
     if (!tripsDirtyRef.current) return;
+    const token = ++tripsPersistTokenRef.current;
+    const snapshot = trips;
     const timer = setTimeout(() => {
-      persistWorkspaceCollection('trips', trips, { merge: true });
-      tripsDirtyRef.current = false;
+      void persistTripsNow(snapshot)
+        .catch(() => undefined)
+        .finally(() => {
+          // Only release the dirty lock for this persist generation.
+          if (tripsPersistTokenRef.current === token) {
+            tripsDirtyRef.current = false;
+          }
+        });
     }, 500);
     return () => clearTimeout(timer);
   }, [trips, company.id]);
@@ -3056,7 +3142,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error(`Could not save your signature to the trip. ${detail}`);
     }
 
+    pinDriverTrip(tripId, { status: nextStatus, driverSignoff });
     tripsDirtyRef.current = true;
+    tripsPersistTokenRef.current += 1;
     setTrips((prev) => prev.map((row) => (row.id === tripId ? patchedTrip : row)));
 
     // Field event is audit-only — never block cargo signoff if this fails.
@@ -3073,22 +3161,57 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const markAssignedDriverArrived = async (tripId: string) => {
     const trip = assertAssignedDriverTrip(tripId);
+    if (!company.id) throw new Error('Company workspace is missing.');
     if (trip.status !== 'In Transit' && trip.status !== 'Inbound') {
       throw new Error('Trip must be In Transit before you can mark arrival.');
     }
     if (!hasSignedInk(trip.driverSignoff?.signatureDataUrl) || !hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl)) {
       throw new Error('Dispatcher and driver signatures must both be on file before arrival.');
     }
-    await addAssignedDriverFieldEvent({
+
+    const signedAt = new Date().toISOString();
+    const timelineEntry = {
+      id: `tl-${Date.now()}`,
       tripId,
-      kind: 'delivery_geo',
-      note: 'I have arrived (Inbound) — browser',
-    });
-    updateTripStatus(
-      tripId,
-      'Inbound',
-      'Driver marked I have arrived at the warehouse (Inbound). Warehouse e-POD can be signed on the Driver phone app or by office on the web.'
-    );
+      status: 'Inbound' as const,
+      timestamp: signedAt,
+      note: 'Driver marked I have arrived at the warehouse (Inbound). Warehouse e-POD can be signed on the Driver phone app or by office on the web.',
+      updatedBy: `${currentUser.name} (Driver)`,
+    };
+    const timeline = [...(trip.timeline || []), timelineEntry];
+    const patchedTrip: Trip = {
+      ...trip,
+      status: 'Inbound',
+      timeline,
+    };
+
+    try {
+      await upsertCollection(company.id, 'trips', [
+        {
+          id: tripId,
+          status: 'Inbound',
+          timeline,
+        } as Trip,
+      ]);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not set Inbound. ${detail}`);
+    }
+
+    pinDriverTrip(tripId, { status: 'Inbound' });
+    tripsDirtyRef.current = true;
+    tripsPersistTokenRef.current += 1;
+    setTrips((prev) => prev.map((row) => (row.id === tripId ? patchedTrip : row)));
+
+    try {
+      await addAssignedDriverFieldEvent({
+        tripId,
+        kind: 'delivery_geo',
+        note: 'I have arrived (Inbound) — browser',
+      });
+    } catch (error) {
+      console.warn('Inbound saved on trip; arrival field event failed', error);
+    }
   };
 
   const createInvoiceForTrip = (tripId: string): Invoice => {
