@@ -173,7 +173,11 @@ export const DriverFieldApp: React.FC = () => {
           onSaveDriverSign={() =>
             run(async () => {
               const ink = driverPadRef.current?.read(selectedTrip.driverSignoff?.signatureDataUrl);
-              if (!ink) throw new Error('Sign on the pad first.');
+              if (!ink) {
+                throw new Error(
+                  'Sign on the pad first — tap “Sign full screen”, sign with your finger, then “Use this signature”.'
+                );
+              }
               await saveAssignedDriverSignoff(selectedTrip.id, ink);
             }, 'Cargo receipt signed.')
           }
@@ -323,7 +327,8 @@ function DriverTripDetail({
     trip.status === 'Loaded' ||
     trip.status === 'In Transit' ||
     trip.status === 'Inbound';
-  const canSignDispatch = !driverSigned && sealedEnough;
+  // Always allow the save tap so the driver gets a clear error instead of a dead button.
+  const canSignDispatch = !driverSigned;
   const truck = trucks.find((t) => t.id === trip.truckId);
   const dnLabel = trip.deliveryNoteNumber?.trim() || 'Not issued yet';
   const gpLabel = trip.gatePassNumber?.trim() || 'Not issued yet';
@@ -480,7 +485,7 @@ function DriverTripDetail({
               <SignaturePad
                 ref={driverPadRef}
                 label="Sign that you received sealed cargo *"
-                hint="This is your hauling receipt — not the warehouse e-POD."
+                hint="Tap “Sign full screen”, sign with your finger, then “Use this signature”."
                 existingUrl={trip.driverSignoff?.signatureDataUrl}
               />
               <button
@@ -493,12 +498,13 @@ function DriverTripDetail({
               </button>
               {!sealedEnough && (
                 <p className="text-[11px] text-amber-700">
-                  Take a seal photo, or wait for dispatch to post the seal number / official DN and gate pass.
+                  Before this will save: take a seal photo, or wait for dispatch to post the seal number / official DN and gate pass.
                 </p>
               )}
-              {!driverSigned && sealedEnough && !dispatcherSigned && (
+              {sealedEnough && (
                 <p className="text-[11px] text-slate-500">
-                  You can sign now. In Transit unlocks after dispatch also signs on the web.
+                  After you sign, tap Save my cargo signature.
+                  {!dispatcherSigned ? ' In Transit unlocks after dispatch also signs on the web.' : ''}
                 </p>
               )}
             </>

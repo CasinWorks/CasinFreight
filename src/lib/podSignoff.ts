@@ -73,3 +73,34 @@ export function readSignatureDataUrl(canvas: HTMLCanvasElement | null, fallback?
   if (canvas && canvasHasInk(canvas)) return exportSignatureDataUrl(canvas);
   return fallback;
 }
+
+/** Re-encode an existing data-URL signature so Firestore trip writes stay under size limits. */
+export async function shrinkSignatureDataUrl(dataUrl: string, maxWidth = 720, quality = 0.55): Promise<string> {
+  if (!dataUrl.startsWith('data:image')) return dataUrl;
+  return await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const scale = Math.min(1, maxWidth / Math.max(1, image.width));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const out = document.createElement('canvas');
+        out.width = width;
+        out.height = height;
+        const ctx = out.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(image, 0, 0, width, height);
+        resolve(out.toDataURL('image/jpeg', quality));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => reject(new Error('Could not read that signature image.'));
+    image.src = dataUrl;
+  });
+}

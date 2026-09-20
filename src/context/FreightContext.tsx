@@ -107,6 +107,7 @@ import { uploadCompanyFile } from '../lib/uploads';
 import { refreshPlatformAdminClaim } from '../config/platformAdmin';
 import { hasSeenTutorialLocally, markTutorialSeenLocally } from '../components/tutorial/tutorialSeen';
 import { hasSignedInk, isStatusRetraction, missingSignaturesForStatus } from '../lib/stageGates';
+import { shrinkSignatureDataUrl } from '../lib/podSignoff';
 import { timelineRetractionFromRequest } from '../lib/tripAudit';
 import { isHelperCrew, isDriverSeatRole } from '../lib/crew';
 
@@ -2979,6 +2980,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const saveAssignedDriverSignoff = async (tripId: string, signatureDataUrl: string) => {
     const trip = assertAssignedDriverTrip(tripId);
+    if (!company.id) throw new Error('Company workspace is missing.');
     if (!signatureDataUrl.startsWith('data:image') || signatureDataUrl.length < 120) {
       throw new Error('Sign on the pad first.');
     }
@@ -2996,50 +2998,77 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         'Take a seal photo first, or wait for dispatch to post the seal number / official DN and gate pass.'
       );
     }
+
+    // Keep trip docs lean — oversized data URLs are a common Firestore write failure.
+    let compactSignature = signatureDataUrl;
+    try {
+      compactSignature = await shrinkSignatureDataUrl(compactSignature);
+    } catch {
+      // Keep original if re-encode fails; length check below still applies.
+    }
+    if (compactSignature.length > 220_000) {
+      compactSignature = await shrinkSignatureDataUrl(compactSignature, 560, 0.45);
+    }
+    if (!compactSignature.startsWith('data:image') || compactSignature.length < 120) {
+      throw new Error('Could not read that signature. Use “Sign full screen”, then tap Use this signature.');
+    }
+
     const signedAt = new Date().toISOString();
     const driverSignoff = {
       name: currentUser.name || currentUser.email || 'Driver',
       role: 'Driver',
       signedAt,
-      signatureDataUrl,
+      signatureDataUrl: compactSignature,
     };
     const dispatcherSigned = hasSignedInk(trip.dispatcherSignoff?.signatureDataUrl);
     const shouldGoInTransit = dispatcherSigned && (trip.status === 'Loaded' || trip.status === 'Pending');
-
-    await addAssignedDriverFieldEvent({
+    const nextStatus = shouldGoInTransit ? ('In Transit' as const) : trip.status;
+    const timelineNote = shouldGoInTransit
+      ? 'Driver signed cargo receipt. Dispatcher yard release already on file — trip is In Transit.'
+      : 'Driver signed received sealed cargo (browser).';
+    const timelineEntry = {
+      id: `tl-${Date.now()}`,
       tripId,
-      kind: 'dispatch_signature',
-      signatureDataUrl,
-      note: 'Driver cargo receipt signed in browser',
-    });
+      status: nextStatus,
+      timestamp: signedAt,
+      note: timelineNote,
+      updatedBy: `${currentUser.name} (Driver)`,
+    };
+    const patchedTrip: Trip = {
+      ...trip,
+      driverSignoff,
+      status: nextStatus,
+      timeline: [...(trip.timeline || []), timelineEntry],
+    };
 
-    // Write signoff directly (same idea as the phone app) so a status-gate alert
-    // cannot block finishing "driver received sealed cargo".
-    tripsDirtyRef.current = true;
-    setTrips((prev) =>
-      prev.map((row) => {
-        if (row.id !== tripId) return row;
-        const nextStatus = shouldGoInTransit ? ('In Transit' as const) : row.status;
-        return {
-          ...row,
+    // Await a lean merge write immediately (do not rely on the 500ms debounce).
+    try {
+      await upsertCollection(company.id, 'trips', [
+        {
+          id: tripId,
           driverSignoff,
           status: nextStatus,
-          timeline: [
-            ...row.timeline,
-            {
-              id: `tl-${Date.now()}`,
-              tripId,
-              status: nextStatus,
-              timestamp: signedAt,
-              note: shouldGoInTransit
-                ? 'Driver signed cargo receipt. Dispatcher yard release already on file — trip is In Transit.'
-                : 'Driver signed received sealed cargo (browser).',
-              updatedBy: `${currentUser.name} (Driver)`,
-            },
-          ],
-        };
-      })
-    );
+          timeline: patchedTrip.timeline,
+        } as Trip,
+      ]);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not save your signature to the trip. ${detail}`);
+    }
+
+    tripsDirtyRef.current = true;
+    setTrips((prev) => prev.map((row) => (row.id === tripId ? patchedTrip : row)));
+
+    // Field event is audit-only — never block cargo signoff if this fails.
+    try {
+      await addAssignedDriverFieldEvent({
+        tripId,
+        kind: 'dispatch_signature',
+        note: 'Driver cargo receipt signed in browser',
+      });
+    } catch (error) {
+      console.warn('Driver signoff saved on trip; field event audit failed', error);
+    }
   };
 
   const markAssignedDriverArrived = async (tripId: string) => {

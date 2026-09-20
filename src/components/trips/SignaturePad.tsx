@@ -154,6 +154,12 @@ export const SignaturePad = forwardRef<SignaturePadHandle, {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    // Commit ink immediately so a re-render / resize cannot wipe an unsaved stroke.
+    const ink = readSignatureDataUrl(event.currentTarget);
+    if (ink) {
+      setCommittedUrl(ink);
+      setHasInk(true);
+    }
   };
 
   const clearCanvas = (canvas: HTMLCanvasElement | null) => {
