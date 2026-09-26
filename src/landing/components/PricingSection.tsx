@@ -1,6 +1,9 @@
 import React from 'react';
-import { Check, Sparkles, Clock, ShieldCheck, ArrowRight, PhoneCall, HelpCircle } from 'lucide-react';
+import { Check, Sparkles, Clock, ArrowRight, Mail } from 'lucide-react';
 import { TextScale, LanguageMode } from '../types';
+
+const ENTERPRISE_MAILTO =
+  'mailto:christianjoshuacasin@gmail.com?subject=Enterprise%20plan%20inquiry&body=Hi%20CasinFreight%2C%0A%0AI%27m%20interested%20in%20the%20Enterprise%20plan.%0A%0ACompany%3A%0AFleet%20size%3A%0A';
 
 interface PricingSectionProps {
   textScale: TextScale;
@@ -43,7 +46,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
         </div>
 
         {/* Pricing Card Grid */}
-        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch">
           {/* Plan 1: 1-Month Free Trial */}
           <div className="bg-slate-50 rounded-3xl p-6 sm:p-8 border-2 border-slate-200 flex flex-col justify-between shadow-xs">
             <div className="space-y-4">
@@ -158,6 +161,76 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
                 <span>Lock in Founding ₱899 Rate</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
+            </div>
+          </div>
+
+          {/* Plan 3: Enterprise (custom) */}
+          <div className="bg-slate-950 text-white rounded-3xl p-6 sm:p-8 border-2 border-slate-700 flex flex-col justify-between shadow-xs md:col-span-2 lg:col-span-1">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center gap-2">
+                <span className="px-3 py-1 bg-slate-800 text-slate-200 rounded-lg text-xs font-black uppercase border border-slate-600">
+                  Custom Fleet Fit
+                </span>
+                <span className="text-xs font-bold text-slate-400">Talk to us</span>
+              </div>
+
+              <div>
+                <h3 className="text-2xl font-black text-white">Enterprise</h3>
+                <p className="text-xs text-slate-400 mt-1">For larger fleets and multi-site operations</p>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-3xl sm:text-4xl font-black text-white">Custom pricing</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Built around your fleet and workflow.</p>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800 space-y-3 text-sm text-slate-300">
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Everything in the top plan</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Customized workflows and modules for your operation</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Custom reports and document formats</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Integrations with your existing systems</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Flexible truck and user limits</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Data migration from spreadsheets or your old system</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>On-site onboarding and training</span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Priority support</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-8">
+              <a
+                id="pricing-card-enterprise-cta"
+                href={ENTERPRISE_MAILTO}
+                className="w-full py-4 bg-white hover:bg-slate-100 border-2 border-slate-500 text-slate-950 font-extrabold text-base rounded-2xl transition-all cursor-pointer shadow-xs flex items-center justify-center gap-2"
+              >
+                <Mail className="w-5 h-5 shrink-0" />
+                <span>Contact us</span>
+              </a>
             </div>
           </div>
         </div>
