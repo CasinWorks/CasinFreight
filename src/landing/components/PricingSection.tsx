@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Sparkles, Clock, ShieldCheck, ArrowRight, PhoneCall, HelpCircle } from 'lucide-react';
+import { Check, Sparkles, Clock, ArrowRight, PhoneCall } from 'lucide-react';
 import { TextScale, LanguageMode } from '../types';
 
 interface PricingSectionProps {
@@ -43,7 +43,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
         </div>
 
         {/* Pricing Card Grid */}
-        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch">
           {/* Plan 1: 1-Month Free Trial */}
           <div className="bg-slate-50 rounded-3xl p-6 sm:p-8 border-2 border-slate-200 flex flex-col justify-between shadow-xs">
             <div className="space-y-4">
@@ -158,6 +158,78 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
                 <span>Lock in Founding ₱899 Rate</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
+            </div>
+          </div>
+
+          {/* Plan 3: Enterprise (Custom) */}
+          <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 border-2 border-amber-500/70 flex flex-col justify-between shadow-xl relative overflow-hidden md:col-span-2 lg:col-span-1">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="px-3 py-1 bg-amber-500/20 text-amber-300 rounded-lg text-xs font-black uppercase border border-amber-500/40">
+                  Custom Fit
+                </span>
+                <span className="text-xs font-bold text-slate-400">Talk to us</span>
+              </div>
+
+              <div>
+                <h3 className="text-2xl font-black text-white">Enterprise</h3>
+                <p className="text-xs text-slate-400 mt-1">For fleets that need more than off-the-shelf</p>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-3xl sm:text-4xl font-black text-amber-300">Custom pricing</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Built around your fleet and workflow.
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-slate-700 space-y-3 text-sm text-slate-200">
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Everything in the Founding Member plan</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Customized workflows and modules for your operation</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Custom reports and document formats</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Integrations with your existing systems</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Flexible truck and user limits</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Data migration from spreadsheets or your old system</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>On-site onboarding and training</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Priority support</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-8">
+              <a
+                id="pricing-card-enterprise-cta"
+                href="mailto:christianjoshuacasin@gmail.com?subject=Enterprise%20plan%20inquiry"
+                className="w-full py-4 bg-white hover:bg-slate-100 border-2 border-amber-400/60 text-slate-900 font-extrabold text-base rounded-2xl transition-all cursor-pointer shadow-xs flex items-center justify-center gap-2"
+              >
+                <PhoneCall className="w-5 h-5 text-amber-600" />
+                <span>Contact us</span>
+              </a>
             </div>
           </div>
         </div>
