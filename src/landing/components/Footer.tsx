@@ -143,11 +143,9 @@ export const Footer: React.FC<FooterProps> = ({ languageMode, onOpenAuth, onOpen
             <CasinWorksCredit className="text-slate-500" />
           </div>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:text-slate-400">Privacy Policy</a>
+            <a href="#privacy" className="hover:text-slate-400">Privacy Notice</a>
             <span>•</span>
-            <a href="#" className="hover:text-slate-400">Terms of Service</a>
-            <span>•</span>
-            <a href="#" className="hover:text-slate-400">Security Guarantee</a>
+            <a href="#terms" className="hover:text-slate-400">Terms of use</a>
           </div>
         </div>
       </div>

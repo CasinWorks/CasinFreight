@@ -25,6 +25,7 @@ import { OrgSetupModal } from './components/onboarding/OrgSetupModal';
 import { ProfileModal } from './components/account/ProfileModal';
 import { NotificationDrawer } from './components/notifications/NotificationDrawer';
 import { LandingPage } from './landing/LandingPage';
+import { PrivacyConsentGate } from './components/legal/PrivacyConsentGate';
 import { BootSplash } from './components/auth/BootSplash';
 import { Trip } from './types';
 import { KanbanSquare, PlusCircle, Receipt, LayoutDashboard, Menu } from 'lucide-react';
@@ -402,6 +403,7 @@ function AppContent() {
     return (
       <>
         <PlatformNoticeGate />
+        <PrivacyConsentGate />
         <DriverFieldApp />
       </>
     );
@@ -410,6 +412,7 @@ function AppContent() {
   return (
     <>
       <PlatformNoticeGate />
+      <PrivacyConsentGate />
       <MainLayout />
     </>
   );

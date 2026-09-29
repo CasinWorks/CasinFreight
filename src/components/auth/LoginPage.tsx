@@ -67,6 +67,7 @@ export const LoginPage: React.FC = () => {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
   const [showFaq, setShowFaq] = useState(() => window.location.hash.replace('#', '') === 'faq');
   const hostedPreview = hostedPricingForCheckout();
 
@@ -127,14 +128,18 @@ export const LoginPage: React.FC = () => {
       setErrorMessage(`Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`);
       return;
     }
+    if (mode !== 'login' && !acceptedLegal) {
+      setErrorMessage('Tick the box to accept the Privacy Notice and Terms.');
+      return;
+    }
     setIsLoading(true);
     let ok = false;
     try {
       const res = mode === 'login'
         ? await login(email, password, { rememberMe })
         : mode === 'join'
-        ? await joinTeam({ name, email, password })
-        : await signup({ name, email, password, companyName });
+        ? await joinTeam({ name, email, password, privacyAcceptedAt: new Date().toISOString() })
+        : await signup({ name, email, password, companyName, privacyAcceptedAt: new Date().toISOString() });
       if (!res.success) {
         setErrorMessage(res.error || 'Authentication failed.');
         return;
@@ -400,6 +405,24 @@ export const LoginPage: React.FC = () => {
                   <p className="text-[11px] text-slate-500 -mt-2">
                     This opens a new workspace. If your boss invited you, go back and use the join link instead.
                   </p>
+                )}
+
+                {mode !== 'login' && (
+                  <label className="flex items-start gap-2 text-[11px] text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={acceptedLegal}
+                      onChange={(event) => setAcceptedLegal(event.target.checked)}
+                      className="mt-0.5 rounded border-slate-600 bg-slate-950 text-blue-600"
+                    />
+                    <span>
+                      I agree to the{' '}
+                      <a href="#privacy" className="font-bold text-blue-400">Privacy Notice</a>
+                      {' '}and{' '}
+                      <a href="#terms" className="font-bold text-blue-400">Terms</a>
+                      . I will only save staff, driver, and client details my company is allowed to keep.
+                    </span>
+                  </label>
                 )}
 
                 <button

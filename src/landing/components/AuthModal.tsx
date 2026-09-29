@@ -58,6 +58,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
 
   useEffect(() => {
     setMode(initialMode);
@@ -108,6 +109,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMessage(`Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`);
       return;
     }
+    if (mode !== 'signin' && !acceptedLegal) {
+      setErrorMessage('Tick the box to accept the Privacy Notice and Terms.');
+      return;
+    }
     setIsLoading(true);
     let ok = false;
     try {
@@ -115,8 +120,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         mode === 'signin'
           ? await login(email, password, { rememberMe })
           : mode === 'join'
-            ? await joinTeam({ name, email, password })
-            : await signup({ name, email, password, companyName });
+            ? await joinTeam({ name, email, password, privacyAcceptedAt: new Date().toISOString() })
+            : await signup({ name, email, password, companyName, privacyAcceptedAt: new Date().toISOString() });
       if (!res.success) {
         setErrorMessage(res.error || 'Authentication failed.');
         return;
@@ -191,7 +196,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   mode === 'signup' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Create Company (Free)
+                Join the beta
               </button>
             </div>
           )}
@@ -348,6 +353,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </p>
             )}
 
+            {mode !== 'signin' && (
+              <label className="flex items-start gap-2 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={acceptedLegal}
+                  onChange={(event) => setAcceptedLegal(event.target.checked)}
+                  className="mt-0.5"
+                  required
+                />
+                <span>
+                  I agree to the{' '}
+                  <a href="#privacy" className="font-bold text-blue-700">Privacy Notice</a>
+                  {' '}and{' '}
+                  <a href="#terms" className="font-bold text-blue-700">Terms</a>
+                  . I will only save staff, driver, and client details my company is allowed to keep.
+                </span>
+              </label>
+            )}
+
             <button
               type="submit"
               id="modal-submit-button"
@@ -370,8 +394,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           ? 'Join company'
                           : 'Sumali sa kumpanya'
                         : languageMode === 'en'
-                          ? 'Start 1-Month Free Trial'
-                          : 'Simulan ang Libreng Buwan'}
+                          ? 'Join as a Beta Tester'
+                          : 'Sumali bilang Beta Tester'}
                   </span>
                   <ArrowRight className="w-5 h-5" />
                 </>

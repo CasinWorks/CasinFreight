@@ -174,7 +174,7 @@ export const SavingsCalculator: React.FC<SavingsCalculatorProps> = ({
               onClick={() => onOpenAuth('signup')}
               className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-black text-base rounded-2xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Start Free 1-Month Trial</span>
+              <span>Join as a Beta Tester</span>
               <ArrowRight className="w-5 h-5" />
             </button>
           </div>

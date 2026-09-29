@@ -111,7 +111,7 @@ export function paidTruckLimit(subscription?: {
   included_trucks?: number;
   pricing_tier?: HostedPricingTier;
   founding_signup_at?: string;
-} | null): number;
+} | null): number | null;
 
 export function billableTruckCount(
   actualCount?: number,

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Camera, Loader2, Trash2, User, X } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { closeIfBackdrop } from '../../lib/modal';
+import { LegalNoticeLinks } from '../legal/LegalPage';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -179,6 +180,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, onO
           {saved && !error && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 p-2.5">Profile saved.</div>
           )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <LegalNoticeLinks />
+          </div>
 
           <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3 space-y-2">
             <div className="flex items-center gap-2 text-rose-800 font-bold">

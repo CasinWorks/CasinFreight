@@ -11,7 +11,9 @@ import { PricingSection } from './components/PricingSection';
 import { FaqSection } from './components/FaqSection';
 import { Footer } from './components/Footer';
 import { AuthModal } from './components/AuthModal';
+import { BetaPromoPopup } from './components/BetaPromoPopup';
 import { FaqPage } from '../components/help/FaqPage';
+import { LegalPage, type LegalKind } from '../components/legal/LegalPage';
 import { TextScale, LanguageMode } from './types';
 
 export type AuthMode = 'signin' | 'signup' | 'join';
@@ -23,6 +25,7 @@ export const LandingPage: React.FC = () => {
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [isStoryModalOpen, setIsStoryModalOpen] = useState(false);
   const [showFullFaq, setShowFullFaq] = useState(() => window.location.hash.replace('#', '') === 'faq-full');
+  const [legalKind, setLegalKind] = useState<LegalKind | null>(null);
 
   const handleOpenAuth = (mode: AuthMode) => {
     setAuthMode(mode);
@@ -49,6 +52,11 @@ export const LandingPage: React.FC = () => {
 
     const applyHash = () => {
       const hash = window.location.hash.replace('#', '');
+      if (hash === 'privacy' || hash === 'terms') {
+        setLegalKind(hash);
+        return;
+      }
+      setLegalKind(null);
       if (hash === 'faq-full') {
         setShowFullFaq(true);
         return;
@@ -159,6 +167,20 @@ export const LandingPage: React.FC = () => {
         languageMode={languageMode}
         onOpenAuth={handleOpenAuth}
       />
+
+      <BetaPromoPopup onJoin={() => handleOpenAuth('signup')} />
+
+      {legalKind && (
+        <LegalPage
+          kind={legalKind}
+          onClose={() => {
+            if (window.location.hash === '#privacy' || window.location.hash === '#terms') {
+              history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+            }
+            setLegalKind(null);
+          }}
+        />
+      )}
 
       <AuthModal
         isOpen={isAuthOpen}

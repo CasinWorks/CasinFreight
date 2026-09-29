@@ -336,7 +336,9 @@ export function perpetualCommissionPhp(kind, billedPhp) {
 export function storageLimitGb(subscription) {
   const addon = Math.max(0, Math.floor(Number(subscription && subscription.storage_addon_gb) || 0));
   const planId = subscription && subscription.plan_id;
-  const base = planId === 'plan_founding' || planId === 'plan_promo' ? FOUNDING_STORAGE_GB : FREE_STORAGE_GB;
+  const base = planId === 'plan_founding' || planId === 'plan_promo' || planId === 'plan_enterprise' || planId === 'plan_beta' || planId === 'plan_premium'
+    ? FOUNDING_STORAGE_GB
+    : FREE_STORAGE_GB;
   return base + addon;
 }
 
@@ -368,6 +370,10 @@ function includedTrucksFor(subscription) {
 /** Trucks this company already paid for, never below the included allowance of their pricing tier. */
 export function paidTruckLimit(subscription) {
   const billed = Math.floor(Number(subscription && subscription.billed_truck_count));
+  if (subscription && (subscription.plan_id === 'plan_beta' || subscription.plan_id === 'plan_premium' || subscription.plan_id === 'plan_enterprise')) {
+    if (Number.isFinite(billed) && billed > 0) return billed;
+    return null;
+  }
   if (subscription && subscription.plan_id === 'plan_promo') {
     if (Number.isFinite(billed) && billed > 0) return billed;
     return 1;

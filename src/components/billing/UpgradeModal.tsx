@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, HardDrive, Lock, Sparkles, Truck, Users, X, Zap } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
-import { PLAN_FOUNDING_ID, PLAN_PROMO_ID, getSaasPlans, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
+import { ENTERPRISE_CONTACT_MAILTO, PLAN_BETA_ID, PLAN_ENTERPRISE_ID, PLAN_FOUNDING_ID, PLAN_PREMIUM_ID, PLAN_PROMO_ID, canCollectSubscriptionPayments, getSaasPlans, isBetaPremiumOpen, formatPhDate, FREE_INCLUDED_TRUCKS, FREE_TRIAL_MONTHS } from '../../config/plans';
 import { calculateSubscriptionPrice, formatPhp, formatStorageGb, FOUNDING_LIST_PHP, MAX_BILLABLE_TRUCKS, STORAGE_EXTRA_GB_PHP, foundingLockBody, foundingLockHeadline, hostedPricingForCheckout, isFoundingSignupOpen, type BillingCycle } from '../../lib/subscriptionPrice';
 import { FoundingUrgencyBanner } from './FoundingUrgencyBanner';
 import { closeIfBackdrop } from '../../lib/modal';
@@ -19,6 +19,7 @@ export const UpgradeModal: React.FC = () => {
     subscription,
     activePlan,
     resetCurrentPlanToFree,
+    choosePremiumPlan,
     cancelSubscriptionAtPeriodEnd,
     resumeSubscription,
     isPlatformAdmin,
@@ -75,7 +76,7 @@ export const UpgradeModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeIfBackdrop(() => setIsUpgradeModalOpen(false), isWaitingForPayMongo || trialLocked)}>
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 max-h-[94vh] overflow-y-auto">
+      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 max-h-[94vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between bg-slate-50">
           <div>
             <div className="flex items-center gap-2">
@@ -94,6 +95,30 @@ export const UpgradeModal: React.FC = () => {
                 <span className="text-[11px] font-extrabold text-rose-950">Free trial ended</span>
                 <p className="text-[10px] text-rose-800 mt-0.5">
                   This workspace had {FREE_TRIAL_MONTHS} month on Free (up to {FREE_INCLUDED_TRUCKS} trucks). Subscribe to keep dispatching, billing, and photos.
+                </p>
+              </div>
+            )}
+            {(activePlan.id === PLAN_BETA_ID || isBetaPremiumOpen()) && (
+              <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <span className="text-[11px] font-extrabold text-emerald-950">Beta Tester — free Premium through Dec 31, 2026</span>
+                <p className="text-[10px] text-emerald-900 mt-0.5">
+                  The whole app is free Premium while you test with us. On January 1, 2027 this workspace becomes a Founder account. You can choose Premium then. We are not collecting payment yet.
+                </p>
+              </div>
+            )}
+            {activePlan.id === PLAN_PREMIUM_ID && (
+              <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+                <span className="text-[11px] font-extrabold text-blue-950">Premium — no charge yet</span>
+                <p className="text-[10px] text-blue-900 mt-0.5">
+                  You chose Premium. Billing stays off until CasinFreight is a registered business.
+                </p>
+              </div>
+            )}
+            {activePlan.id === PLAN_ENTERPRISE_ID && (
+              <div className="mt-2 rounded-xl border border-slate-300 bg-slate-100 px-3 py-2">
+                <span className="text-[11px] font-extrabold text-slate-950">Enterprise</span>
+                <p className="text-[10px] text-slate-700 mt-0.5">
+                  Enterprise is a separate app. This workspace is not switched over from here.
                 </p>
               </div>
             )}
@@ -138,19 +163,26 @@ export const UpgradeModal: React.FC = () => {
           )}
         </div>
 
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
           {saasPlans.map((plan) => {
             const isCurrent = activePlan.id === plan.id;
             const isPaid = plan.id === PLAN_FOUNDING_ID;
+            const isEnterprise = plan.id === PLAN_ENTERPRISE_ID;
             return (
               <div
                 key={plan.id}
                 className={`rounded-2xl border p-5 flex flex-col ${
-                  plan.isRecommended ? 'border-blue-500 ring-2 ring-blue-500/15 bg-blue-50/40' : 'border-slate-200 bg-white'
+                  isEnterprise
+                    ? 'border-slate-700 bg-slate-950 text-white'
+                    : plan.isRecommended
+                      ? 'border-blue-500 ring-2 ring-blue-500/15 bg-blue-50/40'
+                      : 'border-slate-200 bg-white'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                  <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${
+                    isEnterprise ? 'bg-slate-800 text-slate-200 border-slate-600' : 'bg-slate-100 text-slate-600 border-slate-200'
+                  }`}>
                     {plan.badge}
                   </span>
                   {isCurrent && (
@@ -159,7 +191,7 @@ export const UpgradeModal: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <h3 className="text-lg font-extrabold text-slate-900 mt-3">{plan.name}</h3>
+                <h3 className={`text-lg font-extrabold mt-3 ${isEnterprise ? 'text-white' : 'text-slate-900'}`}>{plan.name}</h3>
                 {isPaid ? (
                   <>
                     <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-white border border-slate-200 p-1">
@@ -250,16 +282,23 @@ export const UpgradeModal: React.FC = () => {
                       )}
                     </div>
                   </>
+                ) : isEnterprise ? (
+                  <div className="mt-3">
+                    <div className="text-2xl font-black text-white">Custom pricing</div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">A separate app, built around your fleet and workflow.</p>
+                  </div>
                 ) : (
                   <div className="mt-1 flex items-end gap-1">
                     <span className="text-2xl font-black text-slate-900">₱0</span>
                     <span className="text-xs text-slate-500 mb-1">/{plan.interval}</span>
                   </div>
                 )}
+                {!isEnterprise && (
                 <p className="text-xs text-slate-500 mt-2 min-h-[40px]">{plan.description}</p>
+                )}
                 <ul className="mt-4 space-y-2 flex-1">
                   {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-xs text-slate-700">
+                    <li key={feature} className={`flex items-start gap-2 text-xs ${isEnterprise ? 'text-slate-300' : 'text-slate-700'}`}>
                       <Check className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
                       <span>{feature}</span>
                     </li>
@@ -282,6 +321,15 @@ export const UpgradeModal: React.FC = () => {
                         </div>
                       </div>
                     )}
+                    {!canCollectSubscriptionPayments() ? (
+                      <div className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold text-center px-3">
+                        {isBetaPremiumOpen()
+                          ? 'Included free for Beta Testers. No payment.'
+                          : subscription.grant_source === 'founder' && subscription.plan_id === PLAN_FOUNDING_ID
+                            ? 'Founder account. Choose Premium below if you want it. No payment yet.'
+                            : 'Payment is paused. CasinFreight is not collecting fees yet.'}
+                      </div>
+                    ) : (
                     <button
                       type="button"
                       disabled={waiting}
@@ -297,6 +345,28 @@ export const UpgradeModal: React.FC = () => {
                             : `Pay ${formatPhp(price.chargePhp)}${billingCycle === 'annual' ? '/year' : '/mo'} with PayMongo`}
                       {!waiting && <Zap className="w-3.5 h-3.5" />}
                     </button>
+                    )}
+                    {!isBetaPremiumOpen() && subscription.grant_source === 'founder' && subscription.plan_id === PLAN_FOUNDING_ID && (
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={async () => {
+                          if (!window.confirm('Move this Founder workspace to Premium? There is no payment. Billing stays off until CasinFreight is registered.')) return;
+                          setIsSubmitting(true);
+                          setError(null);
+                          try {
+                            await choosePremiumPlan();
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'Could not move this workspace to Premium.');
+                          } finally {
+                            setIsSubmitting(false);
+                          }
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60"
+                      >
+                        Move to Premium
+                      </button>
+                    )}
                     {isCurrent && (
                       <button
                         type="button"
@@ -315,6 +385,15 @@ export const UpgradeModal: React.FC = () => {
                       </button>
                     )}
                   </div>
+                ) : isEnterprise ? (
+                  <div className="mt-5 space-y-2">
+                    <a
+                      href={ENTERPRISE_CONTACT_MAILTO}
+                      className="w-full py-2.5 rounded-xl bg-white text-slate-950 text-xs font-bold flex items-center justify-center gap-2"
+                    >
+                      Contact us
+                    </a>
+                  </div>
                 ) : (
                   <div className="mt-5 w-full py-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-bold text-center">
                     Included at signup
@@ -325,7 +404,7 @@ export const UpgradeModal: React.FC = () => {
           })}
         </div>
 
-        {(activePlan.id === PLAN_FOUNDING_ID || activePlan.id === PLAN_PROMO_ID) && (
+        {(activePlan.id === PLAN_FOUNDING_ID || activePlan.id === PLAN_PROMO_ID || activePlan.id === PLAN_ENTERPRISE_ID) && (
           <div className="px-6 pb-4">
             <button
               type="button"
@@ -353,7 +432,7 @@ export const UpgradeModal: React.FC = () => {
         <div className="px-6 pb-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] text-slate-500">
           <div className="flex items-center gap-1.5">
             <Truck className="w-3.5 h-3.5" />
-            <span>{subscriptionUsage.trucksUsed}/{subscriptionUsage.maxTrucks ?? 1} paid truck slots</span>
+            <span>{subscriptionUsage.trucksUsed}/{subscriptionUsage.maxTrucks ?? '∞'} paid truck slots</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />

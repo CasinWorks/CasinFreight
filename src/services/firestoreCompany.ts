@@ -104,6 +104,20 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
   );
 }
 
+export async function recordPrivacyAcceptance(params: { uid: string; companyId?: string; acceptedAt: string }): Promise<void> {
+  if (!params.uid) throw new Error('You are not signed in.');
+  await updateDoc(doc(getFirebaseDb(), 'users', params.uid), { privacyAcceptedAt: params.acceptedAt });
+  if (params.companyId) {
+    try {
+      await updateDoc(doc(getFirebaseDb(), 'companies', params.companyId, 'members', params.uid), {
+        privacyAcceptedAt: params.acceptedAt,
+      });
+    } catch {
+      // The user profile is the record that matters if the seat write is blocked.
+    }
+  }
+}
+
 export async function stampUserPresence(params: {
   uid: string;
   lastLoginAt?: string;
@@ -536,6 +550,7 @@ export async function seedCompanyWorkspace(params: {
   companyName: string;
   role: RbacRole;
   subscription: Subscription;
+  privacyAcceptedAt?: string;
 }): Promise<{ company: CompanyDocument; profile: UserProfile }> {
   const companyId = `comp-${params.uid.slice(0, 10)}`;
   const now = new Date().toISOString();
@@ -566,6 +581,7 @@ export async function seedCompanyWorkspace(params: {
     department: 'Executive Board',
     status: 'active',
     has_seen_tutorial: false,
+    ...(params.privacyAcceptedAt ? { privacyAcceptedAt: params.privacyAcceptedAt } : {}),
   };
 
   // Company first so user create can prove createdBy, without letting a new account join an arbitrary companyId.
@@ -588,6 +604,7 @@ export async function joinCompanyFromInvite(params: {
   email: string;
   name: string;
   invite: TeamInvite;
+  privacyAcceptedAt?: string;
 }): Promise<{ company: CompanyDocument; profile: UserProfile }> {
   if (isClientPortalInvite(params.invite)) {
     throw new Error('This invite is for the client portal. Use the client join path.');
@@ -601,6 +618,7 @@ export async function joinCompanyFromInvite(params: {
     companyId: params.invite.companyId,
     status: 'active',
     has_seen_tutorial: false,
+    ...(params.privacyAcceptedAt ? { privacyAcceptedAt: params.privacyAcceptedAt } : {}),
   };
 
   const userRef = doc(getFirebaseDb(), 'users', params.uid);

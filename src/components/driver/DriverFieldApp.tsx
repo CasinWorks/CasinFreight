@@ -18,6 +18,7 @@ import { hasSignedInk } from '../../lib/stageGates';
 import { Trip } from '../../types';
 import { DeliveryNoteModal } from '../trips/DeliveryNoteModal';
 import { SignaturePad, SignaturePadHandle } from '../trips/SignaturePad';
+import { LegalNoticeLinks } from '../legal/LegalPage';
 
 function StatusPill({ status }: { status: string }) {
   const color =
@@ -188,6 +189,9 @@ export const DriverFieldApp: React.FC = () => {
           Your login works, but Driver Roster has no matching email. Ask dispatch to save your email on your driver
           record.
         </div>
+        <div className="mx-4 bg-white border border-slate-200 rounded-2xl p-2">
+          <LegalNoticeLinks />
+        </div>
       </div>
     );
   }
@@ -353,6 +357,9 @@ export const DriverFieldApp: React.FC = () => {
             </button>
           ))
         )}
+        <div className="bg-white border border-slate-200 rounded-2xl p-2">
+          <LegalNoticeLinks />
+        </div>
       </div>
     </div>
   );
@@ -752,6 +759,9 @@ function DriverTripDetail({
             {sealPhoto ? 'Seal photo ✓ / retake' : 'Seal photo'}
           </button>
         </Section>
+        <div className="bg-white border border-slate-200 rounded-2xl p-2">
+          <LegalNoticeLinks />
+        </div>
       </div>
 
       {stickyAction && (

@@ -40,8 +40,8 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
 
           <p className="text-slate-600 text-base sm:text-lg">
             {languageMode === 'en'
-              ? 'Start 100% free for 30 days. No hidden software fees, no surprise setup charges.'
-              : 'Subukan nang libre sa 30 araw. Walang nakatagong bayarin.'}
+              ? 'Beta Testers get free Premium through December 31, 2026. No payment. On January 1, 2027 the account becomes Founder, and you can choose Premium.'
+              : 'Libre ang Premium para sa Beta Tester hanggang December 31, 2026. Walang bayad. Sa January 1, 2027, magiging Founder account.'}
           </p>
         </div>
 
@@ -51,38 +51,38 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
           <div className="bg-slate-50 rounded-3xl p-6 sm:p-8 border-2 border-slate-200 flex flex-col justify-between shadow-xs">
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="px-3 py-1 bg-slate-200 text-slate-800 rounded-lg text-xs font-black uppercase">
-                  Zero Risk Test
+                <span className="px-3 py-1 bg-amber-200 text-amber-950 rounded-lg text-xs font-black uppercase">
+                  Beta Tester
                 </span>
-                <span className="text-xs font-bold text-slate-500">30 Days Full Access</span>
+                <span className="text-xs font-bold text-slate-500">Until Dec 31, 2026</span>
               </div>
 
               <div>
-                <h3 className="text-2xl font-black text-slate-900">1-Month Free Trial</h3>
-                <p className="text-xs text-slate-500 mt-1">Perfect to test with your drivers and staff</p>
+                <h3 className="text-2xl font-black text-slate-900">Free Premium</h3>
+                <p className="text-xs text-slate-500 mt-1">For fleets that join the beta</p>
               </div>
 
               <div className="flex items-baseline gap-1 text-slate-900">
                 <span className="text-4xl font-black font-mono">₱0</span>
-                <span className="text-slate-500 font-bold text-sm">/ first month</span>
+                <span className="text-slate-500 font-bold text-sm">through 2026</span>
               </div>
 
               <div className="pt-4 border-t border-slate-200 space-y-3 text-sm text-slate-700">
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Up to <strong>5 trucks included</strong></span>
+                  <span><strong>Premium tools</strong> while you test with us</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>10 test trips with digital e-POD</span>
+                  <span>No payment — we are not collecting fees yet</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>DPWH GVWR weight calculator</span>
+                  <span>Becomes a Founder account on January 1, 2027</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>No credit card or commitment required</span>
+                  <span>Then you can choose Premium</span>
                 </div>
               </div>
             </div>
@@ -94,7 +94,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
                 onClick={() => onOpenAuth('signup')}
                 className="w-full py-4 bg-white hover:bg-slate-100 border-2 border-slate-300 text-slate-900 font-extrabold text-base rounded-2xl transition-all cursor-pointer shadow-xs"
               >
-                Start Free Trial →
+                Join as a Beta Tester →
               </button>
             </div>
           </div>
@@ -158,7 +158,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
                 onClick={() => onOpenAuth('signup')}
                 className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-black text-base rounded-2xl shadow-xl shadow-emerald-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>Lock in Founding ₱899 Rate</span>
+                <span>Join the beta — no payment</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
             </div>

@@ -138,7 +138,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onOpenAuth('signup')}
             className="inline-flex items-center justify-center h-10 px-4 rounded-lg text-sm font-extrabold text-white bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-600/25 hover:shadow-md transition-all cursor-pointer"
           >
-            <span>{languageMode === 'en' ? '1 Month Free' : 'Subukan Libre'}</span>
+            <span>{languageMode === 'en' ? 'Join the beta' : 'Sumali sa beta'}</span>
           </button>
         </div>
 
@@ -211,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
                   onOpenAuth('signup');
                 }}
               >
-                {languageMode === 'en' ? '1 Month Free' : 'Subukan Libre'}
+                {languageMode === 'en' ? 'Join the beta' : 'Sumali sa beta'}
               </button>
             </div>
 

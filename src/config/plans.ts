@@ -31,10 +31,31 @@ export {
 export const PLAN_FREE_ID = 'plan_free';
 export const PLAN_FOUNDING_ID = 'plan_founding';
 export const PLAN_PROMO_ID = 'plan_promo';
+export const PLAN_ENTERPRISE_ID = 'plan_enterprise';
+export const PLAN_BETA_ID = 'plan_beta';
+export const PLAN_PREMIUM_ID = 'plan_premium';
 export const FOUNDING_PRICE_PHP = FOUNDING_BASE_PHP;
 
+/** Dec 31, 2026, 11:59:59 PM Philippine time. */
+export const BETA_PREMIUM_ENDS_AT = '2026-12-31T15:59:59.999Z';
+/** January 1, 2027, 12:00 AM Philippine time. Beta accounts become Founder. */
+export const FOUNDER_CONVERSION_AT = '2027-01-01T00:00:00+08:00';
+
+export function isBetaPremiumOpen(now = Date.now()): boolean {
+  return now < Date.parse(FOUNDER_CONVERSION_AT);
+}
+
+/** Off until CasinFreight is a registered business. Do not open PayMongo checkout. */
+export function canCollectSubscriptionPayments(): boolean {
+  return false;
+}
+
+/** Opens the existing Manila contact email with an Enterprise inquiry already filled in. */
+export const ENTERPRISE_CONTACT_MAILTO =
+  'mailto:christianjoshuacasin@gmail.com?subject=Enterprise%20plan%20inquiry&body=Hi%20CasinFreight%2C%0A%0AI%27m%20interested%20in%20the%20Enterprise%20plan.%0A%0ACompany%3A%0AFleet%20size%3A%0A';
+
 export function isUnlockedPlanId(planId?: string): boolean {
-  return planId === PLAN_FOUNDING_ID || planId === PLAN_PROMO_ID;
+  return planId === PLAN_FOUNDING_ID || planId === PLAN_PROMO_ID || planId === PLAN_ENTERPRISE_ID || planId === PLAN_BETA_ID || planId === PLAN_PREMIUM_ID;
 }
 
 export interface AdminPlanGrant {
@@ -102,6 +123,24 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     maxTransactions: null,
   },
   [PLAN_PROMO_ID]: {
+    maxTrucks: null,
+    maxAccounts: null,
+    maxRoles: null,
+    maxTransactions: null,
+  },
+  [PLAN_ENTERPRISE_ID]: {
+    maxTrucks: null,
+    maxAccounts: null,
+    maxRoles: null,
+    maxTransactions: null,
+  },
+  [PLAN_BETA_ID]: {
+    maxTrucks: null,
+    maxAccounts: null,
+    maxRoles: null,
+    maxTransactions: null,
+  },
+  [PLAN_PREMIUM_ID]: {
     maxTrucks: null,
     maxAccounts: null,
     maxRoles: null,
@@ -199,10 +238,36 @@ export function getSaasPlans(existing?: Subscription | null): Plan[] {
       '5 GB photo / POD storage; extra space ₱99/GB per month',
     ],
   };
-  return [free, paid];
+  const enterprise: Plan = {
+    ...ENTERPRISE_PLAN,
+  };
+  return [free, paid, enterprise];
 }
 
-export const ALL_PLANS: Plan[] = [...SAAS_PLANS, PROMO_PLAN];
+export const ENTERPRISE_PLAN: Plan = {
+  id: PLAN_ENTERPRISE_ID,
+  name: 'Enterprise',
+  description: 'Custom pricing. Built around your fleet and workflow.',
+  price_php: 0,
+  interval: 'month',
+  max_bookings_per_month: null,
+  max_storage_mb: null,
+  is_active: true,
+  features: [
+    'Everything in the top plan',
+    'Customized workflows and modules for your operation',
+    'Custom reports and document formats',
+    'Integrations with your existing systems',
+    'Flexible truck and user limits',
+    'Data migration from spreadsheets or your old system',
+    'On-site onboarding and training',
+    'Priority support',
+  ],
+  badge: 'ENTERPRISE',
+  isRecommended: false,
+};
+
+export const ALL_PLANS: Plan[] = [...SAAS_PLANS, PROMO_PLAN, ENTERPRISE_PLAN];
 
 export function getPlanLimits(planId?: string): PlanLimits {
   return PLAN_LIMITS[planId || PLAN_FREE_ID] || PLAN_LIMITS[PLAN_FREE_ID];
@@ -284,3 +349,88 @@ export function makePromoSubscription(
     updated_at: now.toISOString(),
   };
 }
+
+/** Free Premium for Beta Testers through Dec 31, 2026. No payment. */
+export function makeBetaSubscription(
+  userId: string,
+  companyId: string,
+  previous?: Partial<Subscription>
+): Subscription {
+  const now = new Date();
+  const consumed = [
+    ...(previous?.consumed_payment_ids || []),
+    previous?.payment_provider_checkout_id || '',
+  ].filter((id, index, all) => Boolean(id) && all.indexOf(id) === index);
+  return {
+    id: previous?.id || `sub-${userId.slice(0, 8) || 'beta'}`,
+    user_id: userId,
+    company_id: companyId,
+    plan_id: PLAN_BETA_ID,
+    status: 'active',
+    current_period_start: previous?.current_period_start || now.toISOString(),
+    current_period_end: BETA_PREMIUM_ENDS_AT,
+    cancel_at_period_end: false,
+    auto_renew: false,
+    payment_provider: 'paymongo',
+    grant_source: 'beta',
+    last_billed_amount_php: 0,
+    ...(consumed.length ? { consumed_payment_ids: consumed } : {}),
+    created_at: previous?.created_at || now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+}
+
+/** January 1, 2027: Beta Tester becomes a Founder account. Premium stays optional and unpaid. */
+export function makeFounderFromBeta(previous: Subscription): Subscription {
+  const start = new Date(FOUNDER_CONVERSION_AT);
+  const end = addBillingMonths(start, 12);
+  return {
+    ...previous,
+    plan_id: PLAN_FOUNDING_ID,
+    status: 'active',
+    current_period_start: start.toISOString(),
+    current_period_end: end.toISOString(),
+    cancel_at_period_end: false,
+    auto_renew: false,
+    grant_source: 'founder',
+    pricing_tier: 'founding',
+    included_trucks: FOUNDING_INCLUDED_TRUCKS,
+    base_rate_php: FOUNDING_BASE_PHP,
+    founding_signup_at: start.toISOString(),
+    lock_expires_at: end.toISOString(),
+    last_billed_amount_php: 0,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function makePremiumFromFounder(previous: Subscription): Subscription {
+  const now = new Date();
+  return {
+    ...previous,
+    plan_id: PLAN_PREMIUM_ID,
+    status: 'active',
+    grant_source: 'founder',
+    last_billed_amount_php: 0,
+    auto_renew: false,
+    cancel_at_period_end: false,
+    updated_at: now.toISOString(),
+  };
+}
+
+/**
+ * While the beta is open, Free workspaces become Beta (free Premium).
+ * On January 1, 2027, Beta becomes Founder. Paid Founding and Promo are left alone.
+ */
+export function applyBetaLifecycle(subscription: Subscription, now = Date.now()): Subscription {
+  if (isBetaPremiumOpen(now)) {
+    if (subscription.plan_id === PLAN_FREE_ID) {
+      return makeBetaSubscription(subscription.user_id, subscription.company_id, subscription);
+    }
+    return subscription;
+  }
+  if (subscription.plan_id === PLAN_BETA_ID || subscription.grant_source === 'beta') {
+    return makeFounderFromBeta(subscription);
+  }
+  return subscription;
+}
+

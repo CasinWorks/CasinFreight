@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, ChevronDown, ChevronRight, Loader2, RefreshCw, Search } from 'lucide-react';
-import { PLAN_FOUNDING_ID, PLAN_PROMO_ID } from '../../config/plans';
+import { PLAN_ENTERPRISE_ID, PLAN_FOUNDING_ID, PLAN_PROMO_ID } from '../../config/plans';
 import { listPlatformCompanyUsage, type CompanyUsageRow } from '../../services/firestoreCompany';
 
 type UsageFilter = 'all' | 'active' | 'quiet' | 'inactive' | 'creating' | 'no-trips';
@@ -54,6 +54,7 @@ function tripState(row: CompanyUsageRow) {
 function planLabel(planId?: string) {
   if (planId === PLAN_FOUNDING_ID) return 'Founding';
   if (planId === PLAN_PROMO_ID) return 'Promo';
+  if (planId === PLAN_ENTERPRISE_ID) return 'Enterprise';
   return 'Free';
 }
 

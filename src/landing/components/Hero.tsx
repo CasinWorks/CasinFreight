@@ -37,15 +37,15 @@ export const Hero: React.FC<HeroProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-black text-amber-950 text-base sm:text-lg">
-                    ₱899/mo for your first year — includes 5 trucks.
+                    Free Premium for Beta Testers through Dec 31, 2026.
                   </span>
                   <span className="hidden md:inline-block px-2.5 py-0.5 text-xs font-black bg-amber-400 text-amber-950 rounded-full">
-                    FOUNDING OFFER
+                    BETA
                   </span>
                 </div>
                 <p className="text-amber-900 text-sm font-medium flex items-center gap-1.5 mt-0.5">
                   <Clock className="w-4 h-4 text-amber-700" />
-                  Founding pricing ends Dec 31, 2026 • Cut-off is Dec 31, 2026, 11:59 PM PH time
+                  No payment. On January 1, 2027 your account becomes Founder, and you can choose Premium.
                 </p>
               </div>
             </div>
@@ -55,7 +55,7 @@ export const Hero: React.FC<HeroProps> = ({
               onClick={() => onOpenAuth('signup')}
               className="w-full sm:w-auto px-5 py-2.5 bg-amber-950 hover:bg-black text-white font-bold text-sm rounded-xl transition-all shadow-xs shrink-0 cursor-pointer text-center"
             >
-              Lock in ₱899 Rate →
+              Join the beta →
             </button>
           </div>
         </div>
@@ -80,9 +80,9 @@ export const Hero: React.FC<HeroProps> = ({
                 <>
                   Full fleet ops.{' '}
                   <span className="text-blue-600 underline decoration-blue-200 decoration-wavy decoration-2">
-                    One month free
+                    Free Premium
                   </span>
-                  , then Founding.
+                  {' '}for Beta Testers.
                 </>
               ) : (
                 <>
@@ -102,15 +102,15 @@ export const Hero: React.FC<HeroProps> = ({
             >
               {languageMode === 'en' ? (
                 <>
-                  Start free for 1 month: up to <strong>5 trucks, 100 team logins, 10 trips</strong>. ₱899/mo for your
-                  first year — includes 5 trucks. After year 1: ₱1,599/mo, and you keep your 5-truck allowance for
-                  life. +₱150/truck beyond 5.
+                  Join as a <strong>Beta Tester</strong> and use Premium free through{' '}
+                  <strong>December 31, 2026</strong>. No payment — we are not collecting fees yet. On{' '}
+                  <strong>January 1, 2027</strong> your account becomes a Founder account, and you can choose Premium.
                 </>
               ) : (
                 <>
-                  Subukan ng 1 buwan nang libre: hanggang <strong>5 trucks, 100 logins, 10 biyahe</strong>. ₱899/buwan
-                  sa unang taon. Pagkatapos ng Year 1: ₱1,599/buwan, panatilihin ang 5-truck allowance habambuhay.
-                  +₱150/truck lampas 5.
+                  Sumali bilang <strong>Beta Tester</strong>. Libre ang Premium hanggang{' '}
+                  <strong>December 31, 2026</strong>. Walang bayad. Sa <strong>January 1, 2027</strong> magiging
+                  Founder account, at puwede kang pumili ng Premium.
                 </>
               )}
             </p>
@@ -147,7 +147,7 @@ export const Hero: React.FC<HeroProps> = ({
                   isLarge ? 'py-5 px-8 text-xl' : 'py-4.5 px-7 text-lg'
                 }`}
               >
-                <span>{languageMode === 'en' ? 'Start Free 1-Month Trial' : 'Subukan Libre sa 1 Buwan'}</span>
+                <span>{languageMode === 'en' ? 'Join as a Beta Tester' : 'Sumali bilang Beta Tester'}</span>
                 <ArrowRight className="w-6 h-6 text-white" />
               </button>
 

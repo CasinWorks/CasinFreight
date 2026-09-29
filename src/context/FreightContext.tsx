@@ -78,6 +78,7 @@ import {
   saveUserProfile,
   saveMemberProfile,
   stampUserPresence,
+  recordPrivacyAcceptance,
   deleteOwnAccountRecords,
   removeCompanyMember,
   listCompanyUserProfiles,
@@ -99,7 +100,7 @@ import {
   type BackupRecord,
   type WorkspaceBackup,
 } from '../lib/workspaceBackup';
-import { PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, SAAS_PLANS, ALL_PLANS, addBillingMonths, getPlanLimits, getSaasPlans, hasReachedLimit, isFoundingPeriodExpired, isFreeTrialExpired, isUnlockedPlanId, makeFreeSubscription, makePromoSubscription, type AdminPlanGrant } from '../config/plans';
+import { PLAN_FOUNDING_ID, PLAN_FREE_ID, PLAN_PROMO_ID, PLAN_ENTERPRISE_ID, PLAN_PREMIUM_ID, SAAS_PLANS, ALL_PLANS, addBillingMonths, applyBetaLifecycle, canCollectSubscriptionPayments, getPlanLimits, getSaasPlans, hasReachedLimit, isBetaPremiumOpen, isFoundingPeriodExpired, isFreeTrialExpired, isUnlockedPlanId, makeBetaSubscription, makeFounderFromBeta, makeFreeSubscription, makePremiumFromFounder, makePromoSubscription, type AdminPlanGrant } from '../config/plans';
 import { MIN_SIGNUP_PASSWORD_LENGTH } from '../config/auth';
 import { paidTruckLimit, FOUNDING_INCLUDED_TRUCKS, FOUNDING_BASE_PHP, storageLimitBytes, storageLimitGb, withHostedRollover, hostedPricingForCheckout, hostedPricingFields, addCalendarYears, calculateSubscriptionPrice } from '../lib/subscriptionPrice';
 import { nextSlotId, TRIP_SLOT_PREFIX, TRUCK_SLOT_PREFIX } from '../lib/planSlots';
@@ -167,8 +168,9 @@ interface FreightContextType {
   isAuthLoading: boolean;
   isFirebaseReady: boolean;
   login: (email: string, password?: string, options?: { rememberMe?: boolean }) => Promise<{ success: boolean; error?: string; clientPortal?: boolean }>;
-  signup: (payload: { name: string; email: string; password: string; companyName: string }) => Promise<{ success: boolean; error?: string }>;
-  joinTeam: (payload: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string; clientPortal?: boolean }>;
+  signup: (payload: { name: string; email: string; password: string; companyName: string; privacyAcceptedAt?: string }) => Promise<{ success: boolean; error?: string }>;
+  joinTeam: (payload: { name: string; email: string; password: string; privacyAcceptedAt?: string }) => Promise<{ success: boolean; error?: string; clientPortal?: boolean }>;
+  acceptPrivacyNotice: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   switchUserAccount: (userId: string) => void;
@@ -397,6 +399,7 @@ interface FreightContextType {
   listPlatformSubscriptions: () => Promise<CompanyDocument[]>;
   setCompanyPlanByAdmin: (companyId: string, planId: string, grant?: AdminPlanGrant) => Promise<void>;
   resetCurrentPlanToFree: () => Promise<void>;
+  choosePremiumPlan: () => Promise<void>;
   deleteCompanyWorkspace: () => Promise<void>;
   captureWorkspaceBackup: () => WorkspaceBackup;
   restoreWorkspaceBackup: (backup: WorkspaceBackup) => Promise<void>;
@@ -771,8 +774,13 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, createdBy, ...companyFields } = companyDoc;
     companyCreatedByRef.current = createdBy || uid;
-    let nextSub = savedSub || makeFreeSubscription(uid, companyId);
+    let nextSub = savedSub || (isBetaPremiumOpen() ? makeBetaSubscription(uid, companyId) : makeFounderFromBeta(makeBetaSubscription(uid, companyId)));
     let persistSub = !savedSub;
+    const lived = applyBetaLifecycle(nextSub);
+    if (lived !== nextSub) {
+      nextSub = lived;
+      persistSub = true;
+    }
     const rolled = withHostedRollover(nextSub);
     if (rolled !== nextSub) {
       nextSub = rolled;
@@ -802,7 +810,13 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return acc;
       }, {})
     ).map((member) => (
-      member.id === uid ? { ...member, has_seen_tutorial: Boolean(member.has_seen_tutorial) || seenTutorial } : member
+      member.id === uid
+        ? {
+            ...member,
+            has_seen_tutorial: Boolean(member.has_seen_tutorial) || seenTutorial,
+            privacyAcceptedAt: member.privacyAcceptedAt || profile?.privacyAcceptedAt,
+          }
+        : member
     ));
     if (
       !uniqueMembers.some((member) => member.id === uid)
@@ -1426,6 +1440,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const setCompanyPlanByAdmin = async (companyId: string, planId: string, grant?: AdminPlanGrant) => {
+    if (planId === PLAN_ENTERPRISE_ID) {
+      throw new Error('Enterprise is a separate app. It is not turned on inside this workspace.');
+    }
     if ((planId === PLAN_FOUNDING_ID || planId === PLAN_PROMO_ID) && !isPlatformAdmin) {
       throw new Error('Only the platform admin can grant this plan.');
     }
@@ -1786,11 +1803,19 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const acceptPrivacyNotice = async () => {
+    if (!currentUserId) throw new Error('You are not signed in.');
+    const acceptedAt = new Date().toISOString();
+    await recordPrivacyAcceptance({ uid: currentUserId, companyId: company.id || undefined, acceptedAt });
+    setUsers((prev) => prev.map((user) => (user.id === currentUserId ? { ...user, privacyAcceptedAt: acceptedAt } : user)));
+  };
+
   const signup = async (payload: {
     name: string;
     email: string;
     password: string;
     companyName: string;
+    privacyAcceptedAt?: string;
   }): Promise<{ success: boolean; error?: string }> => {
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
@@ -1798,6 +1823,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (payload.password.length < MIN_SIGNUP_PASSWORD_LENGTH) {
       return { success: false, error: `Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.` };
+    }
+    if (!payload.privacyAcceptedAt) {
+      return { success: false, error: 'Accept the Privacy Notice and Terms before creating a company.' };
     }
 
     seedingRef.current = true;
@@ -1827,6 +1855,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           email,
           name: payload.name.trim(),
           invite,
+          privacyAcceptedAt: payload.privacyAcceptedAt,
         });
         return { success: true };
       }
@@ -1837,7 +1866,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         name: payload.name.trim(),
         companyName: payload.companyName.trim() || `${payload.name.trim()}'s Fleet`,
         role: { ...OWNER_RBAC_ROLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        subscription: makeFreeSubscription(uid, ''),
+        subscription: isBetaPremiumOpen()
+          ? makeBetaSubscription(uid, '')
+          : makeFounderFromBeta(makeBetaSubscription(uid, '')),
+        privacyAcceptedAt: payload.privacyAcceptedAt,
       });
       await saveCompanyDocument({
         ...createdCompany,
@@ -1855,12 +1887,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     name: string;
     email: string;
     password: string;
+    privacyAcceptedAt?: string;
   }): Promise<{ success: boolean; error?: string; clientPortal?: boolean }> => {
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
     if (payload.password.length < MIN_SIGNUP_PASSWORD_LENGTH) {
       return { success: false, error: `Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.` };
+    }
+    if (!payload.privacyAcceptedAt) {
+      return { success: false, error: 'Accept the Privacy Notice and Terms before joining.' };
     }
 
     seedingRef.current = true;
@@ -1936,7 +1972,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
       }
 
-      await joinCompanyFromInvite({ uid, email, name, invite });
+      await joinCompanyFromInvite({ uid, email, name, invite, privacyAcceptedAt: payload.privacyAcceptedAt });
       return { success: true };
     } catch (error) {
       return { success: false, error: mapAuthError(error) };
@@ -4481,10 +4517,31 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { checkoutUrl: data.checkoutUrl, checkoutSessionId: data.checkoutSessionId };
   };
 
+  const choosePremiumPlan = async () => {
+    if (!canManageCompanyBilling) {
+      throw new Error('Only the company Owner can change the plan.');
+    }
+    if (isBetaPremiumOpen()) {
+      throw new Error('Premium is already free for Beta Testers until December 31, 2026.');
+    }
+    if (subscription.plan_id === PLAN_PREMIUM_ID) return;
+    if (subscription.grant_source === 'paymongo') {
+      throw new Error('This workspace is already on a paid plan.');
+    }
+    if (!company.id) throw new Error('No company workspace is loaded.');
+    const nextSub = makePremiumFromFounder(subscription);
+    await saveCompanySubscription(company.id, nextSub, 'Growth');
+    setSubscription(nextSub);
+    setCompany((prev) => ({ ...prev, subscriptionTier: 'Growth' }));
+  };
+
   const subscribeToFoundingPlan = async (
     billingCycle: 'monthly' | 'annual' = 'monthly',
     truckCount = trucks.length
   ) => {
+    if (!canCollectSubscriptionPayments()) {
+      throw new Error('CasinFreight is not collecting payment yet. Beta Testers use the app free through December 31, 2026.');
+    }
     if (!canManageCompanyBilling) {
       throw new Error('Only the company Owner can manage the subscription.');
     }
@@ -4671,6 +4728,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       login,
       signup,
       joinTeam,
+      acceptPrivacyNotice,
       requestPasswordReset,
       logout,
       switchUserAccount,
@@ -4812,6 +4870,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       listPlatformSubscriptions,
       setCompanyPlanByAdmin,
       resetCurrentPlanToFree,
+      choosePremiumPlan,
       deleteCompanyWorkspace,
       captureWorkspaceBackup,
       restoreWorkspaceBackup,

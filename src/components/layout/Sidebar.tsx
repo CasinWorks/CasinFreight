@@ -30,6 +30,7 @@ import { bansInEffectNow } from '../../lib/truckBans';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
 import { CasinWorksCredit } from '../brand/CasinWorksCredit';
 import { WorkspaceBackupModal } from '../onboarding/WorkspaceBackupModal';
+import { LegalNoticeLinks } from '../legal/LegalPage';
 
 export type NavTab =
   | 'board'
@@ -431,6 +432,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 My profile
               </button>
               {accountItems.map(renderItem)}
+              <LegalNoticeLinks onOpen={onCloseMobileMenu} />
               {(currentUser.role === 'Owner' || currentUser.role.toLowerCase().includes('owner')) && (
                 <button
                   type="button"

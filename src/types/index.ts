@@ -23,6 +23,8 @@ export interface User {
   has_seen_tutorial?: boolean;
   lastLoginAt?: string;
   lastSeenAt?: string;
+  /** When this person accepted the CasinFreight Privacy Notice. */
+  privacyAcceptedAt?: string;
   /** Portal consignee login — not a Company & Team seat. */
   kind?: 'member' | 'client_portal';
   clientId?: string;
@@ -686,7 +688,7 @@ export interface Subscription {
   billing_cycle?: 'monthly' | 'annual';
   billed_truck_count?: number;
   last_billed_amount_php?: number;
-  grant_source?: 'paymongo' | 'promo';
+  grant_source?: 'paymongo' | 'promo' | 'internal' | 'beta' | 'founder';
   storage_addon_gb?: number;
   pricing_tier?: 'founding' | 'founding-rolled' | 'list';
   included_trucks?: number;
