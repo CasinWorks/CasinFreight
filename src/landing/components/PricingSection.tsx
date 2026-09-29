@@ -25,7 +25,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
         <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs sm:text-sm font-black">
             <Sparkles className="w-4 h-4 text-amber-600" />
-            <span>Special Founding Member Rate • Limited Until Dec 31, 2026</span>
+            <span>Founding Member Year 1 starts January 1, 2027</span>
           </div>
 
           <h2
@@ -108,22 +108,22 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 bg-blue-800 text-blue-200 rounded-lg text-xs font-black uppercase">
-                  Lifetime Value Lock
+                  Starts January 1, 2027
                 </span>
               </div>
 
               <div>
                 <h3 className="text-2xl font-black text-white">Founding Member</h3>
-                <p className="text-xs text-blue-200 mt-1">Includes 5 trucks allowance for your fleet</p>
+                <p className="text-xs text-blue-200 mt-1">Year 1 of this rate begins January 1, 2027. Free during the beta.</p>
               </div>
 
               <div>
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-4xl sm:text-5xl font-black font-mono text-emerald-400">₱899</span>
-                  <span className="text-blue-200 font-bold text-sm">/ month for year 1</span>
+                  <span className="text-blue-200 font-bold text-sm">/ month from January 1, 2027</span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Standard renewal after Year 1 is ₱1,599/mo (includes 5 trucks for life). +₱150/truck beyond 5.
+                  Year 1 runs through December 31, 2027. After that, ₱1,599/mo (includes 5 trucks for life). +₱150/truck beyond 5.
                 </p>
               </div>
 
@@ -238,7 +238,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({
         {/* Founding Countdown Callout */}
         <div className="mt-8 max-w-2xl mx-auto text-center bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-center gap-2 text-xs sm:text-sm text-slate-700 font-medium">
           <Clock className="w-4 h-4 text-amber-600" />
-          <span>Founding offer cutoff is Dec 31, 2026, 11:59 PM PH time. Rates increase after limit is reached.</span>
+          <span>Free Premium through December 31, 2026. Founding Member Year 1 at ₱899/mo starts January 1, 2027. No payment during the beta.</span>
         </div>
       </div>
     </section>

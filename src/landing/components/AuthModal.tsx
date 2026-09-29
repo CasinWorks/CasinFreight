@@ -204,7 +204,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {mode === 'signup' && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2.5 text-amber-950 text-xs font-bold">
               <span className="text-base">🎁</span>
-              <span>Includes 5 Trucks Free for 30 Days • Founding Rate locked for Year 1</span>
+              <span>Free Premium through December 31, 2026. Founding Member Year 1 (₱899/mo, 5 trucks) starts January 1, 2027.</span>
             </div>
           )}
 

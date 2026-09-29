@@ -93,17 +93,17 @@ export const Footer: React.FC<FooterProps> = ({ languageMode, onOpenAuth, onOpen
           <div className="space-y-3 text-left">
             <h4 className="text-sm font-extrabold uppercase tracking-wider text-white">Founding Pricing</h4>
             <ul className="space-y-2 text-sm text-slate-400">
-              <li className="text-white font-bold">₱899/mo Year 1 Lock</li>
+              <li className="text-white font-bold">₱899/mo from January 1, 2027</li>
               <li>Includes 5 Trucks</li>
-              <li>30-Day Free Trial</li>
-              <li>Cut-off: Dec 31, 2026</li>
+              <li>Free Premium until then</li>
+              <li>Year 1 through December 31, 2027</li>
               <li>
                 <button
                   type="button"
                   onClick={() => onOpenAuth('signup')}
                   className="text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
                 >
-                  Claim 1 Month Free →
+                  Join the beta →
                 </button>
               </li>
             </ul>
