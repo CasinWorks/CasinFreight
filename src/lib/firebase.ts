@@ -10,7 +10,6 @@ import {
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore';
 
@@ -73,10 +72,13 @@ export async function setAuthRememberMe(remember: boolean): Promise<void> {
 export function getFirebaseDb(): Firestore {
   if (!db) {
     try {
-      // IndexedDB cache: a return visit paints from this browser instead of
-      // downloading the whole office again before the desk opens.
+      // Auto-detect long polling opens dozens of empty "channel" requests and
+      // can sit there for most of a minute before any trip data moves.
+      // One streaming connection is enough. The on-disk cache is for this tab
+      // only, so a second tab does not fight this one for the connection.
       db = initializeFirestore(getFirebaseApp(), {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+        experimentalAutoDetectLongPolling: false,
+        localCache: persistentLocalCache(),
       });
     } catch (error) {
       console.warn('Firestore offline cache unavailable.', error);
