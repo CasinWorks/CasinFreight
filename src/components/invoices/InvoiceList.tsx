@@ -29,7 +29,9 @@ import { PaymentReconciliationModal } from './PaymentReconciliationModal';
 import { InvoiceRetractionModal } from './InvoiceRetractionModal';
 import { FeatureHowTo } from '../help/FeatureHowTo';
 import { InvoiceNotOfficialNotice } from './InvoiceNotOfficialNotice';
+import { StatementPanel } from './StatementPanel';
 import { VAT_EWT_ONE_LINER } from '../../content/taxCopy';
+import { statementForTrip } from '../../lib/statementOfAccount';
 
 interface InvoiceListProps {
   onSelectInvoice: (invoiceId: string) => void;
@@ -43,7 +45,8 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
   const { 
     invoices, 
     clients, 
-    trips, 
+    trips,
+    statements,
     updateInvoiceStatus, 
     createInvoiceForTrip,
     currentUser
@@ -51,6 +54,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
 
   const isOwner = currentUser.role === 'Owner';
 
+  const [section, setSection] = useState<'bills' | 'statements'>('bills');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | InvoiceStatus | 'Locked'>('ALL');
   const [selectedInvoiceForReconciliation, setSelectedInvoiceForReconciliation] = useState<Invoice | null>(null);
@@ -137,6 +141,22 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             <div className="mt-3 max-w-xl">
               <FeatureHowTo feature="invoices" />
             </div>
+            <div className="mt-3 inline-flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setSection('bills')}
+                className={`px-3 py-1 rounded font-semibold ${section === 'bills' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-600'}`}
+              >
+                Trip bills
+              </button>
+              <button
+                type="button"
+                onClick={() => setSection('statements')}
+                className={`px-3 py-1 rounded font-semibold ${section === 'statements' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-600'}`}
+              >
+                Statements
+              </button>
+            </div>
           </div>
 
           {/* Quick Metrics Bar */}
@@ -170,6 +190,8 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
           </div>
         </div>
 
+        {section === 'bills' && (
+        <>
         {/* Search & Filter Toolbar */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
@@ -201,8 +223,19 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             ))}
           </div>
         </div>
+        </>
+        )}
       </div>
 
+      {section === 'statements' ? (
+        <div className="p-4 md:p-6">
+          <StatementPanel
+            onOpenInvoice={onSelectInvoice}
+            onOpenTrip={onSelectTrip}
+          />
+        </div>
+      ) : (
+      <>
       {/* Main Content Area */}
       <div className="p-4 md:p-6 space-y-6">
         
@@ -310,6 +343,9 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
                       <td className="py-3.5 px-4">
                         <div className="font-mono text-slate-800">{trip?.tripNumber || '—'}</div>
                         <div className="text-[10px] text-slate-400 font-mono">{trip?.waybillNumber}</div>
+                        {trip && statementForTrip(statements, trip.id) && (
+                          <div className="text-[10px] text-blue-700 font-mono">{statementForTrip(statements, trip.id)?.statementNumber}</div>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-slate-600">
                         <div>{inv.issueDate}</div>
@@ -436,6 +472,8 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
           isOpen={!!selectedInvoiceForRetraction}
           onClose={() => setSelectedInvoiceForRetraction(null)}
         />
+      )}
+      </>
       )}
     </div>
   );

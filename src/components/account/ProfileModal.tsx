@@ -3,6 +3,7 @@ import { AlertTriangle, Camera, Loader2, Trash2, User, X } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { closeIfBackdrop } from '../../lib/modal';
 import { LegalNoticeLinks } from '../legal/LegalPage';
+import { TextSizeControl } from './TextSizeControl';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -81,7 +82,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, onO
         <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900">My profile</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Your photo and basic details. Email and role stay as they are.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Your photo, text size, and basic details. Email and role stay as they are.</p>
           </div>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
             <X className="w-5 h-5" />
@@ -89,6 +90,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, onO
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto text-xs">
+          <TextSizeControl />
           <div className="flex items-center gap-4">
             <button
               type="button"

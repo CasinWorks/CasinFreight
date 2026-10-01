@@ -454,6 +454,12 @@ service cloud.firestore {
         allow delete: if isCompanyOwner(companyId);
       }
 
+      match /statements/{docId} {
+        allow read: if canAccessCompany(companyId);
+        allow create, update: if hasPerm(companyId, 'invoices.create') || hasPerm(companyId, 'invoices.retract');
+        allow delete: if isCompanyOwner(companyId);
+      }
+
       match /journalEntries/{docId} {
         allow read: if canAccessCompany(companyId);
         allow write: if hasPerm(companyId, 'ledger.post_jv');

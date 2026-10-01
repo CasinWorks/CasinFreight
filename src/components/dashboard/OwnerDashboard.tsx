@@ -30,6 +30,8 @@ import {
   openContainerBookings,
 } from '../../lib/containerTracking';
 import { ContainerCountdownBadge } from '../trips/ContainerCountdownBadge';
+import { crewWeekCash, crewWeekRows, formatPhp, manilaWeek, weekLabel } from '../../lib/crewWeek';
+import { manilaDateKey } from '../../lib/dispatchPapers';
 
 export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; onSelectInvoice: (invoiceId: string) => void }> = ({
   onSelectTrip,
@@ -64,6 +66,10 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
     { current: 0, standard: 0, overdue: 0 }
   );
   const totalReceivables = agingBuckets.current + agingBuckets.standard + agingBuckets.overdue;
+
+  const crewWeek = manilaWeek(manilaDateKey());
+  const crewRows = crewWeekRows(drivers, trips, crewWeek.start, crewWeek.end);
+  const crewCash = crewWeekCash(crewRows, drivers, crewWeek.start);
 
   const activeTrucks = trucks.filter(t => t.status === 'On Trip' || t.status === 'Loading').length;
   const fleetUtilizationRate = trucks.length > 0 ? Math.round((activeTrucks / trucks.length) * 100) : 0;
@@ -147,6 +153,20 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
       </div>
 
       <div className="p-4 md:p-6 space-y-6">
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold text-slate-600 flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-600" />
+              <span>Crew pay · {weekLabel(crewWeek.start, crewWeek.end)}</span>
+            </div>
+            <div className="text-2xl font-black font-mono text-slate-900 mt-1">{formatPhp(crewCash.stillOwedPhp)}</div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Still to hand out. {formatPhp(crewCash.paidPhp)} is already marked paid.
+              Mark each person on Drivers &amp; Helpers after you give them the cash.
+            </p>
+          </div>
+        </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Active Shipments */}

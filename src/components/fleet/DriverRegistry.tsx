@@ -18,7 +18,10 @@ import { useFreight } from '../../context/FreightContext';
 import { CrewRole, Driver, DriverStatus } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
 import { isHelperCrew } from '../../lib/crew';
+import { paperState } from '../../lib/dispatchPapers';
 import { FeatureHowTo } from '../help/FeatureHowTo';
+import { CrewWeekBoard } from './CrewWeekBoard';
+import { formatPhp } from '../../lib/crewWeek';
 
 export const DriverRegistry: React.FC = () => {
   const { drivers, trucks, addDriver, updateDriver, deleteDriver, approveDriver, canAccess } = useFreight();
@@ -38,6 +41,8 @@ export const DriverRegistry: React.FC = () => {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<DriverStatus>('Available');
   const [emergencyContact, setEmergencyContact] = useState('');
+  const [tripPayPhp, setTripPayPhp] = useState('');
+  const [foodAllowancePhp, setFoodAllowancePhp] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | CrewRole>('ALL');
 
   const handleOpenAdd = () => {
@@ -52,6 +57,8 @@ export const DriverRegistry: React.FC = () => {
     setEmail('');
     setStatus('Available');
     setEmergencyContact('');
+    setTripPayPhp('');
+    setFoodAllowancePhp('');
     setShowModal(true);
   };
 
@@ -67,6 +74,8 @@ export const DriverRegistry: React.FC = () => {
     setEmail(drv.email || '');
     setStatus(drv.status);
     setEmergencyContact(drv.emergencyContact);
+    setTripPayPhp(drv.tripPayPhp ? String(drv.tripPayPhp) : '');
+    setFoodAllowancePhp(drv.foodAllowancePhp ? String(drv.foodAllowancePhp) : '');
     setShowModal(true);
   };
 
@@ -92,6 +101,8 @@ export const DriverRegistry: React.FC = () => {
       email: email.trim() || undefined,
       status,
       emergencyContact,
+      tripPayPhp: Number(tripPayPhp) > 0 ? Number(tripPayPhp) : undefined,
+      foodAllowancePhp: Number(foodAllowancePhp) > 0 ? Number(foodAllowancePhp) : undefined,
     };
 
     if (editingDriverId) {
@@ -145,7 +156,13 @@ export const DriverRegistry: React.FC = () => {
             </button>
           )}
         </div>
+      </div>
 
+      <div className="p-4 md:px-6 md:pt-4">
+        <CrewWeekBoard />
+      </div>
+
+      <div className="px-4 md:px-6 pb-2 bg-white border-b border-slate-200">
         {/* Search */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <div className="relative max-w-sm flex-1 min-w-[200px]">
@@ -257,10 +274,22 @@ export const DriverRegistry: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between text-slate-400 text-[10px]">
                       <span>Expiry Date:</span>
-                      <span className="font-mono text-slate-600">{drv.licenseExpiry}</span>
+                      <span className={`font-mono ${paperState(drv.licenseExpiry) === 'ok' ? 'text-slate-600' : 'text-rose-700 font-bold'}`}>
+                        {drv.licenseExpiry || 'Not set'}
+                        {paperState(drv.licenseExpiry) === 'ok' ? '' : ' — cannot dispatch'}
+                      </span>
                     </div>
                   </>
                 )}
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-700 bg-slate-50 p-2 rounded border border-slate-200">
+                <span>Rate per trip</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {(drv.tripPayPhp || drv.foodAllowancePhp)
+                    ? `${formatPhp(drv.tripPayPhp || 0)} + ${formatPhp(drv.foodAllowancePhp || 0)} food`
+                    : 'Not set'}
+                </span>
               </div>
 
               {/* Assigned Truck */}
@@ -452,6 +481,34 @@ export const DriverRegistry: React.FC = () => {
                   </select>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Trip pay (₱)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={tripPayPhp}
+                    onChange={(e) => setTripPayPhp(e.target.value)}
+                    placeholder="800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Food allowance (₱)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={foodAllowancePhp}
+                    onChange={(e) => setFoodAllowancePhp(e.target.value)}
+                    placeholder="150"
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500">Per delivered trip. The week total is this rate times their trips, unless that trip has its own amount.</p>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Emergency Contact & Relationship</label>

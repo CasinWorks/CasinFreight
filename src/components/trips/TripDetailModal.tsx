@@ -53,6 +53,9 @@ import { FuelLogModal } from '../fleet/FuelLogModal';
 import { closeIfBackdrop } from '../../lib/modal';
 import { FeatureHowTo } from '../help/FeatureHowTo';
 import { isContainerBooking } from '../../lib/containerTracking';
+import { dispatchBlockReason } from '../../lib/dispatchPapers';
+import { CargoClaimPanel } from './CargoClaimPanel';
+import { CrewPayPanel } from './CrewPayPanel';
 import { ContainerCountdownBadge } from './ContainerCountdownBadge';
 import { ContainerTrackingPanel } from './ContainerTrackingPanel';
 
@@ -108,7 +111,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   const [receiverRole, setReceiverRole] = useState('');
   const [receiverIdNumber, setReceiverIdNumber] = useState('');
   const [podNotes, setPodNotes] = useState('Received all items in clean, undamaged condition. Seals intact.');
-  const [conditionStatus, setConditionStatus] = useState<'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy'>('Good Condition');
+  const [conditionStatus, setConditionStatus] = useState<POD['conditionStatus']>('Good Condition');
   const [podPhotos, setPodPhotos] = useState<string[]>([]);
   const [isUploadingPodPhoto, setIsUploadingPodPhoto] = useState(false);
   const podFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -989,6 +992,11 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
           <div className="lg:col-span-7 flex flex-col gap-5">
 
             <TruckBanAlert hits={banHits} />
+            {(trip.status === 'Pending' || trip.status === 'Loaded') && dispatchBlockReason(drv) && (
+              <div className="text-[11px] text-rose-900 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 leading-relaxed">
+                This truck cannot leave yet. {dispatchBlockReason(drv)}
+              </div>
+            )}
             
             {/* Route & Cargo Card */}
             <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3">
@@ -1384,6 +1392,9 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               </button>
             </div>
 
+            <CargoClaimPanel trip={trip} />
+            <CrewPayPanel trip={trip} />
+
             {/* Proof of Delivery (POD) Interactive Section */}
             <div id="trip-pod" className={`${trip.status === 'Inbound' && !trip.pod ? 'order-first sm:order-none' : ''} bg-slate-50/60 border border-slate-200 rounded-xl p-4 space-y-3 scroll-mt-4`}>
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -1581,6 +1592,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                       <option value="Good Condition">Good Condition (No Damaged Boxes/Pallets)</option>
                       <option value="Partial Damage">Partial Packaging Damage (Logged)</option>
                       <option value="Packaging Discrepancy">Packaging Discrepancy</option>
+                      <option value="Refused">Customer refused the load</option>
                     </select>
                   </div>
 

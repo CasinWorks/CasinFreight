@@ -32,6 +32,7 @@ export type WorkspaceCollection =
   | 'truckBans'
   | 'trips'
   | 'invoices'
+  | 'statements'
   | 'fuelLogs'
   | 'journalEntries'
   | 'notifications'
@@ -767,6 +768,7 @@ const WORKSPACE_COLLECTIONS: WorkspaceCollection[] = [
   'truckBans',
   'trips',
   'invoices',
+  'statements',
   'fuelLogs',
   'journalEntries',
   'notifications',

@@ -15,6 +15,7 @@ import { formatPhDate } from '../../config/plans';
 import { calculateSubscriptionPrice, formatPhp, hostedPlanName, hostedPricingForCheckout } from '../../lib/subscriptionPrice';
 import { useTutorial } from '../tutorial';
 import { CasinFreightLogo } from '../brand/CasinFreightLogo';
+import { TextSizeControl } from '../account/TextSizeControl';
 
 interface NavbarProps {
   onOpenNewTrip: () => void;
@@ -222,7 +223,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="fixed inset-0 z-40" 
                 onClick={() => setIsUserMenuOpen(false)}
               />
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2 text-xs animate-in zoom-in-95 duration-150">
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2 text-xs animate-in zoom-in-95 duration-150">
                 {/* Header User Details */}
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
                   <div className="font-bold text-slate-900 text-xs">{currentUser.name}</div>
@@ -237,7 +238,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
 
-                <div className="py-2">
+                <div className="py-2 space-y-2">
+                  <TextSizeControl />
                   <button
                     type="button"
                     onClick={() => {

@@ -31,6 +31,13 @@
   }
 }
 
+/* Text size is a per-browser zoom so 10px labels grow too. Printing stays at normal size. */
+@media print {
+  html {
+    zoom: 1 !important;
+  }
+}
+
 /* Keep form fields at least 16px on phones so iOS does not zoom, and leave room for the home indicator. */
 @media (max-width: 767px) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),

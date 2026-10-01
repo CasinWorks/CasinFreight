@@ -72,7 +72,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
   const [receiverIdNumber, setReceiverIdNumber] = useState(
     trip.pod?.receiverIdNumber || ''
   );
-  const [conditionStatus, setConditionStatus] = useState<'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy'>(
+  const [conditionStatus, setConditionStatus] = useState<POD['conditionStatus']>(
     trip.pod?.conditionStatus || 'Good Condition'
   );
   const [podNotes, setPodNotes] = useState(
@@ -582,6 +582,7 @@ export const StatusPrerequisiteModal: React.FC<StatusPrerequisiteModalProps> = (
                     <option value="Good Condition">✓ Good Condition (Seals OK)</option>
                     <option value="Partial Damage">⚠️ Partial Damage Noted</option>
                     <option value="Packaging Discrepancy">📦 Packaging Discrepancy</option>
+                    <option value="Refused">Customer refused the load</option>
                   </select>
                 </div>
               </div>

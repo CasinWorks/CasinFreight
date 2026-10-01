@@ -29,6 +29,7 @@ import {
   LiveTracking, 
   Invoice, 
   InvoiceStatus,
+  StatementOfAccount,
   InvoiceRetractionRequest,
   RetractionReasonCategory,
   ProofOfPayment,
@@ -111,6 +112,9 @@ import { hasSignedInk, isStatusRetraction, missingSignaturesForStatus } from '..
 import { shrinkSignatureDataUrl } from '../lib/podSignoff';
 import { timelineRetractionFromRequest } from '../lib/tripAudit';
 import { isHelperCrew, isDriverSeatRole } from '../lib/crew';
+import { dispatchBlockReason } from '../lib/dispatchPapers';
+import { debitMemoLine, invoiceBlockReason, openClaimForCondition } from '../lib/cargoClaim';
+import { buildStatement, nextStatementNumber, statementDraft } from '../lib/statementOfAccount';
 
 function isFieldDriverRole(role: string): boolean {
   return isDriverSeatRole(role);
@@ -257,6 +261,10 @@ interface FreightContextType {
   approveInvoiceRetraction: (id: string, ownerReviewNote: string, action: 'revert_to_draft' | 'void_invoice') => void;
   rejectInvoiceRetraction: (id: string, ownerReviewNote: string) => void;
   getInvoiceByTripId: (tripId: string) => Invoice | undefined;
+
+  statements: StatementOfAccount[];
+  createStatement: (clientId: string, period: string) => StatementOfAccount;
+  removeStatement: (id: string) => void;
 
   // Fuel Tracking
   fuelLogs: FuelLog[];
@@ -524,6 +532,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [liveTracking, setLiveTracking] = useState<LiveTracking[]>([]);
   const [fieldEvents, setFieldEvents] = useState<FieldEvent[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [statements, setStatements] = useState<StatementOfAccount[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
   const [chartOfAccounts, setChartOfAccounts] = useState<ChartOfAccount[]>(initialChartOfAccounts);
@@ -565,6 +574,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLiveTracking([]);
     setFieldEvents([]);
     setInvoices([]);
+    setStatements([]);
     setNotifications([]);
     setFuelLogs([]);
     setChartOfAccounts(initialChartOfAccounts);
@@ -772,6 +782,13 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         : []
       : await loadCollection<Trip>(companyId, 'trips');
 
+    let loadedStatements: StatementOfAccount[] = [];
+    try {
+      loadedStatements = await loadCollection<StatementOfAccount>(companyId, 'statements');
+    } catch (error) {
+      console.warn('Statements of account could not be loaded. Publish the latest Firestore rules, then refresh.', error);
+    }
+
     const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, createdBy, ...companyFields } = companyDoc;
     companyCreatedByRef.current = createdBy || uid;
     let nextSub = savedSub || (isBetaPremiumOpen() ? makeBetaSubscription(uid, companyId) : makeFounderFromBeta(makeBetaSubscription(uid, companyId)));
@@ -878,6 +895,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     snapshotCollection('truckBans', loadedTruckBans);
     snapshotCollection('trips', loadedTrips);
     snapshotCollection('invoices', loadedInvoices);
+    snapshotCollection('statements', loadedStatements);
     snapshotCollection('fuelLogs', loadedFuelLogs);
     snapshotCollection('journalEntries', loadedJournal);
     snapshotCollection('notifications', loadedNotifications);
@@ -897,6 +915,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTruckBans(loadedTruckBans);
     setTrips(loadedTrips);
     setInvoices(loadedInvoices);
+    setStatements(loadedStatements);
     setFuelLogs(loadedFuelLogs);
     setJournalEntries(loadedJournal);
     setNotifications(loadedNotifications);
@@ -1157,6 +1176,12 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (!persistReadyRef.current || !company.id) return;
+    const timer = setTimeout(() => persistWorkspaceCollection('statements', statements), 500);
+    return () => clearTimeout(timer);
+  }, [statements, company.id]);
+
+  useEffect(() => {
+    if (!persistReadyRef.current || !company.id) return;
     const timer = setTimeout(() => persistWorkspaceCollection('fuelLogs', fuelLogs), 500);
     return () => clearTimeout(timer);
   }, [fuelLogs, company.id]);
@@ -1205,6 +1230,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       truckBans: truckBans.map((item) => stripSecrets(item as unknown as BackupRecord)),
       trips: trips.map((item) => stripSecrets(item as unknown as BackupRecord)),
       invoices: invoices.map((item) => stripSecrets(item as unknown as BackupRecord)),
+      statements: statements.map((item) => stripSecrets(item as unknown as BackupRecord)),
       fuelLogs: fuelLogs.map((item) => stripSecrets(item as unknown as BackupRecord)),
       journalEntries: journalEntries.map((item) => stripSecrets(item as unknown as BackupRecord)),
       roles: roles.map((item) => stripSecrets(item as unknown as BackupRecord)),
@@ -2652,6 +2678,20 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
             window.alert(blocked);
             return trip;
           }
+          if (newStatus === 'In Transit') {
+            const papers = dispatchBlockReason(drivers.find((d) => d.id === merged.driverId));
+            if (papers) {
+              window.alert(papers);
+              return trip;
+            }
+          }
+          if (newStatus === 'Invoiced') {
+            const claimBlock = invoiceBlockReason(merged);
+            if (claimBlock) {
+              window.alert(claimBlock);
+              return trip;
+            }
+          }
         }
         tripsDirtyRef.current = true;
 
@@ -2712,8 +2752,19 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     total: acc.amountPhp,
                     isAccessorial: true,
                     accessorialType: acc.type,
-                  }))
+                  })),
                 ];
+                const debit = debitMemoLine(merged);
+                if (debit) {
+                  lineItems.push({
+                    id: `li-${Date.now()}-debit`,
+                    description: debit.description,
+                    qty: 1,
+                    unitPrice: debit.amountPhp,
+                    total: debit.amountPhp,
+                    isAccessorial: true,
+                  });
+                }
 
                 const subtotalPhp = lineItems.reduce((sum, item) => sum + item.total, 0);
                 const vatPercent = 12;
@@ -3067,6 +3118,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
           status: 'Delivered',
           actualDelivery: new Date().toISOString(),
           pod,
+          cargoClaim: openClaimForCondition(trip, pod.conditionStatus, `${currentUser.name} (${currentUser.role})`),
           timeline: [...trip.timeline, newEvent],
         };
       }
@@ -3341,6 +3393,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       pod,
       status: 'Delivered',
       actualDelivery: trip.actualDelivery || signedAt,
+      cargoClaim: openClaimForCondition(trip, conditionStatus, `${currentUser.name} (Driver)`),
       timeline,
     };
 
@@ -3386,6 +3439,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const trk = trucks.find(t => t.id === trip.truckId);
     const existing = invoices.find(inv => inv.tripId === tripId);
     if (existing) return existing;
+    const claimBlock = invoiceBlockReason(trip);
+    if (claimBlock) throw new Error(claimBlock);
 
     const lineItems = [
       {
@@ -3403,8 +3458,19 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         total: acc.amountPhp,
         isAccessorial: true,
         accessorialType: acc.type,
-      }))
+      })),
     ];
+    const debit = debitMemoLine(trip);
+    if (debit) {
+      lineItems.push({
+        id: `li-${Date.now()}-debit`,
+        description: debit.description,
+        qty: 1,
+        unitPrice: debit.amountPhp,
+        total: debit.amountPhp,
+        isAccessorial: true,
+      });
+    }
 
     const subtotalPhp = lineItems.reduce((sum, item) => sum + item.total, 0);
     const vatPercent = 12;
@@ -3437,6 +3503,35 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setInvoices(prev => [newInvoice, ...prev]);
     return newInvoice;
+  };
+
+  const createStatement = (clientId: string, period: string): StatementOfAccount => {
+    if (!/^\d{4}-\d{2}$/.test(period)) {
+      throw new Error('Pick a month for the statement.');
+    }
+    if (!clients.some((client) => client.id === clientId)) {
+      throw new Error('Pick a shipper first.');
+    }
+    const draft = statementDraft(trips, statements, clientId, period);
+    if (!draft.included.length) {
+      throw new Error('No delivered trips are waiting for a statement in that month.');
+    }
+    const statement = buildStatement({
+      id: `soa-${Date.now()}`,
+      companyId: company.id,
+      clientId,
+      period,
+      statementNumber: nextStatementNumber(statements, period),
+      trips: draft.included,
+      invoices,
+      createdBy: currentUser.name || currentUser.email || 'Billing',
+    });
+    setStatements((prev) => [statement, ...prev]);
+    return statement;
+  };
+
+  const removeStatement = (id: string) => {
+    setStatements((prev) => prev.filter((statement) => statement.id !== id));
   };
 
   const updateInvoice = (id: string, updates: Partial<Invoice>) => {
@@ -4795,6 +4890,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       approveInvoiceRetraction,
       rejectInvoiceRetraction,
       getInvoiceByTripId,
+      statements,
+      createStatement,
+      removeStatement,
       fuelLogs,
       addFuelLog,
       updateFuelLog,

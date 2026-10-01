@@ -15,10 +15,11 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { driverNextStepForTrip } from '../../lib/driverNextStep';
 import { hasSignedInk } from '../../lib/stageGates';
-import { Trip } from '../../types';
+import { POD, Trip } from '../../types';
 import { DeliveryNoteModal } from '../trips/DeliveryNoteModal';
 import { SignaturePad, SignaturePadHandle } from '../trips/SignaturePad';
 import { LegalNoticeLinks } from '../legal/LegalPage';
+import { TextSizeControl } from '../account/TextSizeControl';
 
 function StatusPill({ status }: { status: string }) {
   const color =
@@ -120,6 +121,7 @@ export const DriverFieldApp: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [dnOpen, setDnOpen] = useState(false);
   const [warehouseName, setWarehouseName] = useState('');
+  const [warehouseCondition, setWarehouseCondition] = useState<POD['conditionStatus']>('Good Condition');
   const [warehouseRole, setWarehouseRole] = useState('Warehouse receiving officer');
   const driverPadRef = useRef<SignaturePadHandle>(null);
   const warehousePadRef = useRef<SignaturePadHandle>(null);
@@ -206,8 +208,10 @@ export const DriverFieldApp: React.FC = () => {
           message={message}
           warehouseName={warehouseName}
           warehouseRole={warehouseRole}
+          warehouseCondition={warehouseCondition}
           setWarehouseName={setWarehouseName}
           setWarehouseRole={setWarehouseRole}
+          setWarehouseCondition={setWarehouseCondition}
           driverPadRef={driverPadRef}
           warehousePadRef={warehousePadRef}
           sealInputRef={sealInputRef}
@@ -277,6 +281,7 @@ export const DriverFieldApp: React.FC = () => {
                 signatureDataUrl: ink,
                 receiverName: warehouseName,
                 receiverRole: warehouseRole,
+                conditionStatus: warehouseCondition,
               });
             }, 'Warehouse e-POD saved. Trip is Delivered.')
           }
@@ -316,6 +321,10 @@ export const DriverFieldApp: React.FC = () => {
           Sign out
         </button>
       </header>
+
+      <div className="px-4 pt-3">
+        <TextSizeControl />
+      </div>
 
       {message && (
         <div className="mx-4 mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
@@ -372,8 +381,10 @@ function DriverTripDetail({
   message,
   warehouseName,
   warehouseRole,
+  warehouseCondition,
   setWarehouseName,
   setWarehouseRole,
+  setWarehouseCondition,
   driverPadRef,
   warehousePadRef,
   sealInputRef,
@@ -393,8 +404,10 @@ function DriverTripDetail({
   message: string | null;
   warehouseName: string;
   warehouseRole: string;
+  warehouseCondition: POD['conditionStatus'];
   setWarehouseName: (value: string) => void;
   setWarehouseRole: (value: string) => void;
+  setWarehouseCondition: (value: POD['conditionStatus']) => void;
   driverPadRef: React.RefObject<SignaturePadHandle | null>;
   warehousePadRef: React.RefObject<SignaturePadHandle | null>;
   sealInputRef: React.RefObject<HTMLInputElement | null>;
@@ -522,6 +535,7 @@ function DriverTripDetail({
         className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3"
         style={{ paddingBottom: stickyAction ? 'calc(5.5rem + env(safe-area-inset-bottom))' : 'max(1.25rem, env(safe-area-inset-bottom))' }}
       >
+        <TextSizeControl />
         {message && (
           <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 font-medium">
             {message}
@@ -648,6 +662,19 @@ function DriverTripDetail({
                   enterKeyHint="next"
                   className="mt-1.5 w-full min-h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 normal-case"
                 />
+              </label>
+              <label className="block text-xs font-bold text-slate-500 uppercase">
+                Cargo on arrival
+                <select
+                  value={warehouseCondition}
+                  onChange={(e) => setWarehouseCondition(e.target.value as POD['conditionStatus'])}
+                  className="mt-1.5 w-full min-h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 normal-case"
+                >
+                  <option value="Good Condition">Good condition</option>
+                  <option value="Partial Damage">Damage</option>
+                  <option value="Packaging Discrepancy">Shortage / discrepancy</option>
+                  <option value="Refused">Customer refused the load</option>
+                </select>
               </label>
               <label className="block text-xs font-bold text-slate-500 uppercase">
                 Role / title *

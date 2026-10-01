@@ -173,6 +173,15 @@ export interface TruckFuelSummary {
   targetKmPerLiter: number;
 }
 
+/** Cash already given for one Monday–Sunday crew week. Not a ledger entry. */
+export interface CrewWeekPayment {
+  weekStart: string;
+  paidAt: string;
+  paidBy: string;
+  owedPhp: number;
+  trips: number;
+}
+
 export type DriverStatus = 'Available' | 'On Duty' | 'Off Duty' | 'Leave';
 export type CrewRole = 'driver' | 'helper';
 
@@ -194,6 +203,12 @@ export interface Driver {
   approvalStatus?: 'Approved' | 'Pending' | 'Requires Review';
   clearanceNote?: string;
   emergencyContact: string;
+  /** Pesos per delivered trip. The weekly total uses this unless the trip has its own amount. */
+  tripPayPhp?: number;
+  /** Food allowance in pesos per delivered trip. */
+  foodAllowancePhp?: number;
+  /** Weeks already handed to this person. */
+  weekPayments?: CrewWeekPayment[];
   totalTripsCompleted: number;
   rating: number; // 1 to 5
 }
@@ -418,7 +433,30 @@ export interface POD {
   signatureDataUrl?: string;
   photoUrls: string[];
   notes?: string;
-  conditionStatus: 'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy';
+  conditionStatus: 'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy' | 'Refused';
+}
+
+export type CargoClaimKind = 'shortage' | 'damage' | 'refusal';
+export type CargoClaimStatus = 'open' | 'debit_memo' | 'waived';
+
+export interface CargoClaim {
+  id: string;
+  kind: CargoClaimKind;
+  status: CargoClaimStatus;
+  note?: string;
+  debitMemoPhp?: number;
+  loggedAt: string;
+  loggedBy: string;
+}
+
+/** Amount this trip owes the crew. When blank, the weekly total uses each person’s rate. */
+export interface TripCrewPay {
+  driverTripPayPhp: number;
+  driverFoodPhp: number;
+  helperTripPayPhp: number;
+  helperFoodPhp: number;
+  recordedAt?: string;
+  recordedBy?: string;
 }
 
 export interface DeliveryPrerequisites {
@@ -433,7 +471,7 @@ export interface DeliveryPrerequisites {
   podReceiverRole?: string;
   podReceiverIdNumber?: string;
   podSignedAt?: string;
-  podCondition?: 'Good Condition' | 'Partial Damage' | 'Packaging Discrepancy';
+  podCondition?: POD['conditionStatus'];
   billingAuditApproved?: boolean;
 }
 
@@ -511,6 +549,8 @@ export interface Trip {
    */
   moveType?: MoveType;
   container?: ContainerTracking;
+  cargoClaim?: CargoClaim;
+  crewPay?: TripCrewPay;
 }
 
 export type FieldEventKind =
@@ -641,6 +681,41 @@ export interface Invoice {
   paidAt?: string;
   paymentMethod?: PaymentMethodType;
   paymentReference?: string;
+}
+
+/** One trip on a monthly statement. Amounts match that trip’s freight bill when one exists. */
+export interface StatementLine {
+  tripId: string;
+  tripNumber: string;
+  waybillNumber: string;
+  serviceDate: string;
+  description: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  subtotalPhp: number;
+  vatAmountPhp: number;
+  ewtAmountPhp: number;
+  grandTotalPhp: number;
+}
+
+/** One statement of account for one shipper and one calendar month. */
+export interface StatementOfAccount {
+  id: string;
+  companyId: string;
+  clientId: string;
+  statementNumber: string;
+  /** YYYY-MM in Philippine calendar dates. */
+  period: string;
+  issueDate: string;
+  lines: StatementLine[];
+  subtotalPhp: number;
+  vatPercent: number;
+  vatAmountPhp: number;
+  withholdingTaxPercent: number;
+  withholdingTaxAmountPhp: number;
+  grandTotalPhp: number;
+  createdAt: string;
+  createdBy: string;
 }
 
 export type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense';

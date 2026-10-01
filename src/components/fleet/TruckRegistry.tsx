@@ -27,7 +27,6 @@ import { TruckFuelDetailModal } from './TruckFuelDetailModal';
 import { FuelAnalyticsDashboard } from './FuelAnalyticsDashboard';
 import { FeatureHowTo } from '../help/FeatureHowTo';
 import { TruckScheduleBoard } from './TruckScheduleBoard';
-
 export const TruckRegistry: React.FC = () => {
   const { 
     trucks, 
@@ -72,7 +71,6 @@ export const TruckRegistry: React.FC = () => {
   const [fuelType, setFuelType] = useState<'Diesel' | 'Euro 4 Diesel'>('Euro 4 Diesel');
   const [lastOdometerKm, setLastOdometerKm] = useState<number>(95000);
   const [maintenanceNote, setMaintenanceNote] = useState<string>('');
-
   const TRUCK_TYPES: TruckType[] = [
     '4-Wheeler Closed Van',
     '6-Wheeler Closed Van',
