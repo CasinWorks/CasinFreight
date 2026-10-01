@@ -310,6 +310,49 @@ service cloud.firestore {
         );
     }
 
+    function planIdOf(data) {
+      return data.keys().hasAny(['subscription'])
+        && data.subscription is map
+        && data.subscription.keys().hasAny(['plan_id'])
+        && data.subscription.plan_id is string
+        ? data.subscription.plan_id
+        : 'plan_free';
+    }
+
+    // The signed-in owner may refresh their own plan record.
+    // Free can become Beta. Beta can return to Free when the period ends.
+    // The same plan can update dates and rollover fields.
+    // This cannot grant Founding, Premium, Promo, or Enterprise.
+    function ownerMayRefreshSubscription(companyId) {
+      let nextSub = request.resource.data.subscription;
+      let prevPlan = planIdOf(resource.data);
+      let nextPlan = planIdOf(request.resource.data);
+      return isCompanyOwner(companyId)
+        && storageUsageWithinPlan(companyId)
+        && request.resource.data.id == companyId
+        && request.resource.data.subscriptionTier in ['Free', 'Growth']
+        && nextSub is map
+        && nextSub.plan_id is string
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdBy', 'id', 'salesAgentId'])
+        && (
+          !resource.data.keys().hasAny(['createdBy'])
+          || request.resource.data.createdBy == resource.data.createdBy
+        )
+        && (
+          nextPlan == prevPlan
+          || (
+            prevPlan == 'plan_free'
+            && nextPlan == 'plan_beta'
+            && nextSub.grant_source == 'beta'
+            && (
+              !nextSub.keys().hasAny(['last_billed_amount_php'])
+              || nextSub.last_billed_amount_php == 0
+            )
+          )
+          || (prevPlan == 'plan_beta' && nextPlan == 'plan_free')
+        );
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
@@ -405,6 +448,7 @@ service cloud.firestore {
       // settings.manage may update them the same way as name, tin, and address.
       // Missing containerTrackingEnabled means the feature is off.
       allow update: if isPlatformAdmin()
+        || ownerMayRefreshSubscription(companyId)
         || (
           canAccessCompany(companyId)
           && !request.resource.data.diff(resource.data).affectedKeys()
@@ -452,17 +496,20 @@ service cloud.firestore {
       // every other trip field. A missing moveType is a direct booking.
       // These fields do not grant or remove truck availability.
       match /trips/{tripId} {
-        allow read: if portalMayReadTrip(companyId)
-          || (
-            canAccessCompany(companyId)
-            && (
-              canReadAllCompanyTrips(companyId)
-              || (!isFieldDriverMember() && hasPerm(companyId, 'trips.view'))
-              || isAssignedTripDriver(companyId, tripId)
-            )
-          );
+        // Any company login may read trips. A driver query such as
+        // driverId == their roster row cannot be checked with a per-document
+        // roster lookup, so that lookup is not part of this read.
+        allow read: if canAccessCompany(companyId) && !isClientPortalUser();
+        allow read: if portalMayReadTrip(companyId);
         allow create: if hasPerm(companyId, 'trips.create')
           && (isPlatformAdmin() || !isFreePlan(companyId) || tripId.matches('^slot-trip-[0-9]$'));
+        // The driver phone stamps GPS, signs cargo, and sets Inbound / e-POD.
+        // Check that first, without the office permission lookups.
+        allow update: if inCompany(companyId)
+          && isFieldDriverMember()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'driverSignoff', 'status', 'timeline', 'pod', 'actualDelivery', 'actualPickup', 'cargoClaim'
+          ]);
         allow update: if canWriteTrip(companyId, tripId)
           || (
             isClientPortalFor(companyId)
@@ -574,32 +621,19 @@ service cloud.firestore {
       }
 
       match /fieldEvents/{docId} {
-        allow read: if (
-            canAccessCompany(companyId)
-            && (
-              canReadAllCompanyTrips(companyId)
-              || (!isFieldDriverMember() && hasPerm(companyId, 'trips.view'))
-              || (
-                resource.data.tripId is string
-                && isAssignedTripDriver(companyId, resource.data.tripId)
-              )
-            )
-          )
-          || (
-            isClientPortalFor(companyId)
-            && resource.data.keys().hasAny(['clientId'])
-            && resource.data.clientId == portalClientId()
-          )
-          || (
-            isClientPortalFor(companyId)
-            && resource.data.tripId is string
-            && exists(tripPath(companyId, resource.data.tripId))
-            && get(tripPath(companyId, resource.data.tripId)).data.clientId == portalClientId()
-          );
+        allow read: if canAccessCompany(companyId) && !isClientPortalUser();
+        allow read: if isClientPortalFor(companyId)
+          && resource.data.tripId is string
+          && exists(tripPath(companyId, resource.data.tripId))
+          && get(tripPath(companyId, resource.data.tripId)).data.clientId == portalClientId();
+        allow create, update: if inCompany(companyId)
+          && isFieldDriverMember()
+          && request.resource.data.tripId is string
+          && exists(tripPath(companyId, request.resource.data.tripId));
         allow create, update: if request.resource.data.tripId is string
           && (
-            canWriteTrip(companyId, request.resource.data.tripId)
-            || isAssignedTripDriver(companyId, request.resource.data.tripId)
+            isAssignedTripDriver(companyId, request.resource.data.tripId)
+            || canWriteTrip(companyId, request.resource.data.tripId)
             || (
               isClientPortalFor(companyId)
               && exists(tripPath(companyId, request.resource.data.tripId))
@@ -612,19 +646,10 @@ service cloud.firestore {
       }
 
       match /liveTracking/{tripId} {
-        allow read: if (
-            canAccessCompany(companyId)
-            && (
-              canReadAllCompanyTrips(companyId)
-              || (!isFieldDriverMember() && hasPerm(companyId, 'trips.view'))
-              || isAssignedTripDriver(companyId, tripId)
-            )
-          )
-          || (
-            isClientPortalFor(companyId)
-            && exists(tripPath(companyId, tripId))
-            && get(tripPath(companyId, tripId)).data.clientId == portalClientId()
-          );
+        allow read: if canAccessCompany(companyId) && !isClientPortalUser();
+        allow read: if isClientPortalFor(companyId)
+          && exists(tripPath(companyId, tripId))
+          && get(tripPath(companyId, tripId)).data.clientId == portalClientId();
         allow create, update: if isAssignedTripDriver(companyId, tripId)
           || hasPerm(companyId, 'trips.edit');
         allow delete: if isCompanyOwner(companyId);

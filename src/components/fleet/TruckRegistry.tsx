@@ -18,7 +18,8 @@ import {
   TrendingUp,
   DollarSign
 } from 'lucide-react';
-import { useFreight, getTargetKmPerLiter } from '../../context/FreightContext';
+import { useFreight } from '../../context/FreightContext';
+import { getTargetKmPerLiter } from '../../lib/fuelTarget';
 import { Truck, TruckType, TruckStatus, FuelLog } from '../../types';
 import { helperCrew, licensedDrivers } from '../../lib/crew';
 import { FuelLogModal } from './FuelLogModal';

@@ -21,7 +21,8 @@ import {
   ArrowUpRight,
   ShieldAlert
 } from 'lucide-react';
-import { useFreight, getTargetKmPerLiter } from '../../context/FreightContext';
+import { useFreight } from '../../context/FreightContext';
+import { getTargetKmPerLiter } from '../../lib/fuelTarget';
 import { Truck, FuelLog } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
 

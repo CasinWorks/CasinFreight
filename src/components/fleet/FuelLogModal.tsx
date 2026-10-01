@@ -15,7 +15,8 @@ import {
   User as UserIcon,
   Clock
 } from 'lucide-react';
-import { useFreight, getTargetKmPerLiter } from '../../context/FreightContext';
+import { useFreight } from '../../context/FreightContext';
+import { getTargetKmPerLiter } from '../../lib/fuelTarget';
 import { Truck, FuelLog, FuelPaymentMethod } from '../../types';
 import { closeIfBackdrop } from '../../lib/modal';
 

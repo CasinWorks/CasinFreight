@@ -164,7 +164,12 @@ export const DriverFieldApp: React.FC = () => {
       await action();
       flash(okMessage);
     } catch (error) {
-      flash(error instanceof Error ? error.message : String(error));
+      const raw = error instanceof Error ? error.message : String(error);
+      flash(
+        /insufficient permissions|permission-denied/i.test(raw)
+          ? 'Could not save that from this phone. Ask dispatch to publish the latest company rules, then try again.'
+          : raw
+      );
     } finally {
       setBusy(false);
     }

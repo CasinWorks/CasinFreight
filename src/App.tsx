@@ -389,7 +389,7 @@ function TutorialUpgradeGate() {
 }
 
 function AppContent() {
-  const { isAuthenticated, isAuthLoading, isPlatformAdmin, activeDowntime, isFieldDriverSession } = useFreight();
+  const { isAuthenticated, isAuthLoading, isPlatformAdmin, activeDowntime, isFieldDriverSession, sessionError } = useFreight();
 
   if (isAuthLoading) {
     return <BootSplash />;
@@ -408,6 +408,11 @@ function AppContent() {
             CasinFreight is in downtime — {activeDowntime.title}. Team members cannot operate after sign-in. The platform owner can sign in to turn this off.
           </div>
         )}
+        {sessionError && (
+          <div className="bg-rose-600 text-white text-center text-sm font-semibold px-4 py-3">
+            {sessionError}
+          </div>
+        )}
         <LandingPage />
       </>
     );
@@ -417,6 +422,11 @@ function AppContent() {
     return (
       <>
         <PlatformNoticeGate />
+        {sessionError && (
+          <div className="bg-rose-600 text-white text-center text-sm font-semibold px-4 py-3">
+            {sessionError}
+          </div>
+        )}
         <PrivacyConsentGate />
         <DriverFieldApp />
       </>
@@ -426,6 +436,11 @@ function AppContent() {
   return (
     <>
       <PlatformNoticeGate />
+      {sessionError && (
+        <div className="bg-rose-600 text-white text-center text-sm font-semibold px-4 py-3">
+          {sessionError}
+        </div>
+      )}
       <PrivacyConsentGate />
       <MainLayout />
     </>

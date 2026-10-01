@@ -38,7 +38,8 @@ import {
   Line, 
   CartesianGrid 
 } from 'recharts';
-import { useFreight, getTargetKmPerLiter } from '../../context/FreightContext';
+import { useFreight } from '../../context/FreightContext';
+import { getTargetKmPerLiter } from '../../lib/fuelTarget';
 import { Trip, Truck, Driver, Client, FuelLog } from '../../types';
 
 interface TripProfitabilityViewProps {

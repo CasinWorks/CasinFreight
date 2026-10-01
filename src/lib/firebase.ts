@@ -72,12 +72,16 @@ export async function setAuthRememberMe(remember: boolean): Promise<void> {
 export function getFirebaseDb(): Firestore {
   if (!db) {
     try {
-      // Auto-detect long polling opens dozens of empty "channel" requests and
-      // can sit there for most of a minute before any trip data moves.
-      // One streaming connection is enough. The on-disk cache is for this tab
-      // only, so a second tab does not fight this one for the connection.
+      // Auto-detect long polling opens dozens of empty "channel" requests.
+      // Safari blocks that streaming channel ("access control checks"), so
+      // Safari uses one long-poll connection from the start. Other browsers
+      // keep a single stream. The on-disk cache is for this tab only.
+      const safari = typeof navigator !== 'undefined'
+        && /safari/i.test(navigator.userAgent)
+        && !/chrome|chromium|android|crios|fxios|edg/i.test(navigator.userAgent);
       db = initializeFirestore(getFirebaseApp(), {
         experimentalAutoDetectLongPolling: false,
+        experimentalForceLongPolling: safari,
         localCache: persistentLocalCache(),
       });
     } catch (error) {

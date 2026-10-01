@@ -113,6 +113,7 @@ import { hasSignedInk, isStatusRetraction, missingSignaturesForStatus } from '..
 import { shrinkSignatureDataUrl } from '../lib/podSignoff';
 import { timelineRetractionFromRequest } from '../lib/tripAudit';
 import { isHelperCrew, isDriverSeatRole } from '../lib/crew';
+import { getTargetKmPerLiter } from '../lib/fuelTarget';
 import { dispatchBlockReason } from '../lib/dispatchPapers';
 import { debitMemoLine, invoiceBlockReason, openClaimForCondition } from '../lib/cargoClaim';
 import { buildStatement, nextStatementNumber, statementDraft } from '../lib/statementOfAccount';
@@ -143,20 +144,6 @@ function crewTripField(
   return String(row?.crewRole || '').toLowerCase() === 'helper' ? 'helperId' : 'driverId';
 }
 
-export const getTargetKmPerLiter = (type: TruckType): number => {
-  switch (type) {
-    case '4-Wheeler Closed Van': return 7.0;
-    case '6-Wheeler Closed Van': return 5.5;
-    case '6-Wheeler Dropside/Wingvan': return 5.0;
-    case '10-Wheeler Wingvan': return 3.2;
-    case '10-Wheeler Dump Truck': return 2.8;
-    case '20ft Container Chassis': return 3.0;
-    case '40ft Container Chassis': return 2.5;
-    case 'Tractor Head / 14-Wheeler': return 2.4;
-    default: return 3.5;
-  }
-};
-
 export interface FleetFuelAnalytics {
   totalCostPhp: number;
   totalLiters: number;
@@ -178,6 +165,8 @@ interface FreightContextType {
   currentUser: User;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
+  /** Shown when Firestore refuses the company load. Null once the office opens cleanly. */
+  sessionError: string | null;
   /** False while freight bills, statements, fuel, and the ledger are still downloading. */
   booksReady: boolean;
   isFirebaseReady: boolean;
@@ -541,6 +530,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [booksReady, setBooksReady] = useState(false);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -790,18 +780,29 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Trips and the desk open the board. Bills, fuel, and the ledger follow
     // after the splash, so a return to the office is not stuck on those books.
     const companyDocPromise = getCompanyDocument(companyId);
+    const loadNamed = async <T extends { id: string }>(
+      name: WorkspaceCollection,
+      task: Promise<T[]>,
+    ): Promise<T[] | null> => {
+      try {
+        return await task;
+      } catch (error) {
+        console.error(`Could not load ${name}`, error);
+        return null;
+      }
+    };
     const deskPromise = Promise.all([
-      loadCollection<RbacRole>(companyId, 'roles'),
-      loadCollection<User>(companyId, 'members'),
-      loadCollection<Truck>(companyId, 'trucks'),
-      loadCollection<Driver>(companyId, 'drivers'),
-      loadCollection<Client>(companyId, 'clients'),
-      loadCollection<RateCard>(companyId, 'rateCards'),
-      loadCollection<TruckBan>(companyId, 'truckBans'),
-      loadCollection<AppNotification>(companyId, 'notifications'),
+      loadNamed<RbacRole>('roles', loadCollection<RbacRole>(companyId, 'roles')),
+      loadNamed<User>('members', loadCollection<User>(companyId, 'members')),
+      loadNamed<Truck>('trucks', loadCollection<Truck>(companyId, 'trucks')),
+      loadNamed<Driver>('drivers', loadCollection<Driver>(companyId, 'drivers')),
+      loadNamed<Client>('clients', loadCollection<Client>(companyId, 'clients')),
+      loadNamed<RateCard>('rateCards', loadCollection<RateCard>(companyId, 'rateCards')),
+      loadNamed<TruckBan>('truckBans', loadCollection<TruckBan>(companyId, 'truckBans')),
+      loadNamed<AppNotification>('notifications', loadCollection<AppNotification>(companyId, 'notifications')),
     ]);
     const tripsEarly = profileRole && !profileIsDriver
-      ? loadCollection<Trip>(companyId, 'trips')
+      ? loadNamed<Trip>('trips', loadCollection<Trip>(companyId, 'trips'))
       : null;
     const booksPromise = profileIsDriver
       ? null
@@ -836,22 +837,40 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ] = await deskPromise;
     if (hydrateGenerationRef.current !== generation) return;
 
+    const memberRows = loadedMembers ?? [];
+    const driverRows = loadedDrivers ?? [];
+    let missedList = [
+      loadedRoles,
+      loadedMembers,
+      loadedTrucks,
+      loadedDrivers,
+      loadedClients,
+      loadedRateCards,
+      loadedTruckBans,
+      loadedNotifications,
+    ].some((rows) => rows === null);
+
     const memberRole = String(
       (profile?.role as string) ||
-        loadedMembers.find((m) => m.id === uid)?.role ||
+        memberRows.find((m) => m.id === uid)?.role ||
         ''
     );
     const driverSession = isFieldDriverRole(memberRole);
     const driverRosterId = driverSession
-      ? resolveDriverRosterId(loadedDrivers, uid, profile?.email)
+      ? resolveDriverRosterId(driverRows, uid, profile?.email)
       : null;
     const loadedTrips = driverSession
       ? driverRosterId
-        ? await loadCollectionWhere<Trip>(companyId, 'trips', crewTripField(loadedDrivers, driverRosterId), driverRosterId)
+        ? await loadNamed<Trip>(
+            'trips',
+            loadCollectionWhere<Trip>(companyId, 'trips', crewTripField(driverRows, driverRosterId), driverRosterId),
+          )
         : []
       : tripsEarly
         ? await tripsEarly
-        : await loadCollection<Trip>(companyId, 'trips');
+        : await loadNamed<Trip>('trips', loadCollection<Trip>(companyId, 'trips'));
+    if (loadedTrips === null) missedList = true;
+    const tripRows = loadedTrips ?? [];
     if (hydrateGenerationRef.current !== generation) return;
 
     const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, createdBy, ...companyFields } = companyDoc;
@@ -872,17 +891,18 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       nextSub = makeFreeSubscription(uid, companyId, nextSub);
       persistSub = true;
     }
-    if (persistSub) {
+    const mayPersistPlan = createdBy === uid || memberRole.toLowerCase().startsWith('owner');
+    if (persistSub && mayPersistPlan) {
       saveCompanySubscription(companyId, nextSub, isUnlockedPlanId(nextSub.plan_id) ? 'Growth' : 'Free').catch((error) => {
         console.error('Could not persist subscription period or Founding rollover', error);
       });
     }
     const nextRoles = ensureDefaultSystemRoles(
-      loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]
+      loadedRoles && loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]
     );
     const seenTutorial = Boolean(profile?.has_seen_tutorial) || hasSeenTutorialLocally(uid);
     const uniqueMembers = Object.values(
-      loadedMembers.reduce<Record<string, User>>((acc, member) => {
+      memberRows.reduce<Record<string, User>>((acc, member) => {
         const key = (member.email || member.id).toLowerCase();
         if (!acc[key] || member.status === 'active' || member.id === uid) {
           acc[key] = member;
@@ -909,7 +929,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     // Backfill Drivers & Helpers when a Driver / Field Operator seat has no roster row yet.
-    let driversForWorkspace = loadedDrivers;
+    let driversForWorkspace = driverRows;
     const canBackfillRoster =
       createdBy === uid
       || memberRole === 'Owner'
@@ -917,7 +937,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       || checkPermission(memberRole, 'drivers.crud', nextRoles);
     if (canBackfillRoster) {
       const rosterEmails = new Set(
-        loadedDrivers.map((d) => String(d.email || '').trim().toLowerCase()).filter(Boolean)
+        driverRows.map((d) => String(d.email || '').trim().toLowerCase()).filter(Boolean)
       );
       const missingDriverSeats = uniqueMembers.filter((member) => {
         if (!isDriverSeatRole(String(member.role || ''), nextRoles)) return false;
@@ -949,15 +969,16 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
 
-    snapshotCollection('roles', loadedRoles);
-    snapshotCollection('members', uniqueMembers);
-    snapshotCollection('trucks', loadedTrucks);
-    snapshotCollection('drivers', driversForWorkspace);
-    snapshotCollection('clients', loadedClients);
-    snapshotCollection('rateCards', loadedRateCards);
-    snapshotCollection('truckBans', loadedTruckBans);
-    snapshotCollection('trips', loadedTrips);
-    snapshotCollection('notifications', loadedNotifications);
+    // A failed read stays out of the hydrated set so an empty list cannot overwrite Firestore.
+    if (loadedRoles) snapshotCollection('roles', loadedRoles);
+    if (loadedMembers) snapshotCollection('members', uniqueMembers);
+    if (loadedTrucks) snapshotCollection('trucks', loadedTrucks);
+    if (loadedDrivers) snapshotCollection('drivers', driversForWorkspace);
+    if (loadedClients) snapshotCollection('clients', loadedClients);
+    if (loadedRateCards) snapshotCollection('rateCards', loadedRateCards);
+    if (loadedTruckBans) snapshotCollection('truckBans', loadedTruckBans);
+    if (loadedTrips) snapshotCollection('trips', tripRows);
+    if (loadedNotifications) snapshotCollection('notifications', loadedNotifications);
 
     setCompany({
       ...companyFields,
@@ -966,18 +987,23 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSubscription(nextSub);
     setRoles(nextRoles);
     setUsers(uniqueMembers);
-    setTrucks(loadedTrucks);
+    setTrucks(loadedTrucks ?? []);
     setDrivers(driversForWorkspace);
-    setClients(loadedClients);
-    setRateCards(loadedRateCards);
-    setTruckBans(loadedTruckBans);
-    setTrips(loadedTrips);
-    setNotifications(loadedNotifications);
+    setClients(loadedClients ?? []);
+    setRateCards(loadedRateCards ?? []);
+    setTruckBans(loadedTruckBans ?? []);
+    setTrips(tripRows);
+    setNotifications(loadedNotifications ?? []);
     if (Array.isArray(savedAccounts) && savedAccounts.length) {
       setChartOfAccounts(savedAccounts as ChartOfAccount[]);
     }
     setCurrentUserId(uid);
-    setCurrentRole((loadedMembers.find((m) => m.id === uid)?.role as UserRole) || 'Owner');
+    setCurrentRole((memberRows.find((m) => m.id === uid)?.role as UserRole) || 'Owner');
+    setSessionError(
+      missedList
+        ? 'Some company lists could not be opened. In Firebase Console, open Firestore → Rules, paste firestore.rules from this project, then Publish and refresh.'
+        : null,
+    );
     setIsAuthenticated(true);
     setIsOnboardingOpen(!onboardingComplete);
     persistReadyRef.current = true;
@@ -1117,6 +1143,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const run = ++authRunRef.current;
       if (!fbUser) {
         resetWorkspace();
+        setSessionError(null);
         setIsAuthenticated(false);
         setIsAuthLoading(false);
         return;
@@ -1170,6 +1197,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (authRunRef.current !== run) return;
         console.error('Failed to hydrate Firebase workspace', error);
         resetWorkspace();
+        setSessionError(mapAuthError(error));
         setIsAuthenticated(false);
       } finally {
         if (authRunRef.current === run) setIsAuthLoading(false);
@@ -5029,6 +5057,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       currentUser,
       isAuthenticated,
       isAuthLoading,
+      sessionError,
       booksReady,
       isFirebaseReady: isFirebaseConfigured(),
       login,
