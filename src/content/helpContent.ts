@@ -209,7 +209,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     steps: [
       'Deliver the trip first. Unbilled deliveries show at the top of Invoices.',
       'Create the freight bill. VAT 12% and EWT (default 2%) are computed for your bookkeeper.',
-      'For a monthly shipper, open Statements, pick the client and the month, and generate one statement. The trip bills stay.',
+      'Open Statements and pick the month. The list shows each company. Generate from a row that still has trips waiting. The trip bills stay.',
       'Send it, then attach proof of payment and the client’s Form 2307 when they pay. The PDF is a billing aid, not an Official Receipt.',
       'Mark Paid to lock collections. Void or retract needs dual control (Owner).',
     ],

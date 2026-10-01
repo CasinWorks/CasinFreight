@@ -83,6 +83,17 @@ export function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date
   return aStart < bEnd && bStart < aEnd;
 }
 
+/** The hour starts before the current clock time, so the truck cannot leave then. */
+export function hourIsPast(day: Date, hour: number, now = new Date()): boolean {
+  const slot = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0);
+  return slot.getTime() < now.getTime();
+}
+
+export function scheduleIsPast(value: string | undefined | null, now = new Date()): boolean {
+  const date = parseSchedule(value);
+  return Boolean(date && date.getTime() < now.getTime());
+}
+
 export function hourBooking(blocks: TruckBusyBlock[], day: Date, hour: number): TruckBusyBlock | null {
   const slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0);
   const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000);

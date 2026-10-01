@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Trip } from '../../types';
 import {
   bookingsOnDay,
@@ -9,7 +9,9 @@ import {
   formatHourLabel,
   formatScheduleValue,
   hourBooking,
+  hourIsPast,
   parseSchedule,
+  scheduleIsPast,
   sameDay,
   startOfDay,
   windowConflict,
@@ -53,6 +55,12 @@ export const AssignSchedulePicker: React.FC<AssignSchedulePickerProps> = ({
   const [cursor, setCursor] = useState(() => new Date(pickupDate.getFullYear(), pickupDate.getMonth(), 1));
   const [viewDay, setViewDay] = useState(() => startOfDay(pickupDate));
   const [setting, setSetting] = useState<'pickup' | 'delivery'>('pickup');
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const blocks = useMemo(() => busyBlocks(trips, truckId), [trips, truckId]);
   const conflict = truckId ? windowConflict(blocks, pickup, delivery) : null;
@@ -60,6 +68,7 @@ export const AssignSchedulePicker: React.FC<AssignSchedulePickerProps> = ({
   const cells = monthCells(cursor);
 
   const chooseHour = (hour: number) => {
+    if (hourIsPast(viewDay, hour, now)) return;
     const next = new Date(viewDay.getFullYear(), viewDay.getMonth(), viewDay.getDate(), hour, 0, 0, 0);
     const value = formatScheduleValue(next);
     if (setting === 'pickup') onPickup(value);
@@ -73,8 +82,8 @@ export const AssignSchedulePicker: React.FC<AssignSchedulePickerProps> = ({
           <div className="text-xs font-bold text-slate-800">Schedule</div>
           <p className="text-[11px] text-slate-500">
             {truckId
-              ? `Grey hours are already booked on ${truckLabel}. Pick a free time.`
-              : 'Choose a truck to see which hours are already booked.'}
+              ? `Grey hours are already booked on ${truckLabel}. Hours before now cannot be used.`
+              : 'Hours before the current time cannot be used. Choose a truck to see which hours are already booked.'}
           </p>
         </div>
         <div className="flex gap-1">
@@ -168,19 +177,21 @@ export const AssignSchedulePicker: React.FC<AssignSchedulePickerProps> = ({
           <div className="grid grid-cols-4 sm:grid-cols-6 gap-1">
             {Array.from({ length: 24 }, (_, hour) => {
               const booking = truckId ? hourBooking(blocks, viewDay, hour) : null;
+              const past = hourIsPast(viewDay, hour, now);
               const slot = new Date(viewDay.getFullYear(), viewDay.getMonth(), viewDay.getDate(), hour, 0, 0, 0);
               const isPickup = sameDay(slot, pickupDate) && pickupDate.getHours() === hour && pickupDate.getMinutes() === 0;
               const isDelivery = Boolean(deliveryDate && sameDay(slot, deliveryDate) && deliveryDate.getHours() === hour && deliveryDate.getMinutes() === 0);
               const selected = setting === 'pickup' ? isPickup : isDelivery;
+              const blocked = Boolean(booking) || past;
               return (
                 <button
                   key={hour}
                   type="button"
-                  disabled={Boolean(booking)}
-                  title={booking ? `${booking.tripNumber} · ${booking.route} · ${formatClock(booking.start)}–${formatClock(booking.end)}` : 'Free'}
+                  disabled={blocked}
+                  title={past ? 'This hour is already past' : booking ? `${booking.tripNumber} · ${booking.route} · ${formatClock(booking.start)}–${formatClock(booking.end)}` : 'Free'}
                   onClick={() => chooseHour(hour)}
                   className={`rounded-md border px-1 py-1 text-[10px] font-bold leading-tight ${
-                    booking
+                    blocked
                       ? 'bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed'
                       : selected
                         ? setting === 'pickup'
@@ -190,13 +201,19 @@ export const AssignSchedulePicker: React.FC<AssignSchedulePickerProps> = ({
                   }`}
                 >
                   {formatHourLabel(hour)}
-                  <span className="block font-medium truncate">{booking ? 'Booked' : 'Free'}</span>
+                  <span className="block font-medium truncate">{past ? 'Past' : booking ? 'Booked' : 'Free'}</span>
                 </button>
               );
             })}
           </div>
         </div>
       </div>
+
+      {(scheduleIsPast(pickup, now) || (deliveryDate && scheduleIsPast(delivery, now))) && (
+        <p className="text-[11px] text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
+          Pickup and delivery have to be the current time or later. This truck cannot leave before now.
+        </p>
+      )}
 
       {deliveryDate && deliveryDate <= pickupDate && (
         <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">

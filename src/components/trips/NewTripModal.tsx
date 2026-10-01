@@ -35,7 +35,7 @@ import {
 import { FeatureHowTo } from '../help/FeatureHowTo';
 import { ContainerMoveFields } from './ContainerMoveFields';
 import { PRESET_ROUTE_ZONES, rememberZone, sameZone, zonesForShipper } from '../../lib/routeZones';
-import { busyBlocks, formatScheduleValue, parseSchedule, windowConflict } from '../../lib/truckSchedule';
+import { busyBlocks, formatScheduleValue, parseSchedule, scheduleIsPast, windowConflict } from '../../lib/truckSchedule';
 import { AssignSchedulePicker } from './AssignSchedulePicker';
 
 interface NewTripModalProps {
@@ -259,6 +259,10 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     const deliveryAt = parseSchedule(scheduledDelivery);
     if (!pickupAt || !deliveryAt || deliveryAt <= pickupAt) {
       window.alert('Set a delivery time that is after the pickup time.');
+      return;
+    }
+    if (scheduleIsPast(scheduledPickup) || scheduleIsPast(scheduledDelivery)) {
+      window.alert('Pickup and delivery have to be the current time or later. This truck cannot leave before now.');
       return;
     }
 
