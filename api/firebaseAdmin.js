@@ -347,6 +347,155 @@ async function rolloverAllCompanies(db) {
   return { scanned: snap.size, updated };
 }
 
+const CREW_EMAIL_ORIGINS = [
+  'https://casinfreight.com',
+  'https://www.casinfreight.com',
+  'https://casin-freight.vercel.app',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+
+function crewContinueOrigin(origin) {
+  const clean = String(origin || '').replace(/\/$/, '');
+  if (CREW_EMAIL_ORIGINS.includes(clean)) return clean;
+  return 'https://casin-freight.vercel.app';
+}
+
+async function callerMayInviteCrew(db, caller) {
+  const userSnap = await db.collection('users').doc(caller.uid).get();
+  if (!userSnap.exists) {
+    throw Object.assign(new Error('No company is linked to this login.'), { status: 403 });
+  }
+  const userData = userSnap.data() || {};
+  const companyId = String(userData.companyId || '');
+  if (!companyId) {
+    throw Object.assign(new Error('No company is linked to this login.'), { status: 403 });
+  }
+  const companySnap = await db.collection('companies').doc(companyId).get();
+  if (!companySnap.exists) {
+    throw Object.assign(new Error('Company workspace was not found.'), { status: 404 });
+  }
+  const company = companySnap.data() || {};
+  const role = String(userData.role || '');
+  const isOwner = String(company.createdBy || '') === caller.uid
+    || role === 'Owner'
+    || role.toLowerCase().includes('owner')
+    || isPlatformAdmin(caller);
+  if (isOwner) return companyId;
+
+  const roleSnap = await db.collection('companies').doc(companyId).collection('roles').doc(role).get();
+  const permissions = roleSnap.exists && Array.isArray(roleSnap.data().permissions)
+    ? roleSnap.data().permissions
+    : [];
+  if (permissions.includes('drivers.crud') || permissions.includes('rbac.manage') || permissions.includes('settings.manage')) {
+    return companyId;
+  }
+  throw Object.assign(new Error('Only the owner or someone who can edit drivers can send this login email.'), { status: 403 });
+}
+
+async function sendPasswordSetupEmail(email, continueUrl) {
+  const apiKey = firebaseWebApiKey();
+  if (!apiKey) {
+    throw Object.assign(new Error('Firebase web API key is missing, so the login email cannot be sent.'), { status: 500 });
+  }
+  const send = async (url) => {
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestType: 'PASSWORD_RESET',
+          email,
+          ...(url ? { continueUrl: url } : {}),
+        }),
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    return { ok: response.ok, payload };
+  };
+
+  let result = await send(continueUrl);
+  const message = String(result.payload?.error?.message || '');
+  if (!result.ok && (message.includes('INVALID_CONTINUE_URI') || message.includes('UNAUTHORIZED_DOMAIN'))) {
+    result = await send('');
+  }
+  if (!result.ok) {
+    const reason = message || 'Firebase did not send the login email.';
+    throw Object.assign(new Error(reason), { status: 502 });
+  }
+}
+
+/**
+ * Create the person's login if needed, then email them Firebase's link to choose a password.
+ * That inbox link is how they prove the email is theirs and open CasinFreight.
+ */
+async function sendCrewAccessEmail(authHeader, body, origin) {
+  const admin = getAdmin();
+  if (!admin) {
+    return {
+      status: 500,
+      data: { error: 'FIREBASE_SERVICE_ACCOUNT is not set, so CasinFreight cannot email a login yet.' },
+    };
+  }
+  const caller = await lookupCaller(authHeader);
+  if (!caller) {
+    return { status: 401, data: { error: 'Sign in required.' } };
+  }
+  const email = String(body?.email || '').trim().toLowerCase();
+  const name = String(body?.name || '').trim() || email.split('@')[0];
+  if (!email.includes('@') || !email.includes('.')) {
+    return { status: 400, data: { error: 'Enter a real email address.' } };
+  }
+
+  const db = admin.firestore();
+  let companyId = '';
+  try {
+    companyId = await callerMayInviteCrew(db, caller);
+  } catch (error) {
+    const status = error && error.status ? error.status : 403;
+    return { status, data: { error: error instanceof Error ? error.message : 'Not allowed.' } };
+  }
+
+  let authUser;
+  try {
+    authUser = await admin.auth().getUserByEmail(email);
+  } catch (error) {
+    const code = error && error.code ? String(error.code) : '';
+    if (code !== 'auth/user-not-found') {
+      return { status: 500, data: { error: 'Could not look up that email.' } };
+    }
+    const password = `${require('crypto').randomBytes(18).toString('base64url')}Aa1`;
+    authUser = await admin.auth().createUser({
+      email,
+      password,
+      displayName: name,
+      emailVerified: false,
+    });
+  }
+
+  const profileSnap = await db.collection('users').doc(authUser.uid).get();
+  const existingCompanyId = profileSnap.exists ? String(profileSnap.data().companyId || '') : '';
+  if (existingCompanyId && existingCompanyId !== companyId) {
+    return {
+      status: 409,
+      data: { error: 'That email already belongs to another company. Untie it there before inviting them here.' },
+    };
+  }
+  if (existingCompanyId === companyId && profileSnap.exists) {
+    return { status: 200, data: { emailed: false, alreadyJoined: true } };
+  }
+
+  const continueUrl = `${crewContinueOrigin(origin)}/?join=1&email=${encodeURIComponent(email)}`;
+  try {
+    await sendPasswordSetupEmail(email, continueUrl);
+  } catch (error) {
+    const status = error && error.status ? error.status : 502;
+    return { status, data: { error: error instanceof Error ? error.message : 'Could not send the login email.' } };
+  }
+  return { status: 200, data: { emailed: true, alreadyJoined: false } };
+}
+
 module.exports = {
   getAdminDb,
   isPlatformAdmin,
@@ -355,4 +504,5 @@ module.exports = {
   setCancelFlag,
   loadOwnedCompany,
   rolloverAllCompanies,
+  sendCrewAccessEmail,
 };

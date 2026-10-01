@@ -237,15 +237,14 @@ export const HELP_GUIDES: HelpGuide[] = [
     summary: 'Roster licensed drivers and pahinante.',
     steps: [
       'Tap Add driver or helper.',
-      'Drivers need LTO license number, restrictions, and expiry. Put the same email they will use on the phone app.',
-      'Helpers can skip a license. Mark the role as Helper / pahinante.',
+      'Drivers need LTO license number, restrictions, and expiry, plus the email they will use on the phone.',
+      'Helpers can skip a license. Mark the role as Helper / pahinante and enter their email too.',
       'Assign them to a truck here or on the truck record.',
       'Set trip pay and food allowance. The week box shows what you owe each driver and helper, and how many trips they had. Mark paid after you hand them the cash.',
     ],
     tips: [
-      'Helpers do not log in to the driver app.',
-      'Invite the driver under Company with role Driver — the roster row is created or linked automatically.',
-      'On web and phone, Drivers only see trips assigned to them on the roster.',
+      'Saving emails them a link to choose a password. That email is how they open the app. Check Spam if it does not arrive, or tap Send login email.',
+      'On the phone, a driver sees trips where they are the driver. A helper sees trips where they are the pahinante.',
     ],
   },
   {
@@ -253,8 +252,8 @@ export const HELP_GUIDES: HelpGuide[] = [
     title: 'Driver phone app',
     summary: 'Seal photos and e-POD for the assigned driver only.',
     steps: [
-      'Invite the person under Company → role Driver (roster syncs automatically).',
-      'They install CasinFreight Driver and sign in with email and password.',
+      'On Drivers & Helpers, save the person with their email. CasinFreight emails them a link to choose a password.',
+      'They open that email, set a password, then sign in on the phone with the same email.',
       'They only see trips assigned to them. They take seal photos, sign cargo handoff, and collect warehouse e-POD on the same phone after Inbound (hand the phone to the warehouse officer for name + role + signature).',
       'Office staff can also stamp e-POD on the website if needed.',
     ],

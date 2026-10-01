@@ -37,7 +37,7 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
   onSelectTrip,
   onSelectInvoice
 }) => {
-  const { trips, trucks, invoices, clients, drivers, company } = useFreight();
+  const { trips, trucks, invoices, clients, drivers, company, booksReady } = useFreight();
   const containersDue = company.containerTrackingEnabled ? openContainerBookings(trips) : [];
   const hasLiveData = trips.length > 0 || invoices.length > 0;
 
@@ -200,10 +200,10 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
               </span>
             </div>
             <div className="text-3xl font-black text-slate-900 font-mono mt-1">
-              ₱{(totalRevenue / 1000).toFixed(1)}k
+              {booksReady ? `₱${(totalRevenue / 1000).toFixed(1)}k` : '…'}
             </div>
             <div className="text-[11px] text-slate-500 font-mono">
-              ₱{totalRevenue.toLocaleString()} gross invoiced
+              {booksReady ? `₱${totalRevenue.toLocaleString()} gross invoiced` : 'Freight bills are still loading'}
             </div>
           </div>
 

@@ -127,12 +127,19 @@ function resolveDriverRosterId(
 ): string | null {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const match = roster.find((d) => {
-    if (String(d.crewRole || 'driver').toLowerCase() === 'helper') return false;
     const rowUid = String(d.userId || '');
     const rowEmail = String(d.email || '').trim().toLowerCase();
     return (uid && rowUid === uid) || (Boolean(cleanEmail) && rowEmail === cleanEmail);
   });
   return match?.id || null;
+}
+
+function crewTripField(
+  roster: { id: string; crewRole?: string }[],
+  rosterId: string | null
+): 'driverId' | 'helperId' {
+  const row = roster.find((person) => person.id === rosterId);
+  return String(row?.crewRole || '').toLowerCase() === 'helper' ? 'helperId' : 'driverId';
 }
 
 export const getTargetKmPerLiter = (type: TruckType): number => {
@@ -170,6 +177,8 @@ interface FreightContextType {
   currentUser: User;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
+  /** False while freight bills, statements, fuel, and the ledger are still downloading. */
+  booksReady: boolean;
   isFirebaseReady: boolean;
   login: (email: string, password?: string, options?: { rememberMe?: boolean }) => Promise<{ success: boolean; error?: string; clientPortal?: boolean }>;
   signup: (payload: { name: string; email: string; password: string; companyName: string; privacyAcceptedAt?: string }) => Promise<{ success: boolean; error?: string }>;
@@ -179,7 +188,9 @@ interface FreightContextType {
   logout: () => Promise<void>;
   switchUserAccount: (userId: string) => void;
   switchUserRole: (role: UserRole) => void;
-  addUser: (user: Omit<User, 'id' | 'companyId'>) => Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }>;
+  addUser: (user: Omit<User, 'id' | 'companyId'>) => Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string; emailError?: string }>;
+  sendCrewAccessEmail: (person: { name: string; email: string }) => Promise<{ success: boolean; error?: string; emailed?: boolean; alreadyJoined?: boolean }>;
+  registerCrewLogin: (person: { name: string; email: string }) => Promise<{ success: boolean; error?: string; emailed?: boolean; alreadyJoined?: boolean }>;
   inviteClientPortal: (clientId: string, email: string, contactName?: string) => Promise<{ success: boolean; error?: string; inviteUrl?: string }>;
   removeUserFromCompany: (userId: string) => Promise<{ success: boolean; error?: string }>;
   tiedCompanyLogins: User[];
@@ -492,6 +503,11 @@ function mapAuthError(error: unknown): string {
 
 export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const persistReadyRef = useRef(false);
+  /** Collections that have been read from Firestore. Persist must not run before that, or an empty list can overwrite the office. */
+  const hydratedCollectionsRef = useRef<Set<string>>(new Set());
+  const hydrateGenerationRef = useRef(0);
+  const authRunRef = useRef(0);
+  const booksReadyRef = useRef(false);
   const persistHashRef = useRef<Record<string, string>>({});
   const persistIdsRef = useRef<Record<string, string[]>>({});
   const persistDocHashRef = useRef<Record<string, Record<string, string>>>({});
@@ -523,6 +539,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [booksReady, setBooksReady] = useState(false);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -548,6 +565,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const resetWorkspace = () => {
     persistReadyRef.current = false;
+    hydratedCollectionsRef.current.clear();
+    hydrateGenerationRef.current += 1;
+    booksReadyRef.current = false;
+    setBooksReady(false);
     persistHashRef.current = {};
     persistIdsRef.current = {};
     persistDocHashRef.current = {};
@@ -587,6 +608,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const snapshotCollection = (name: WorkspaceCollection, items: { id: string }[]) => {
+    hydratedCollectionsRef.current.add(name);
     persistHashRef.current[name] = JSON.stringify(items);
     persistIdsRef.current[name] = items.map((item) => item.id).filter(Boolean);
     persistDocHashRef.current[name] = Object.fromEntries(
@@ -646,6 +668,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     options?: { merge?: boolean }
   ) => {
     if (!persistReadyRef.current || !company.id) return;
+    if (!hydratedCollectionsRef.current.has(name)) return;
     const hash = JSON.stringify(items);
     if (persistHashRef.current[name] === hash) return;
 
@@ -682,6 +705,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const persistTripsNow = (items: Trip[]): Promise<void> => {
     if (!persistReadyRef.current || !company.id) return Promise.resolve();
+    if (!hydratedCollectionsRef.current.has('trips')) return Promise.resolve();
     const hash = JSON.stringify(items);
     if (persistHashRef.current.trips === hash) return Promise.resolve();
 
@@ -734,11 +758,69 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const applyLoadedCollection = <T extends { id: string }>(
+    generation: number,
+    name: WorkspaceCollection,
+    loaded: T[],
+    setter: (value: T[] | ((current: T[]) => T[])) => void,
+  ) => {
+    if (hydrateGenerationRef.current !== generation) return;
+    if (hydratedCollectionsRef.current.has(name)) return;
+    snapshotCollection(name, loaded);
+    setter((current) => {
+      if (current.length === 0) return loaded;
+      const remoteIds = new Set(loaded.map((item) => item.id));
+      const localOnly = current.filter((item) => item.id && !remoteIds.has(item.id));
+      return localOnly.length ? [...loaded, ...localOnly] : loaded;
+    });
+  };
+
   const hydrateCompany = async (companyId: string, uid: string, profile?: UserProfile | null) => {
-    const companyDoc = await getCompanyDocument(companyId);
+    const generation = hydrateGenerationRef.current + 1;
+    hydrateGenerationRef.current = generation;
+    persistReadyRef.current = false;
+    hydratedCollectionsRef.current.clear();
+    booksReadyRef.current = false;
+    setBooksReady(false);
+
+    const profileRole = String(profile?.role || '');
+    const profileIsDriver = isFieldDriverRole(profileRole);
+    // Trips and the desk open the board. Bills, fuel, and the ledger follow
+    // after the splash, so a return to the office is not stuck on those books.
+    const companyDocPromise = getCompanyDocument(companyId);
+    const deskPromise = Promise.all([
+      loadCollection<RbacRole>(companyId, 'roles'),
+      loadCollection<User>(companyId, 'members'),
+      loadCollection<Truck>(companyId, 'trucks'),
+      loadCollection<Driver>(companyId, 'drivers'),
+      loadCollection<Client>(companyId, 'clients'),
+      loadCollection<RateCard>(companyId, 'rateCards'),
+      loadCollection<TruckBan>(companyId, 'truckBans'),
+      loadCollection<AppNotification>(companyId, 'notifications'),
+    ]);
+    const tripsEarly = profileRole && !profileIsDriver
+      ? loadCollection<Trip>(companyId, 'trips')
+      : null;
+    const booksPromise = profileIsDriver
+      ? null
+      : Promise.all([
+          loadCollection<Invoice>(companyId, 'invoices'),
+          loadCollection<FuelLog>(companyId, 'fuelLogs'),
+          loadCollection<JournalEntry>(companyId, 'journalEntries'),
+          loadCollection<RbacAuditEntry>(companyId, 'auditLogs'),
+        ]);
+    const statementsPromise = profileIsDriver
+      ? null
+      : loadCollection<StatementOfAccount>(companyId, 'statements').catch((error) => {
+          console.warn('Statements of account could not be loaded. Publish the latest Firestore rules, then refresh.', error);
+          return [] as StatementOfAccount[];
+        });
+
+    const companyDoc = await companyDocPromise;
     if (!companyDoc) {
       throw new Error('Company workspace was not found for this account.');
     }
+    if (hydrateGenerationRef.current !== generation) return;
 
     const [
       loadedRoles,
@@ -748,46 +830,27 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       loadedClients,
       loadedRateCards,
       loadedTruckBans,
-      loadedInvoices,
-      loadedFuelLogs,
-      loadedJournal,
       loadedNotifications,
-      loadedAudit,
-    ] = await Promise.all([
-      loadCollection<RbacRole>(companyId, 'roles'),
-      loadCollection<User>(companyId, 'members'),
-      loadCollection<Truck>(companyId, 'trucks'),
-      loadCollection<Driver>(companyId, 'drivers'),
-      loadCollection<Client>(companyId, 'clients'),
-      loadCollection<RateCard>(companyId, 'rateCards'),
-      loadCollection<TruckBan>(companyId, 'truckBans'),
-      loadCollection<Invoice>(companyId, 'invoices'),
-      loadCollection<FuelLog>(companyId, 'fuelLogs'),
-      loadCollection<JournalEntry>(companyId, 'journalEntries'),
-      loadCollection<AppNotification>(companyId, 'notifications'),
-      loadCollection<RbacAuditEntry>(companyId, 'auditLogs'),
-    ]);
+    ] = await deskPromise;
+    if (hydrateGenerationRef.current !== generation) return;
 
     const memberRole = String(
       (profile?.role as string) ||
         loadedMembers.find((m) => m.id === uid)?.role ||
         ''
     );
-    const driverRosterId = isFieldDriverRole(memberRole)
+    const driverSession = isFieldDriverRole(memberRole);
+    const driverRosterId = driverSession
       ? resolveDriverRosterId(loadedDrivers, uid, profile?.email)
       : null;
-    const loadedTrips = isFieldDriverRole(memberRole)
+    const loadedTrips = driverSession
       ? driverRosterId
-        ? await loadCollectionWhere<Trip>(companyId, 'trips', 'driverId', driverRosterId)
+        ? await loadCollectionWhere<Trip>(companyId, 'trips', crewTripField(loadedDrivers, driverRosterId), driverRosterId)
         : []
-      : await loadCollection<Trip>(companyId, 'trips');
-
-    let loadedStatements: StatementOfAccount[] = [];
-    try {
-      loadedStatements = await loadCollection<StatementOfAccount>(companyId, 'statements');
-    } catch (error) {
-      console.warn('Statements of account could not be loaded. Publish the latest Firestore rules, then refresh.', error);
-    }
+      : tripsEarly
+        ? await tripsEarly
+        : await loadCollection<Trip>(companyId, 'trips');
+    if (hydrateGenerationRef.current !== generation) return;
 
     const { subscription: savedSub, chartOfAccounts: savedAccounts, onboardingComplete, createdBy, ...companyFields } = companyDoc;
     companyCreatedByRef.current = createdBy || uid;
@@ -808,11 +871,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       persistSub = true;
     }
     if (persistSub) {
-      try {
-        await saveCompanySubscription(companyId, nextSub, isUnlockedPlanId(nextSub.plan_id) ? 'Growth' : 'Free');
-      } catch (error) {
+      saveCompanySubscription(companyId, nextSub, isUnlockedPlanId(nextSub.plan_id) ? 'Growth' : 'Free').catch((error) => {
         console.error('Could not persist subscription period or Founding rollover', error);
-      }
+      });
     }
     const nextRoles = ensureDefaultSystemRoles(
       loadedRoles.length ? loadedRoles : [OWNER_RBAC_ROLE]
@@ -894,12 +955,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     snapshotCollection('rateCards', loadedRateCards);
     snapshotCollection('truckBans', loadedTruckBans);
     snapshotCollection('trips', loadedTrips);
-    snapshotCollection('invoices', loadedInvoices);
-    snapshotCollection('statements', loadedStatements);
-    snapshotCollection('fuelLogs', loadedFuelLogs);
-    snapshotCollection('journalEntries', loadedJournal);
     snapshotCollection('notifications', loadedNotifications);
-    snapshotCollection('auditLogs', loadedAudit);
 
     setCompany({
       ...companyFields,
@@ -914,12 +970,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRateCards(loadedRateCards);
     setTruckBans(loadedTruckBans);
     setTrips(loadedTrips);
-    setInvoices(loadedInvoices);
-    setStatements(loadedStatements);
-    setFuelLogs(loadedFuelLogs);
-    setJournalEntries(loadedJournal);
     setNotifications(loadedNotifications);
-    setRbacAuditLogs(loadedAudit);
     if (Array.isArray(savedAccounts) && savedAccounts.length) {
       setChartOfAccounts(savedAccounts as ChartOfAccount[]);
     }
@@ -929,6 +980,40 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsOnboardingOpen(!onboardingComplete);
     persistReadyRef.current = true;
     refreshTiedCompanyLogins(companyId, uniqueMembers).catch(() => setTiedCompanyLogins([]));
+
+    if (driverSession) {
+      booksReadyRef.current = true;
+      setBooksReady(true);
+      return;
+    }
+
+    const booksTask = booksPromise ?? Promise.all([
+      loadCollection<Invoice>(companyId, 'invoices'),
+      loadCollection<FuelLog>(companyId, 'fuelLogs'),
+      loadCollection<JournalEntry>(companyId, 'journalEntries'),
+      loadCollection<RbacAuditEntry>(companyId, 'auditLogs'),
+    ]);
+    const statementsTask = statementsPromise ?? loadCollection<StatementOfAccount>(companyId, 'statements').catch((error) => {
+      console.warn('Statements of account could not be loaded. Publish the latest Firestore rules, then refresh.', error);
+      return [] as StatementOfAccount[];
+    });
+
+    void (async () => {
+      try {
+        const [loadedInvoices, loadedFuelLogs, loadedJournal, loadedAudit] = await booksTask;
+        const loadedStatements = await statementsTask;
+        if (hydrateGenerationRef.current !== generation) return;
+        applyLoadedCollection(generation, 'invoices', loadedInvoices, setInvoices);
+        applyLoadedCollection(generation, 'fuelLogs', loadedFuelLogs, setFuelLogs);
+        applyLoadedCollection(generation, 'journalEntries', loadedJournal, setJournalEntries);
+        applyLoadedCollection(generation, 'auditLogs', loadedAudit, setRbacAuditLogs);
+        applyLoadedCollection(generation, 'statements', loadedStatements, setStatements);
+        booksReadyRef.current = true;
+        setBooksReady(true);
+      } catch (error) {
+        console.error('Freight bills, fuel, or the ledger could not be loaded.', error);
+      }
+    })();
   };
 
   useEffect(() => {
@@ -965,13 +1050,18 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setLiveTracking([]);
         setFieldEvents([]);
       } else {
+        const tripField = crewTripField(drivers, rosterId);
         unsubs.push(
-          listenCollectionWhere<Trip>(company.id, 'trips', 'driverId', rosterId, (remote) => {
+          listenCollectionWhere<Trip>(company.id, 'trips', tripField, rosterId, (remote) => {
             if (tripsDirtyRef.current) return;
             setTrips(applyPinnedTrips(remote));
-          }),
-          listenCollectionWhere<LiveTracking>(company.id, 'liveTracking', 'driverId', rosterId, setLiveTracking)
+          })
         );
+        if (tripField === 'driverId') {
+          unsubs.push(
+            listenCollectionWhere<LiveTracking>(company.id, 'liveTracking', 'driverId', rosterId, setLiveTracking)
+          );
+        }
       }
     } else {
       unsubs.push(
@@ -1022,6 +1112,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const unsub = onAuthStateChanged(getFirebaseAuth(), async (fbUser) => {
+      const run = ++authRunRef.current;
       if (!fbUser) {
         resetWorkspace();
         setIsAuthenticated(false);
@@ -1071,13 +1162,15 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
             ...(shouldStampSeen ? { lastSeenAt: seenAt } : {}),
           }).catch(() => {});
         }
+        if (authRunRef.current !== run) return;
         await hydrateCompany(profile.companyId, fbUser.uid, profile);
       } catch (error) {
+        if (authRunRef.current !== run) return;
         console.error('Failed to hydrate Firebase workspace', error);
         resetWorkspace();
         setIsAuthenticated(false);
       } finally {
-        setIsAuthLoading(false);
+        if (authRunRef.current === run) setIsAuthLoading(false);
       }
     });
 
@@ -1242,7 +1335,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!isAuthenticated || !company.id) return;
     const timer = window.setTimeout(() => {
-      if (!persistReadyRef.current) return;
+      if (!persistReadyRef.current || !booksReadyRef.current) return;
       const backup = captureWorkspaceBackup();
       saveWeeklyBackup(backup).catch((err) => console.warn('Could not save weekly local backup', err));
       syncDeviceEvidence({
@@ -1255,7 +1348,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }).catch((err) => console.warn('Could not auto-save BIR copies to this device', err));
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [isAuthenticated, company.id]);
+  }, [isAuthenticated, company.id, booksReady]);
 
   const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
 
@@ -2182,7 +2275,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return uploaded;
   };
 
-  const addUser = async (userData: Omit<User, 'id' | 'companyId'>): Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string }> => {
+  const addUser = async (userData: Omit<User, 'id' | 'companyId'>): Promise<{ success: boolean; error?: string; emailed?: boolean; inviteUrl?: string; emailError?: string }> => {
     if (requireUpgrade(!canAddAccount)) {
       return { success: false, error: 'Team seat limit reached (100 on Free trial). Remove unused invites or subscribe for unlimited seats.' };
     }
@@ -2252,7 +2345,78 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
     pushAudit('USER_ROLE_ASSIGNED', `Invited ${userData.name} (${userData.email}) as ${userData.role}.`, userData.role, userData.name);
-    return { success: true, emailed: false, inviteUrl };
+    const mailed = await sendCrewAccessEmail({ name: userData.name, email: userData.email });
+    return {
+      success: true,
+      emailed: Boolean(mailed.emailed),
+      inviteUrl,
+      emailError: mailed.success ? undefined : mailed.error,
+    };
+  };
+
+  const sendCrewAccessEmail = async (person: { name: string; email: string }): Promise<{ success: boolean; error?: string; emailed?: boolean; alreadyJoined?: boolean }> => {
+    const email = person.email.trim().toLowerCase();
+    const name = person.name.trim() || email.split('@')[0];
+    if (!email.includes('@')) {
+      return { success: false, error: 'Enter a real email so we can send the login link.' };
+    }
+    if (!isFirebaseConfigured() || !company.id) {
+      return { success: false, error: 'Sign in to the company before sending a login email.' };
+    }
+    try {
+      const response = await fetch('/api/crew-invite', {
+        method: 'POST',
+        headers: await paymongoRequestHeaders(),
+        body: JSON.stringify({ email, name }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string; emailed?: boolean; alreadyJoined?: boolean };
+      if (!response.ok) {
+        return { success: false, error: data.error || 'Could not email the login link.' };
+      }
+      return { success: true, emailed: Boolean(data.emailed), alreadyJoined: Boolean(data.alreadyJoined) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Could not email the login link.' };
+    }
+  };
+
+  const registerCrewLogin = async (person: { name: string; email: string }): Promise<{ success: boolean; error?: string; emailed?: boolean; alreadyJoined?: boolean }> => {
+    const email = person.email.trim().toLowerCase();
+    const name = person.name.trim() || email.split('@')[0];
+    if (!email.includes('@')) {
+      return { success: false, error: 'Enter a real email so we can send the login link.' };
+    }
+    const alreadyOnTeam = users.some((member) => (member.email || '').trim().toLowerCase() === email);
+    if (!alreadyOnTeam && requireUpgrade(!canAddAccount)) {
+      return { success: false, error: 'Team seat limit reached (100 on Free trial). Remove unused invites or subscribe for unlimited seats.' };
+    }
+    if (company.id && !users.some((member) => (member.email || '').trim().toLowerCase() === email && member.status !== 'invited' && !String(member.id).startsWith('invite-'))) {
+      try {
+        await saveInvite({
+          email,
+          name,
+          role: 'Driver',
+          companyId: company.id,
+          invitedBy: currentUserId,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        return { success: false, error: mapAuthError(error) };
+      }
+    }
+    if (!alreadyOnTeam) {
+      setUsers((prev) => [
+        ...prev,
+        {
+          id: `invite-${Date.now()}`,
+          name,
+          email,
+          role: 'Driver',
+          companyId: company.id,
+          status: 'invited',
+        },
+      ]);
+    }
+    return sendCrewAccessEmail({ name, email });
   };
 
   const inviteClientPortal = async (
@@ -2686,6 +2850,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
           }
           if (newStatus === 'Invoiced') {
+            if (!booksReadyRef.current) {
+              window.alert('Freight bills are still loading. Wait a moment, then move this trip to Invoiced again.');
+              return trip;
+            }
             const claimBlock = invoiceBlockReason(merged);
             if (claimBlock) {
               window.alert(claimBlock);
@@ -3143,7 +3311,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error('Your login is not linked to a Driver Roster row. Ask dispatch to save your email on your driver record.');
     }
     const trip = trips.find((t) => t.id === tripId);
-    if (!trip || trip.driverId !== assignedDriverRosterId) {
+    if (!trip || (trip.driverId !== assignedDriverRosterId && trip.helperId !== assignedDriverRosterId)) {
       throw new Error('This trip is not assigned to you.');
     }
     return trip;
@@ -3438,6 +3606,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       window.alert('Trip not found.');
       return null;
     }
+    if (!booksReadyRef.current) {
+      window.alert('Freight bills are still loading. Wait a moment, then create the bill again.');
+      return null;
+    }
 
     const trk = trucks.find(t => t.id === trip.truckId);
     const existing = invoices.find(inv => inv.tripId === tripId);
@@ -3512,6 +3684,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const createStatement = (clientId: string, period: string): StatementOfAccount => {
+    if (!booksReadyRef.current) {
+      throw new Error('Statements are still loading. Wait a moment, then generate again.');
+    }
     if (!/^\d{4}-\d{2}$/.test(period)) {
       throw new Error('Pick a month for the statement.');
     }
@@ -4825,6 +5000,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       currentUser,
       isAuthenticated,
       isAuthLoading,
+      booksReady,
       isFirebaseReady: isFirebaseConfigured(),
       login,
       signup,
@@ -4835,6 +5011,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       switchUserAccount,
       switchUserRole,
       addUser,
+      sendCrewAccessEmail,
+      registerCrewLogin,
       inviteClientPortal,
       removeUserFromCompany,
       tiedCompanyLogins,

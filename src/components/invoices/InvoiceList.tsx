@@ -47,6 +47,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
     clients, 
     trips,
     statements,
+    booksReady,
     updateInvoiceStatus, 
     createInvoiceForTrip,
     currentUser
@@ -266,7 +267,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         )}
 
         {/* Unbilled Delivered Shipments Alert Banner */}
-        {unbilledDeliveredTrips.length > 0 && (
+        {booksReady && unbilledDeliveredTrips.length > 0 && (
           <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
@@ -318,7 +319,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
               {filteredInvoices.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">
-                    No invoices match your filter criteria.
+                    {booksReady ? 'No invoices match your filter criteria.' : 'Freight bills are still loading.'}
                   </td>
                 </tr>
               ) : (

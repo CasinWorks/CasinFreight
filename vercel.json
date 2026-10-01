@@ -16,6 +16,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/crew-invite", "destination": "/api/crewInvite" },
     { "source": "/api/paymongo/checkout", "destination": "/api/paymongo" },
     { "source": "/api/paymongo/verify", "destination": "/api/paymongo" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }

@@ -225,20 +225,33 @@ service cloud.firestore {
       return /databases/$(database)/documents/companies/$(companyId)/trips/$(tripId);
     }
 
+    function rosterRowMatchesAuth(companyId, rosterId) {
+      return rosterId is string
+        && exists(/databases/$(database)/documents/companies/$(companyId)/drivers/$(rosterId))
+        && (
+          (
+            get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(rosterId)).data.keys().hasAny(['email'])
+            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(rosterId)).data.email is string
+            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(rosterId)).data.email.lower() == authEmail()
+          )
+          || (
+            get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(rosterId)).data.keys().hasAny(['userId'])
+            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(rosterId)).data.userId == request.auth.uid
+          )
+        );
+    }
+
     function isAssignedTripDriver(companyId, tripId) {
       return inCompany(companyId)
         && exists(tripPath(companyId, tripId))
-        && get(tripPath(companyId, tripId)).data.keys().hasAny(['driverId'])
-        && exists(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId))
         && (
           (
-            get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.keys().hasAny(['email'])
-            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.email is string
-            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.email.lower() == authEmail()
+            get(tripPath(companyId, tripId)).data.keys().hasAny(['driverId'])
+            && rosterRowMatchesAuth(companyId, get(tripPath(companyId, tripId)).data.driverId)
           )
           || (
-            get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.keys().hasAny(['userId'])
-            && get(/databases/$(database)/documents/companies/$(companyId)/drivers/$(get(tripPath(companyId, tripId)).data.driverId)).data.userId == request.auth.uid
+            get(tripPath(companyId, tripId)).data.keys().hasAny(['helperId'])
+            && rosterRowMatchesAuth(companyId, get(tripPath(companyId, tripId)).data.helperId)
           )
         );
     }
@@ -362,11 +375,20 @@ service cloud.firestore {
     }
 
     match /companies/{companyId} {
+      // Beta Tester signup stores plan_beta (free Premium through Dec 31, 2026).
+      // A new company cannot grant itself Founding, Premium, or Enterprise.
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.id == companyId
         && request.resource.data.subscriptionTier == 'Free'
-        && request.resource.data.subscription.plan_id == 'plan_free';
+        && request.resource.data.subscription.plan_id is string
+        && (
+          request.resource.data.subscription.plan_id == 'plan_free'
+          || (
+            request.resource.data.subscription.plan_id == 'plan_beta'
+            && request.resource.data.subscription.grant_source == 'beta'
+          )
+        );
       // Invitees need company read while claiming a seat (before members/{uid} exists).
       // Client portal users need company read for trip queries after join.
       allow read: if canAccessCompany(companyId)
@@ -492,6 +514,7 @@ service cloud.firestore {
             && (
               !('crewRole' in request.resource.data)
               || request.resource.data.crewRole == 'driver'
+              || request.resource.data.crewRole == 'helper'
             )
           );
         allow delete: if hasPerm(companyId, 'drivers.crud');

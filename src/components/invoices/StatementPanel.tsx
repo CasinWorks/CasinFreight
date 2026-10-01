@@ -11,7 +11,7 @@ interface StatementPanelProps {
 }
 
 export const StatementPanel: React.FC<StatementPanelProps> = ({ onOpenInvoice, onOpenTrip }) => {
-  const { clients, trips, invoices, statements, createStatement, removeStatement } = useFreight();
+  const { clients, trips, invoices, statements, booksReady, createStatement, removeStatement } = useFreight();
   const [clientId, setClientId] = useState('');
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState(() => manilaDateKey().slice(0, 7));
@@ -106,9 +106,15 @@ export const StatementPanel: React.FC<StatementPanelProps> = ({ onOpenInvoice, o
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
         <div className="px-4 py-3 border-b border-slate-200 text-xs font-semibold text-slate-700">
-          {rows.length} {rows.length === 1 ? 'company' : 'companies'} · {statementMonthLabel(period)}
+          {booksReady
+            ? `${rows.length} ${rows.length === 1 ? 'company' : 'companies'} · ${statementMonthLabel(period)}`
+            : `Statements are still loading · ${statementMonthLabel(period)}`}
         </div>
-        {rows.length === 0 ? (
+        {!booksReady ? (
+          <div className="px-4 py-8 text-center text-xs text-slate-400">
+            Statements are still loading.
+          </div>
+        ) : rows.length === 0 ? (
           <div className="px-4 py-8 text-center text-xs text-slate-400">
             No company has a statement or a delivered trip in {statementMonthLabel(period)}.
           </div>

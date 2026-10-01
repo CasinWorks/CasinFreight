@@ -101,10 +101,14 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
     });
     if (!result.success) return;
 
-    if (result.inviteUrl) {
+    if (result.emailed) {
+      window.alert(`We emailed ${inviteEmail}. They open it, choose a password, then sign in. They must not create a new company.`);
+    } else if (result.inviteUrl) {
       try {
         await navigator.clipboard.writeText(result.inviteUrl);
-        window.alert(`Invite saved. Join link copied. Send it to ${inviteEmail} — they choose a password on that page and join this company.`);
+        window.alert(result.emailError
+          ? `Invite saved, but the email was not sent. ${result.emailError}\nJoin link copied.`
+          : `Invite saved. Join link copied. Send it to ${inviteEmail} — they choose a password on that page and join this company.`);
       } catch {
         window.alert(`Invite saved. Send this join link:\n${result.inviteUrl}`);
       }

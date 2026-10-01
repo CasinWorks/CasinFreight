@@ -66,7 +66,8 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
     trips, 
     addFuelLog, 
     updateFuelLog, 
-    fuelLogs, 
+    fuelLogs,
+    booksReady,
     canLogFuel 
   } = useFreight();
 
@@ -209,6 +210,10 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!booksReady) {
+      alert('Fuel records are still loading. Wait a moment, then save again.');
+      return;
+    }
     if (!truckId) {
       alert('Please select a truck.');
       return;

@@ -38,7 +38,8 @@ export const FuelAnalyticsDashboard: React.FC<FuelAnalyticsDashboardProps> = ({
 }) => {
   const { 
     trucks, 
-    fuelLogs, 
+    fuelLogs,
+    booksReady, 
     getTruckFuelSummary, 
     getFleetFuelAnalytics, 
     deleteFuelLog, 
@@ -146,7 +147,9 @@ export const FuelAnalyticsDashboard: React.FC<FuelAnalyticsDashboardProps> = ({
           </div>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl font-mono font-black text-slate-900">
-              ₱{fleetAnalytics.totalCostPhp.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              {booksReady
+                ? `₱${fleetAnalytics.totalCostPhp.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                : 'Loading fill-ups…'}
             </span>
           </div>
           <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">

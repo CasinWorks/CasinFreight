@@ -223,7 +223,13 @@ export const RbacManagementView: React.FC = () => {
     } catch {
       /* clipboard may be blocked */
     }
-    showToast(`Invite saved for ${invitedName}. Send them this join link (copied): they choose a password and join your company — they must not Create company.`);
+    showToast(
+      result.emailed
+        ? `We emailed ${invitedEmail}. They open it, choose a password, then sign in. They must not Create company.`
+        : result.emailError
+          ? `Invite saved for ${invitedName}, but the email was not sent. ${result.emailError}`
+          : `Invite saved for ${invitedName}. Send them this join link (copied): they choose a password and join your company — they must not Create company.`
+    );
   };
 
   const canRemoveTeammates =

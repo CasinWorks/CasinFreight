@@ -24,10 +24,11 @@ import { CrewWeekBoard } from './CrewWeekBoard';
 import { formatPhp } from '../../lib/crewWeek';
 
 export const DriverRegistry: React.FC = () => {
-  const { drivers, trucks, addDriver, updateDriver, deleteDriver, approveDriver, canAccess } = useFreight();
+  const { drivers, trucks, addDriver, updateDriver, deleteDriver, approveDriver, canAccess, registerCrewLogin } = useFreight();
 
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
 
   // Form State
@@ -79,14 +80,26 @@ export const DriverRegistry: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       alert('Please fill out the name.');
       return;
     }
+    const loginEmail = email.trim().toLowerCase();
+    if (!loginEmail.includes('@')) {
+      alert('Enter the email they will use to open CasinFreight. We send the login link there.');
+      return;
+    }
     if (crewRole !== 'helper' && !licenseNo.trim()) {
       alert('Please fill out the driver name and license number.');
+      return;
+    }
+    const emailTaken = drivers.some(
+      (person) => person.id !== editingDriverId && (person.email || '').trim().toLowerCase() === loginEmail
+    );
+    if (emailTaken) {
+      alert('That email is already on this roster.');
       return;
     }
 
@@ -98,7 +111,7 @@ export const DriverRegistry: React.FC = () => {
       licenseRestrictions: crewRole === 'helper' ? (licenseRestrictions.trim() || 'Helper / pahinante (no driving duty)') : licenseRestrictions,
       licenseExpiry,
       assignedTruckId: assignedTruckId || undefined,
-      email: email.trim() || undefined,
+      email: loginEmail,
       status,
       emergencyContact,
       tripPayPhp: Number(tripPayPhp) > 0 ? Number(tripPayPhp) : undefined,
@@ -110,7 +123,43 @@ export const DriverRegistry: React.FC = () => {
     } else {
       addDriver(payload);
     }
-    setShowModal(false);
+
+    const previous = editingDriverId ? drivers.find((person) => person.id === editingDriverId) : undefined;
+    const alreadyLinked = Boolean(previous?.userId) && (previous?.email || '').trim().toLowerCase() === loginEmail;
+    setSaving(true);
+    try {
+      if (!alreadyLinked) {
+        const mailed = await registerCrewLogin({ name: name.trim(), email: loginEmail });
+        if (mailed.alreadyJoined) {
+          alert(`${name.trim()} already has a CasinFreight login on this company.`);
+        } else if (mailed.emailed) {
+          alert(`We emailed ${loginEmail}. They open that message, choose a password, then sign in. Ask them to check Spam if it is not in the inbox.`);
+        } else {
+          alert(mailed.error || `Saved ${name.trim()}, but the login email was not sent. Use Send login email on their card.`);
+        }
+      }
+      setShowModal(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resendLoginEmail = async (person: Driver) => {
+    const loginEmail = (person.email || '').trim().toLowerCase();
+    if (!loginEmail) {
+      alert('Add an email on this person first.');
+      return;
+    }
+    const mailed = await registerCrewLogin({ name: person.name, email: loginEmail });
+    if (mailed.alreadyJoined) {
+      alert(`${person.name} already has a CasinFreight login on this company.`);
+      return;
+    }
+    if (mailed.emailed) {
+      alert(`We emailed ${loginEmail} again. They open it, choose a password, then sign in.`);
+      return;
+    }
+    alert(mailed.error || 'The login email was not sent.');
   };
 
   const helperCount = drivers.filter((d) => isHelperCrew(d)).length;
@@ -139,7 +188,7 @@ export const DriverRegistry: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Philippine LTO licenses for drivers, plus helpers / pahinante assigned to each truck.
+              Add a driver or helper here. CasinFreight emails them a link to choose a password and open the app.
             </p>
             <div className="mt-3 max-w-xl">
               <FeatureHowTo feature="drivers" />
@@ -224,14 +273,14 @@ export const DriverRegistry: React.FC = () => {
                         Helper / pahinante
                       </span>
                     )}
-                    {!helper && drv.userId && (
-                      <span className="mt-0.5 inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                    {drv.userId && (
+                      <span className="mt-0.5 ml-1 inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
                         App login linked
                       </span>
                     )}
-                    {!helper && !drv.userId && drv.email && (
-                      <span className="mt-0.5 inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                        Invite pending · {drv.email}
+                    {!drv.userId && drv.email && (
+                      <span className="mt-0.5 ml-1 inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        Waiting to sign in · {drv.email}
                       </span>
                     )}
                   </div>
@@ -323,6 +372,15 @@ export const DriverRegistry: React.FC = () => {
                         <span>Approve</span>
                       </button>
                     )}
+                    {!drv.userId && drv.email && (
+                      <button
+                        type="button"
+                        onClick={() => { void resendLoginEmail(drv); }}
+                        className="px-2 py-1 text-blue-700 hover:bg-blue-50 rounded text-[11px] font-bold"
+                      >
+                        Send login email
+                      </button>
+                    )}
                     <button
                       onClick={() => handleOpenEdit(drv)}
                       className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors text-xs flex items-center gap-1 font-medium"
@@ -388,19 +446,18 @@ export const DriverRegistry: React.FC = () => {
                 />
               </div>
 
-              {crewRole === 'driver' && (
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Driver app login email</label>
+                <label className="block font-semibold text-slate-700 mb-1">Login email *</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Same email you invite under Company & Team"
+                  placeholder="name@email.com"
+                  required
                   className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Prefer inviting under Company &amp; Team as role Driver — they are added to this roster automatically. Or enter the same email here to link an existing login.</p>
+                <p className="text-[10px] text-slate-400 mt-1">We email this address a link to choose a password. That is the only registration. They sign in on the phone with that email.</p>
               </div>
-              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -531,9 +588,10 @@ export const DriverRegistry: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                  disabled={saving}
+                  className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold disabled:opacity-60"
                 >
-                  {editingDriverId ? 'Update' : crewRole === 'helper' ? 'Save helper' : 'Save driver'}
+                  {saving ? 'Sending email…' : editingDriverId ? 'Update and email' : 'Save and email login'}
                 </button>
               </div>
             </form>

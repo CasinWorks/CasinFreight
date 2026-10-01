@@ -65,7 +65,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setErrorMessage(null);
     setInfoMessage(
       initialMode === 'join' && invitedEmail
-        ? 'You were invited. Enter your name, choose a password, and join. This website is for fleet staff (office / dispatch).'
+        ? 'Open the email from CasinFreight, choose a password there, then enter that same password here and tap Join.'
         : null
     );
     setPassword('');
@@ -165,7 +165,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="text-left">
               <h4 className="font-extrabold text-slate-900 text-lg">Finish your invite</h4>
               <p className="text-sm text-slate-500 mt-1">
-                Choose a password, then tap Join. Fleet staff open the website after this; warehouse / client portal contacts use the CasinFreight Driver app on the phone.
+                Open the email we sent, choose a password on that page, then enter the same password here and tap Join. Drivers and helpers then sign in on the phone. Office staff use this website.
               </p>
             </div>
           ) : (

@@ -68,6 +68,10 @@ export default defineConfig(({ mode }) => {
         const { stampAdminSession } = nodeRequire('./api/firebaseAdmin.js');
         return stampAdminSession(authHeader);
       }),
+      jsonDevApi('crew-invite-dev-api', '/api/crew-invite', async (body, origin, authHeader) => {
+        const { sendCrewAccessEmail } = nodeRequire('./api/firebaseAdmin.js');
+        return sendCrewAccessEmail(authHeader, body, origin);
+      }),
     ],
     resolve: {
       alias: {

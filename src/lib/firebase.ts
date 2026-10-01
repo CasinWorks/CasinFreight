@@ -6,7 +6,13 @@ import {
   setPersistence,
   type Auth,
 } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -66,7 +72,16 @@ export async function setAuthRememberMe(remember: boolean): Promise<void> {
 
 export function getFirebaseDb(): Firestore {
   if (!db) {
-    db = getFirestore(getFirebaseApp());
+    try {
+      // IndexedDB cache: a return visit paints from this browser instead of
+      // downloading the whole office again before the desk opens.
+      db = initializeFirestore(getFirebaseApp(), {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch (error) {
+      console.warn('Firestore offline cache unavailable.', error);
+      db = getFirestore(getFirebaseApp());
+    }
   }
   return db;
 }

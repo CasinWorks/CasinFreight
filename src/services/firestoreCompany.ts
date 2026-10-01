@@ -718,7 +718,6 @@ export async function ensureDriverRosterForLogin(params: {
     const patch: Record<string, unknown> = {
       email,
       name: params.name || match.data().name || email.split('@')[0],
-      crewRole: 'driver',
     };
     if (params.uid) patch.userId = params.uid;
     await setDoc(match.ref, stripUndefined(patch), { merge: true });
