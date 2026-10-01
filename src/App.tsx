@@ -37,10 +37,12 @@ import { HowToPage } from './components/help/HowToPage';
 import { WorkspaceBackupModal } from './components/onboarding/WorkspaceBackupModal';
 import { DriverFieldApp } from './components/driver/DriverFieldApp';
 import { helpToolDestination } from './content/helpContent';
+import { ContainerReturnReport } from './components/containers/ContainerReturnReport';
+import { ContainerReturnAlerts } from './components/containers/ContainerReturnAlerts';
 import { Analytics } from '@vercel/analytics/react';
 
 function MainLayout() {
-  const { canAccess, isOnboardingOpen, setIsOnboardingOpen, canCreateBooking, setIsUpgradeModalOpen, canManageBilling, canManageCompanyBilling } = useFreight();
+  const { canAccess, isOnboardingOpen, setIsOnboardingOpen, canCreateBooking, setIsUpgradeModalOpen, canManageBilling, canManageCompanyBilling, company } = useFreight();
 
   const [activeTab, setActiveTab] = useState<NavTab>('board');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -75,6 +77,12 @@ function MainLayout() {
     }
     window.alert('Plan limit reached. Ask the company Owner to upgrade or manage the subscription.');
   };
+
+  useEffect(() => {
+    if (activeTab === 'containers' && !company.containerTrackingEnabled) {
+      setActiveTab('board');
+    }
+  }, [activeTab, company.containerTrackingEnabled]);
 
   const handleTabChange = (tab: NavTab) => {
     if (tab === 'orgsetup') {
@@ -216,6 +224,10 @@ function MainLayout() {
             <TruckBanRegistry />
           )}
 
+          {activeTab === 'containers' && company.containerTrackingEnabled && (
+            <ContainerReturnReport />
+          )}
+
           {activeTab === 'dashboard' && (
             <OwnerDashboard
               onSelectTrip={(tId) => setSelectedTripId(tId)}
@@ -335,6 +347,8 @@ function MainLayout() {
         invoiceId={selectedInvoiceId}
         onClose={() => setSelectedInvoiceId(null)}
       />
+
+      <ContainerReturnAlerts />
 
       <OrgSetupModal
         isOpen={isOrgSetupOpen}

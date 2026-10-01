@@ -43,6 +43,7 @@ import { StatusPrerequisiteModal } from './StatusPrerequisiteModal';
 import { TripExceptionModal } from './TripExceptionModal';
 import { TripStatusRetractionModal } from './TripStatusRetractionModal';
 import { resumeTarget, TripKanbanCard } from './TripKanbanCard';
+import { ContainerCountdownBadge } from './ContainerCountdownBadge';
 import { FeatureHowTo } from '../help/FeatureHowTo';
 
 interface TripBoardProps {
@@ -1262,6 +1263,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="font-mono font-extrabold text-blue-700 text-sm">{trip.tripNumber}</div>
+                          <ContainerCountdownBadge trip={trip} />
                           <div className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{clt?.name || '—'}</div>
                         </div>
                         <span
@@ -1356,6 +1358,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
                           <td className="py-3.5 px-4">
                             <div className="font-mono font-bold text-blue-600">{trip.tripNumber}</div>
                             <div className="text-[10px] text-slate-400 font-mono">{trip.waybillNumber}</div>
+                            <ContainerCountdownBadge trip={trip} />
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-slate-800 max-w-[180px] truncate">
                             {clt?.name}

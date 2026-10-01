@@ -22,12 +22,21 @@ import { DriverLeaderboard } from './DriverLeaderboard';
 import { OwnerAnalyticsCharts } from './OwnerAnalyticsCharts';
 import { useFreight } from '../../context/FreightContext';
 import { FeatureHowTo } from '../help/FeatureHowTo';
+import {
+  DETENTION_ESTIMATE_LABEL,
+  estimateContainerDetention,
+  formatEstimatedPeso,
+  formatManilaDate,
+  openContainerBookings,
+} from '../../lib/containerTracking';
+import { ContainerCountdownBadge } from '../trips/ContainerCountdownBadge';
 
 export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; onSelectInvoice: (invoiceId: string) => void }> = ({
   onSelectTrip,
   onSelectInvoice
 }) => {
-  const { trips, trucks, invoices, clients, drivers } = useFreight();
+  const { trips, trucks, invoices, clients, drivers, company } = useFreight();
+  const containersDue = company.containerTrackingEnabled ? openContainerBookings(trips) : [];
   const hasLiveData = trips.length > 0 || invoices.length > 0;
 
   const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year'>('month');
@@ -216,6 +225,47 @@ export const OwnerDashboard: React.FC<{ onSelectTrip: (tripId: string) => void; 
             </div>
           </div>
         </div>
+
+        {company.containerTrackingEnabled && containersDue.length > 0 && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Containers due for return</h3>
+                <p className="text-[11px] text-slate-500">Open container bookings, soonest return date first. {DETENTION_ESTIMATE_LABEL}</p>
+              </div>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
+                {containersDue.length} open
+              </span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {containersDue.map((trip) => {
+                const estimate = estimateContainerDetention(trip.container);
+                return (
+                  <button
+                    key={trip.id}
+                    type="button"
+                    onClick={() => onSelectTrip(trip.id)}
+                    className="w-full text-left py-2.5 flex flex-wrap items-center justify-between gap-2 hover:bg-slate-50"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-mono font-bold text-slate-900 text-xs">{trip.tripNumber}</div>
+                      <div className="text-[11px] text-slate-600 truncate">
+                        {trip.container?.containerNo || 'No container number'} · {trip.container?.shippingLine || 'Shipping line not set'} · {trip.originZone} → {trip.destinationZone}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-slate-600">
+                        {trip.container?.returnBy ? formatManilaDate(trip.container.returnBy) : 'No return date'}
+                        {estimate.daysOverdue > 0 ? ` · est. ${formatEstimatedPeso(estimate.detentionAccruedPhp)}` : ''}
+                      </span>
+                      <ContainerCountdownBadge trip={trip} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Executive Recharts Section: Monthly Revenue, Avg Load per Trip & Fleet Utilization Rates */}
         <OwnerAnalyticsCharts trips={trips} trucks={trucks} invoices={invoices} />

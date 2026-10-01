@@ -26,6 +26,7 @@ import { closeIfBackdrop } from '../../lib/modal';
 import { TruckFuelDetailModal } from './TruckFuelDetailModal';
 import { FuelAnalyticsDashboard } from './FuelAnalyticsDashboard';
 import { FeatureHowTo } from '../help/FeatureHowTo';
+import { TruckScheduleBoard } from './TruckScheduleBoard';
 
 export const TruckRegistry: React.FC = () => {
   const { 
@@ -43,7 +44,7 @@ export const TruckRegistry: React.FC = () => {
   } = useFreight();
 
   // Tab View Switch: Fleet Overview vs Fuel Analytics
-  const [viewMode, setViewMode] = useState<'FLEET' | 'FUEL'>('FLEET');
+  const [viewMode, setViewMode] = useState<'FLEET' | 'FUEL' | 'SCHEDULE'>('FLEET');
 
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
@@ -309,6 +310,18 @@ export const TruckRegistry: React.FC = () => {
             </button>
 
             <button
+              onClick={() => setViewMode('SCHEDULE')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'SCHEDULE'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-slate-600" />
+              <span>Truck schedule</span>
+            </button>
+
+            <button
               onClick={() => setViewMode('FUEL')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 viewMode === 'FUEL'
@@ -361,6 +374,8 @@ export const TruckRegistry: React.FC = () => {
             onOpenTruckFuelDetail={handleOpenTruckFuelDetail}
             onOpenEditFuel={handleOpenEditFuel}
           />
+        ) : viewMode === 'SCHEDULE' ? (
+          <TruckScheduleBoard />
         ) : (
           /* Fleet Cards Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

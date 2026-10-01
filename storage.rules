@@ -30,6 +30,8 @@ service firebase.storage {
       ];
     }
 
+    // Container return photos use companies/{companyId}/container-returns/…
+    // and the same size, type, and company checks as every other company file.
     match /companies/{companyId}/{allPaths=**} {
       allow read: if signedIn() && userCompanyId() == companyId;
       allow create, update: if signedIn()

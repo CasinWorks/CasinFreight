@@ -24,6 +24,7 @@ import {
   HardDrive,
   CircleHelp,
   User,
+  Box,
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { bansInEffectNow } from '../../lib/truckBans';
@@ -47,7 +48,8 @@ export type NavTab =
   | 'rbac'
   | 'orgsetup'
   | 'help'
-  | 'admin';
+  | 'admin'
+  | 'containers';
 
 type NavPermission =
   | 'pod_upload'
@@ -96,6 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     canManageBilling,
     isPlatformAdmin,
     truckBans,
+    company,
   } = useFreight();
 
   const [fleetOpen, setFleetOpen] = useState(true);
@@ -135,6 +138,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: KanbanSquare,
       permission: 'pod_upload',
     },
+    ...(company.containerTrackingEnabled
+      ? [{
+          id: 'containers' as const,
+          label: 'Container returns',
+          icon: Box,
+          permission: 'pod_upload' as const,
+        }]
+      : []),
     {
       id: 'exceptions',
       label: 'Exceptions',

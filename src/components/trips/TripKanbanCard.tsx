@@ -25,6 +25,7 @@ import {
 } from '../../types';
 
 import { resumeTarget } from '../../lib/stageGates';
+import { ContainerCountdownBadge } from './ContainerCountdownBadge';
 
 export { resumeTarget };
 
@@ -177,6 +178,7 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
         <span className="text-slate-400 mx-1">•</span>
         <span className="text-slate-500">{trip.cargoDescription}</span>
       </div>
+      <ContainerCountdownBadge trip={trip} />
 
       {!compact && (
       <div className="mb-2 bg-slate-50 p-1.5 rounded border border-slate-100">

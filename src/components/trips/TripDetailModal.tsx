@@ -52,6 +52,9 @@ import { TripProfitabilityView } from './TripProfitabilityView';
 import { FuelLogModal } from '../fleet/FuelLogModal';
 import { closeIfBackdrop } from '../../lib/modal';
 import { FeatureHowTo } from '../help/FeatureHowTo';
+import { isContainerBooking } from '../../lib/containerTracking';
+import { ContainerCountdownBadge } from './ContainerCountdownBadge';
+import { ContainerTrackingPanel } from './ContainerTrackingPanel';
 
 interface TripDetailModalProps {
   tripId: string | null;
@@ -94,7 +97,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
   // Modal sub-dialog states
   const [showDeliveryNoteModal, setShowDeliveryNoteModal] = useState(false);
   const [prerequisiteTargetStatus, setPrerequisiteTargetStatus] = useState<TripStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'OPERATIONS' | 'PROFITABILITY' | 'DOCUMENTS'>('OPERATIONS');
+  const [activeTab, setActiveTab] = useState<'OPERATIONS' | 'PROFITABILITY' | 'DOCUMENTS' | 'CONTAINER'>('OPERATIONS');
   const [showFuelLogModal, setShowFuelLogModal] = useState(false);
   const [fuelModalTripId, setFuelModalTripId] = useState<string | undefined>(undefined);
   const [fuelModalTruckId, setFuelModalTruckId] = useState<string | undefined>(undefined);
@@ -143,6 +146,14 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
       }
     }
   }, [trip]);
+
+  const showContainerTab = Boolean(company.containerTrackingEnabled && trip && isContainerBooking(trip));
+
+  useEffect(() => {
+    if (!showContainerTab) {
+      setActiveTab((current) => (current === 'CONTAINER' ? 'OPERATIONS' : current));
+    }
+  }, [showContainerTab]);
 
   if (!isOpen || !trip) return null;
 
@@ -404,6 +415,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
             <div className="min-w-0 flex-1">
               <div className="font-mono font-bold text-slate-900 truncate">{trip.tripNumber}</div>
               <div className="text-sm text-slate-600 truncate">{clt?.name || 'Client'}</div>
+              <ContainerCountdownBadge trip={trip} />
             </div>
             <span className={`text-xs px-2.5 py-1 rounded-full font-bold border shrink-0 ${
               trip.status === 'Pending' ? 'bg-slate-100 text-slate-700 border-slate-200' :
@@ -483,6 +495,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                 }`}>
                   {trip.status}
                 </span>
+                <ContainerCountdownBadge trip={trip} />
                 {trip.activeStatusRetraction?.status === 'Pending_Approval' && (
                   <button
                     type="button"
@@ -795,6 +808,21 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
               </span>
             </button>
 
+            {showContainerTab && (
+              <button
+                onClick={() => setActiveTab('CONTAINER')}
+                className={`flex-1 sm:flex-none min-h-11 sm:min-h-0 px-3 py-2 rounded-lg text-sm sm:text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+                  activeTab === 'CONTAINER'
+                    ? 'bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Clock className="hidden sm:block w-3.5 h-3.5" />
+                <span className="sm:hidden">Box</span>
+                <span className="hidden sm:inline">Container return</span>
+              </button>
+            )}
+
             <button
               onClick={() => setActiveTab('DOCUMENTS')}
               className={`flex-1 sm:flex-none min-h-11 sm:min-h-0 px-3 py-2 rounded-lg text-sm sm:text-xs font-bold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
@@ -948,6 +976,10 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+        ) : activeTab === 'CONTAINER' && showContainerTab ? (
+          <div className="overflow-y-auto p-4 md:p-6 flex-1 bg-slate-50/50">
+            <ContainerTrackingPanel key={trip.id} trip={trip} />
           </div>
         ) : (
           /* Modal Body: 2 Column Layout (Operations) */
@@ -1467,15 +1499,25 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Quick Action Button to Advance to In Transit */}
-                  {trip.status !== 'On Hold' && trip.status !== 'Cancelled' && canManipulateTripStatus('In Transit', trip.status).allowed && (
+                  {/* Next stage only. Already In Transit means the next step is Inbound. */}
+                  {nextOpsStage &&
+                    nextOpsStage !== 'Invoiced' &&
+                    trip.status !== 'On Hold' &&
+                    trip.status !== 'Cancelled' &&
+                    canManipulateTripStatus(nextOpsStage, trip.status).allowed && (
                     <button
                       type="button"
-                      onClick={() => setPrerequisiteTargetStatus('In Transit')}
+                      onClick={() => setPrerequisiteTargetStatus(nextOpsStage)}
                       className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95"
                     >
                       <ArrowRight className="w-3.5 h-3.5" />
-                      <span>Advance Shipment to In Transit</span>
+                      <span>
+                        {nextOpsStage === 'Loaded'
+                          ? 'Advance Shipment to Loaded'
+                          : nextOpsStage === 'In Transit'
+                          ? 'Advance Shipment to In Transit'
+                          : 'Advance Shipment to Inbound'}
+                      </span>
                     </button>
                   )}
                 </div>

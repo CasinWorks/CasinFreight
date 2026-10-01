@@ -24,7 +24,19 @@ import { matchingTruckBans } from '../../lib/truckBans';
 import { closeIfBackdrop } from '../../lib/modal';
 import { TruckBanAlert } from '../truckbans/TruckBanAlert';
 import { helperCrew, licensedDrivers } from '../../lib/crew';
+import {
+  bookingContainerFields,
+  collectShippingLineSuggestions,
+  emptyContainerDraft,
+  patchContainerDraft,
+  upsertContainerRateDefault,
+  type ContainerDraft,
+} from '../../lib/containerTracking';
 import { FeatureHowTo } from '../help/FeatureHowTo';
+import { ContainerMoveFields } from './ContainerMoveFields';
+import { PRESET_ROUTE_ZONES, rememberZone, sameZone, zonesForShipper } from '../../lib/routeZones';
+import { busyBlocks, formatScheduleValue, parseSchedule, windowConflict } from '../../lib/truckSchedule';
+import { AssignSchedulePicker } from './AssignSchedulePicker';
 
 interface NewTripModalProps {
   isOpen: boolean;
@@ -38,12 +50,16 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     drivers, 
     clients, 
     addClient,
+    updateClient,
     rateCards, 
     suggestRateCard, 
     addTrip, 
     canCreateBooking,
     setIsUpgradeModalOpen,
     truckBans,
+    company,
+    trips,
+    updateCompany,
   } = useFreight();
 
   // Form State
@@ -75,15 +91,22 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
   // Dates
   const [scheduledPickup, setScheduledPickup] = useState<string>(() => {
     const now = new Date();
-    now.setHours(now.getHours() + 2, 0, 0, 0);
-    return now.toISOString().slice(0, 16);
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 2);
+    return formatScheduleValue(now);
   });
   const [scheduledDelivery, setScheduledDelivery] = useState<string>(() => {
     const now = new Date();
-    now.setHours(now.getHours() + 10, 0, 0, 0);
-    return now.toISOString().slice(0, 16);
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 10);
+    return formatScheduleValue(now);
   });
   const [notes, setNotes] = useState<string>('');
+  const [moveType, setMoveType] = useState<'direct' | 'container'>('direct');
+  const [addingZoneFor, setAddingZoneFor] = useState<'origin' | 'destination' | null>(null);
+  const [zoneDraft, setZoneDraft] = useState('');
+  const [containerDraft, setContainerDraft] = useState<ContainerDraft>(() => emptyContainerDraft());
+  const containerTrackingOn = Boolean(company.containerTrackingEnabled);
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientTin, setNewClientTin] = useState('');
@@ -92,6 +115,12 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
   const [newClientTerms, setNewClientTerms] = useState(30);
 
   // Pre-fill initial defaults when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setMoveType('direct');
+    setContainerDraft(emptyContainerDraft());
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen) {
       if (trucks.length > 0 && !selectedTruckId) {
@@ -113,6 +142,11 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
 
   // Selected Truck Object
   const currentTruck = trucks.find(t => t.id === selectedTruckId);
+
+  const shippingLineSuggestions = useMemo(
+    () => collectShippingLineSuggestions(trips, company.containerRateDefaults),
+    [trips, company.containerRateDefaults],
+  );
 
   const banHits = useMemo(() => matchingTruckBans({
     bans: truckBans,
@@ -221,6 +255,31 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
       return;
     }
 
+    const pickupAt = parseSchedule(scheduledPickup);
+    const deliveryAt = parseSchedule(scheduledDelivery);
+    if (!pickupAt || !deliveryAt || deliveryAt <= pickupAt) {
+      window.alert('Set a delivery time that is after the pickup time.');
+      return;
+    }
+
+    const clash = windowConflict(busyBlocks(trips, selectedTruckId), scheduledPickup, scheduledDelivery);
+    if (clash) {
+      window.alert(`${clash.tripNumber} already has this truck from ${clash.route}. Pick a free pickup and delivery time.`);
+      return;
+    }
+
+    const selectedClient = clients.find((client) => client.id === selectedClientId);
+    if (selectedClient) {
+      let saved = selectedClient.savedZones;
+      for (const zone of [originZone, destinationZone]) {
+        const next = rememberZone(saved, zone);
+        if (next) saved = next;
+      }
+      if (saved !== selectedClient.savedZones) {
+        updateClient(selectedClient.id, { savedZones: saved });
+      }
+    }
+
     const createdTrip = addTrip({
       truckId: selectedTruckId,
       driverId: selectedDriverId,
@@ -245,7 +304,21 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
       demurrageRatePerHour: Number(demurrageRatePerHour),
       overweightSurchargePerKg: Number(overweightSurchargePerKg),
       notes,
+      ...bookingContainerFields(containerTrackingOn, moveType, containerDraft),
     });
+
+    if (createdTrip && containerTrackingOn && moveType === 'container' && containerDraft.saveRateDefault) {
+      const saved = bookingContainerFields(true, 'container', containerDraft);
+      if ('container' in saved && saved.container.shippingLine && saved.container.containerSize && saved.container.detentionRatePerDay !== undefined) {
+        updateCompany({
+          containerRateDefaults: upsertContainerRateDefault(company.containerRateDefaults, {
+            shippingLine: saved.container.shippingLine,
+            containerSize: saved.container.containerSize,
+            ratePerDay: saved.container.detentionRatePerDay,
+          }),
+        });
+      }
+    }
 
     if (!createdTrip) {
       return;
@@ -257,22 +330,67 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
     onClose();
   };
 
-  // Preset Zones in Philippines
-  const zoneOptions = [
-    'North Harbor / MICT Manila',
-    'South Harbor Gate 3 Manila',
-    'Caloocan / Valenzuela Industrial',
-    'Pasig / Taguig Food Terminal',
-    'Muntinlupa / Sucat Warehouse Hub',
-    'Laguna Technopark (Biñan/Sta. Rosa)',
-    'Cavite Export Zone (CEPZ Rosario)',
-    'Batangas Port Container Terminal',
-    'Clark Freeport Zone, Pampanga',
-    'Subic Bay Freeport Zone',
-    'San Fernando, Pampanga',
-    'Lipa City / Batangas Light Park',
-    'Cabuyao Light Industry & Science Park'
-  ];  return (
+  const selectedShipper = clients.find((client) => client.id === selectedClientId);
+  const shipperTripZones = trips
+    .filter((trip) => trip.clientId === selectedClientId)
+    .flatMap((trip) => [trip.originZone, trip.destinationZone]);
+  const originChoices = zonesForShipper({
+    savedZones: selectedShipper?.savedZones,
+    usedZones: shipperTripZones,
+  });
+  const destinationChoices = zonesForShipper({
+    savedZones: selectedShipper?.savedZones,
+    usedZones: shipperTripZones,
+  });
+
+  const saveShipperZone = (side: 'origin' | 'destination') => {
+    const name = zoneDraft.trim();
+    if (!name) return;
+    if (!selectedShipper) {
+      window.alert('Choose the shipper first. The new zone is saved on that client, then it shows in their list.');
+      return;
+    }
+    const preset = PRESET_ROUTE_ZONES.find((zone) => sameZone(zone, name));
+    if (preset) {
+      if (side === 'origin') setOriginZone(preset);
+      else setDestinationZone(preset);
+      setZoneDraft('');
+      setAddingZoneFor(null);
+      return;
+    }
+    const next = rememberZone(selectedShipper.savedZones, name);
+    const chosen = next
+      ? next[next.length - 1]
+      : (selectedShipper.savedZones || []).find((zone) => sameZone(zone, name)) || name;
+    if (next) updateClient(selectedShipper.id, { savedZones: next });
+    if (side === 'origin') setOriginZone(chosen);
+    else setDestinationZone(chosen);
+    setZoneDraft('');
+    setAddingZoneFor(null);
+  };
+
+  const renderZoneOptions = (choices: { standard: string[]; shipper: string[] }, current: string) => (
+    <>
+      {current && ![...choices.standard, ...choices.shipper].some((zone) => zone === current) && (
+        <option value={current}>{current}</option>
+      )}
+      <optgroup label="Standard zones">
+        {choices.standard.map((zone) => (
+          <option key={zone} value={zone}>{zone}</option>
+        ))}
+      </optgroup>
+      {choices.shipper.length > 0 && (
+        <optgroup label={selectedShipper ? `Saved for ${selectedShipper.name}` : 'Saved for this shipper'}>
+          {choices.shipper.map((zone) => (
+            <option key={zone} value={zone}>{zone}</option>
+          ))}
+        </optgroup>
+      )}
+      <option value="__add_zone__">+ Add a zone for this shipper…</option>
+    </>
+  );
+
+  return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-900">
         
@@ -307,6 +425,47 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
           <div className="sm:hidden">
             <FeatureHowTo feature="calculator" compact />
           </div>
+
+          {containerTrackingOn && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-700">Move type</div>
+              <p className="text-[11px] text-slate-500 mt-1 mb-2">
+                This booking only. A reefer or chassis can still do a direct warehouse-to-warehouse move.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMoveType('direct')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                    moveType === 'direct' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200'
+                  }`}
+                >
+                  Direct
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoveType('container');
+                    const day = scheduledPickup.slice(0, 10);
+                    setContainerDraft((prev) => (prev.pickupDate ? prev : patchContainerDraft(prev, { pickupDate: day })));
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                    moveType === 'container' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200'
+                  }`}
+                >
+                  Container
+                </button>
+              </div>
+              {moveType === 'container' && (
+                <ContainerMoveFields
+                  draft={containerDraft}
+                  onChange={setContainerDraft}
+                  suggestions={shippingLineSuggestions}
+                  rateDefaults={company.containerRateDefaults}
+                />
+              )}
+            </div>
+          )}
           
           {/* Section 1: Fleet & Load Calculation (Crucial Spec Requirement) */}
           <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4">
@@ -653,13 +812,41 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
                 </div>
                 <select
                   value={originZone}
-                  onChange={(e) => setOriginZone(e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_zone__') {
+                      setAddingZoneFor('origin');
+                      setZoneDraft('');
+                      return;
+                    }
+                    setOriginZone(e.target.value);
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 mb-2"
                 >
-                  {zoneOptions.map(z => (
-                    <option key={z} value={z}>{z}</option>
-                  ))}
+                  {renderZoneOptions(originChoices, originZone)}
                 </select>
+                {addingZoneFor === 'origin' && (
+                  <div className="mb-2 flex gap-1.5">
+                    <input
+                      value={zoneDraft}
+                      onChange={(e) => setZoneDraft(e.target.value)}
+                      placeholder="Zone name, e.g. Davao Sasa Port"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveShipperZone('origin');
+                        }
+                      }}
+                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveShipperZone('origin')}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
                 <input
                   type="text"
                   value={originAddress}
@@ -677,13 +864,41 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
                 </div>
                 <select
                   value={destinationZone}
-                  onChange={(e) => setDestinationZone(e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_zone__') {
+                      setAddingZoneFor('destination');
+                      setZoneDraft('');
+                      return;
+                    }
+                    setDestinationZone(e.target.value);
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 mb-2"
                 >
-                  {zoneOptions.map(z => (
-                    <option key={z} value={z}>{z}</option>
-                  ))}
+                  {renderZoneOptions(destinationChoices, destinationZone)}
                 </select>
+                {addingZoneFor === 'destination' && (
+                  <div className="mb-2 flex gap-1.5">
+                    <input
+                      value={zoneDraft}
+                      onChange={(e) => setZoneDraft(e.target.value)}
+                      placeholder="Zone name, e.g. Cebu Mandaue"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveShipperZone('destination');
+                        }
+                      }}
+                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveShipperZone('destination')}
+                      className="px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-[11px] font-bold"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
                 <input
                   type="text"
                   value={destinationAddress}
@@ -694,34 +909,15 @@ export const NewTripModal: React.FC<NewTripModalProps> = ({ isOpen, onClose, onT
               </div>
             </div>
 
-            {/* Schedule Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Scheduled Loading / Pickup *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={scheduledPickup}
-                  onChange={(e) => setScheduledPickup(e.target.value)}
-                  required
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Scheduled Delivery Target *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={scheduledDelivery}
-                  onChange={(e) => setScheduledDelivery(e.target.value)}
-                  required
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500 shadow-2xs"
-                />
-              </div>
-            </div>
+            <AssignSchedulePicker
+              truckId={selectedTruckId}
+              truckLabel={currentTruck ? `${currentTruck.plateNumber}` : 'This truck'}
+              trips={trips}
+              pickup={scheduledPickup}
+              delivery={scheduledDelivery}
+              onPickup={setScheduledPickup}
+              onDelivery={setScheduledDelivery}
+            />
 
             <div className="mt-4">
               <TruckBanAlert hits={banHits} />

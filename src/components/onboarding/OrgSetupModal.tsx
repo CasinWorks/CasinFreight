@@ -252,6 +252,30 @@ export const OrgSetupModal: React.FC<OrgSetupModalProps> = ({ isOpen, onClose })
                 />
               </div>
 
+              <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900">Container return tracking</div>
+                    <p className="text-slate-600 mt-1">
+                      Optional. Turn this on for a free-time countdown, a return-attempt log, and an estimated detention figure on container bookings. Direct warehouse-to-warehouse bookings stay the same. Truck availability does not change.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={Boolean(company.containerTrackingEnabled)}
+                    onClick={() => updateCompany({ containerTrackingEnabled: !company.containerTrackingEnabled })}
+                    className={`shrink-0 mt-0.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                      company.containerTrackingEnabled
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-slate-700 border-slate-300'
+                    }`}
+                  >
+                    {company.containerTrackingEnabled ? 'On' : 'Off'}
+                  </button>
+                </div>
+              </div>
+
               <div className="flex justify-end pt-3">
                 <button
                   type="button"

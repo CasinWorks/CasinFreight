@@ -14,6 +14,7 @@ import {
 import { useFreight } from '../../context/FreightContext';
 import { closeIfBackdrop } from '../../lib/modal';
 import { Client } from '../../types';
+import { rememberZone } from '../../lib/routeZones';
 import { FeatureHowTo } from '../help/FeatureHowTo';
 
 const EMPTY_FORM = {
@@ -24,6 +25,8 @@ const EMPTY_FORM = {
   email: '',
   billingAddress: '',
   paymentTermsDays: 30,
+  savedZones: [] as string[],
+  zoneDraft: '',
 };
 
 export const ClientRegistry: React.FC = () => {
@@ -51,6 +54,8 @@ export const ClientRegistry: React.FC = () => {
       email: client.email,
       billingAddress: client.billingAddress,
       paymentTermsDays: client.paymentTermsDays,
+      savedZones: [...(client.savedZones || [])],
+      zoneDraft: '',
     });
     setShowModal(true);
   };
@@ -69,6 +74,7 @@ export const ClientRegistry: React.FC = () => {
       email: form.email.trim(),
       billingAddress: form.billingAddress.trim(),
       paymentTermsDays: Number(form.paymentTermsDays) || 30,
+      savedZones: form.savedZones,
     };
     if (editingId) {
       updateClient(editingId, payload);
@@ -187,6 +193,11 @@ export const ClientRegistry: React.FC = () => {
                   <MapPin className="w-3 h-3 text-slate-400 mt-0.5" />
                   <span className="line-clamp-2">{client.billingAddress || 'No billing address'}</span>
                 </div>
+                {(client.savedZones || []).length > 0 && (
+                  <div className="text-[11px] text-slate-600">
+                    Zones: {client.savedZones!.join(' · ')}
+                  </div>
+                )}
               </div>
 
               {canManage && (
@@ -301,6 +312,47 @@ export const ClientRegistry: React.FC = () => {
                   className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500"
                 />
               </label>
+              <div>
+                <span className="font-semibold text-slate-700">Saved zones</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">Places that are not on the standard list. They show when you book this shipper.</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {form.savedZones.length === 0 && <span className="text-[11px] text-slate-400">None yet.</span>}
+                  {form.savedZones.map((zone) => (
+                    <button
+                      key={zone}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, savedZones: prev.savedZones.filter((item) => item !== zone) }))}
+                      className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-[11px] text-slate-700"
+                      title="Remove this zone"
+                    >
+                      {zone} ×
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-1.5">
+                  <input
+                    value={form.zoneDraft}
+                    onChange={(e) => setForm((prev) => ({ ...prev, zoneDraft: e.target.value }))}
+                    placeholder="Add a zone, e.g. Davao Sasa Port"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = rememberZone(form.savedZones, form.zoneDraft);
+                      if (!form.zoneDraft.trim()) return;
+                      if (!next) {
+                        window.alert('That place is already on the standard list, or it is already saved for this shipper.');
+                        return;
+                      }
+                      setForm((prev) => ({ ...prev, savedZones: next, zoneDraft: '' }));
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 font-bold text-slate-700"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
               <div className="pt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setShowModal(false)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold">
                   Cancel

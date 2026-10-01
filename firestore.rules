@@ -372,6 +372,10 @@ service cloud.firestore {
       allow read: if canAccessCompany(companyId)
         || matchingInvite(companyId)
         || isClientPortalFor(companyId);
+      // containerTrackingEnabled and containerRateDefaults are ordinary company
+      // fields. They are not in the protected billing list below, so Owner and
+      // settings.manage may update them the same way as name, tin, and address.
+      // Missing containerTrackingEnabled means the feature is off.
       allow update: if isPlatformAdmin()
         || (
           canAccessCompany(companyId)
@@ -416,6 +420,10 @@ service cloud.firestore {
         allow update, delete: if isCompanyOwner(companyId);
       }
 
+      // moveType and container (free time, detention estimate, returnAttempts)
+      // are ordinary trip fields. They use the same create/update gates as
+      // every other trip field. A missing moveType is a direct booking.
+      // These fields do not grant or remove truck availability.
       match /trips/{tripId} {
         allow read: if portalMayReadTrip(companyId)
           || (
@@ -491,6 +499,12 @@ service cloud.firestore {
           );
         allow create: if hasPerm(companyId, 'ratecards.manage') || hasPerm(companyId, 'settings.manage');
         allow update: if hasPerm(companyId, 'ratecards.manage') || hasPerm(companyId, 'settings.manage')
+          || (
+            hasPerm(companyId, 'trips.create')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['savedZones'])
+            && request.resource.data.savedZones is list
+            && request.resource.data.savedZones.size() < 80
+          )
           || (
             signedIn()
             && matchingInvite(companyId)

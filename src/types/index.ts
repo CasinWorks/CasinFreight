@@ -45,6 +45,51 @@ export interface Company {
   registeredDate: string;
   storageUsedBytes?: number;
   salesAgentId?: string;
+  /**
+   * Optional container return tracking. Missing or false hides every container
+   * screen. Direct warehouse-to-warehouse bookings are unchanged either way.
+   */
+  containerTrackingEnabled?: boolean;
+  /** User-entered detention rate memory. Not a shipping-line tariff table. */
+  containerRateDefaults?: ContainerRateDefault[];
+}
+
+export type MoveType = 'direct' | 'container';
+export type ContainerSize = '20' | '40' | '40HC' | 'other';
+export type ReturnAttemptOutcome = 'returned' | 'no_slot' | 'queue_delay' | 'other';
+
+export interface ContainerRateDefault {
+  shippingLine: string;
+  containerSize: ContainerSize;
+  ratePerDay: number;
+}
+
+export interface ContainerReturnAttempt {
+  id: string;
+  attemptedAt: string;
+  depot: string;
+  outcome: ReturnAttemptOutcome;
+  queueMinutes?: number;
+  note?: string;
+  photoUrl?: string;
+  loggedBy: string;
+}
+
+export interface ContainerTracking {
+  containerNo?: string;
+  shippingLine?: string;
+  containerSize?: ContainerSize;
+  pickupDate?: string;
+  freeTimeDays?: number;
+  freeTimeStartDate?: string;
+  /** Calendar date the box should be back. Computed, or typed over by the user. */
+  returnBy?: string;
+  returnByOverridden?: boolean;
+  returnDepot?: string;
+  detentionRatePerDay?: number;
+  /** Set when a return attempt is logged as returned. Stops the detention estimate. */
+  returnedAt?: string;
+  returnAttempts?: ContainerReturnAttempt[];
 }
 
 export type TruckType = 
@@ -175,6 +220,8 @@ export interface AppNotification {
     driverName?: string;
     statusBadge?: string;
     licenseRestriction?: string;
+    /** One in-app container alert per trip per Manila day. */
+    containerAlertKey?: string;
   };
 }
 
@@ -205,6 +252,8 @@ export interface Client {
   portalInvitedAt?: string;
   /** Warehouse / receiving contacts who can sign e-POD for this shipper (phone app). */
   portalAgents?: ClientPortalAgent[];
+  /** Places this shipper uses that are not on the standard zone list. */
+  savedZones?: string[];
 }
 
 export interface RateCard {
@@ -456,6 +505,12 @@ export interface Trip {
   exceptionNote?: string;
   activeStatusRetraction?: TripStatusRetractionRequest | null;
   statusRetractionHistory?: TripStatusRetractionRequest[];
+  /**
+   * Missing means a direct warehouse-to-warehouse booking.
+   * Never inferred from truck type.
+   */
+  moveType?: MoveType;
+  container?: ContainerTracking;
 }
 
 export type FieldEventKind =
