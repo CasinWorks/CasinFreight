@@ -360,6 +360,7 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
 
     if (prerequisiteTargetStatus === 'Invoiced') {
       const inv = createInvoiceForTrip(trip.id);
+      if (!inv) return;
       updateTripStatus(
         trip.id, 
         'Invoiced', 

@@ -288,7 +288,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
                   key={t.id}
                   onClick={() => {
                     const inv = createInvoiceForTrip(t.id);
-                    onSelectInvoice(inv.id);
+                    if (inv) onSelectInvoice(inv.id);
                   }}
                   className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-2xs"
                 >

@@ -100,13 +100,27 @@ export function CargoClaimPanel({ trip }: { trip: Trip }) {
           className="mt-1 w-full h-9 bg-white border border-slate-200 rounded-lg px-2 text-xs text-slate-900"
         />
       </label>
-      <button
-        type="button"
-        onClick={save}
-        className="h-9 px-3 rounded-lg bg-slate-900 text-white text-xs font-bold"
-      >
-        Save claim
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={save}
+          className="h-9 px-3 rounded-lg bg-slate-900 text-white text-xs font-bold"
+        >
+          Save claim
+        </button>
+        {existing && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm('Cancel this shortage, damage, or refusal? Nothing will be deducted, and the freight bill can be created.')) return;
+              updateTrip(trip.id, { cargoClaim: undefined });
+            }}
+            className="h-9 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold"
+          >
+            Cancel claim
+          </button>
+        )}
+      </div>
     </div>
   );
 }

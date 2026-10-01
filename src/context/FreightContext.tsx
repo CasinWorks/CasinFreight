@@ -252,7 +252,7 @@ interface FreightContextType {
   canApproveTripStatusRetraction: boolean;
   
   invoices: Invoice[];
-  createInvoiceForTrip: (tripId: string) => Invoice;
+  createInvoiceForTrip: (tripId: string) => Invoice | null;
   updateInvoice: (id: string, updates: Partial<Invoice>) => void;
   updateInvoiceStatus: (id: string, status: InvoiceStatus) => void;
   reconcileAndLockInvoice: (id: string, pop: ProofOfPayment) => void;
@@ -3432,15 +3432,21 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const createInvoiceForTrip = (tripId: string): Invoice => {
+  const createInvoiceForTrip = (tripId: string): Invoice | null => {
     const trip = trips.find(t => t.id === tripId);
-    if (!trip) throw new Error('Trip not found');
+    if (!trip) {
+      window.alert('Trip not found.');
+      return null;
+    }
 
     const trk = trucks.find(t => t.id === trip.truckId);
     const existing = invoices.find(inv => inv.tripId === tripId);
     if (existing) return existing;
     const claimBlock = invoiceBlockReason(trip);
-    if (claimBlock) throw new Error(claimBlock);
+    if (claimBlock) {
+      window.alert(claimBlock);
+      return null;
+    }
 
     const lineItems = [
       {

@@ -382,6 +382,7 @@ export const TripBoard: React.FC<TripBoardProps> = ({
 
     if (prerequisiteTargetStatus === 'Invoiced') {
       const inv = createInvoiceForTrip(prerequisiteTrip.id);
+      if (!inv) return;
       updateTripStatus(
         prerequisiteTrip.id, 
         'Invoiced', 
