@@ -20,6 +20,7 @@ import { DeliveryNoteModal } from '../trips/DeliveryNoteModal';
 import { SignaturePad, SignaturePadHandle } from '../trips/SignaturePad';
 import { LegalNoticeLinks } from '../legal/LegalPage';
 import { TextSizeControl } from '../account/TextSizeControl';
+import { PasswordSettings } from '../account/PasswordSettings';
 
 function StatusPill({ status }: { status: string }) {
   const color =
@@ -119,6 +120,7 @@ export const DriverFieldApp: React.FC = () => {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [dnOpen, setDnOpen] = useState(false);
   const [warehouseName, setWarehouseName] = useState('');
   const [warehouseCondition, setWarehouseCondition] = useState<POD['conditionStatus']>('Good Condition');
@@ -168,6 +170,21 @@ export const DriverFieldApp: React.FC = () => {
     }
   };
 
+  const passwordSheet = passwordOpen ? (
+    <div className="fixed inset-0 z-[80] bg-slate-900/40 flex items-end sm:items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-3">
+        <PasswordSettings />
+        <button
+          type="button"
+          onClick={() => setPasswordOpen(false)}
+          className="w-full min-h-11 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (!assignedDriverRosterId) {
     return (
       <div
@@ -179,14 +196,24 @@ export const DriverFieldApp: React.FC = () => {
             <div className="text-base font-extrabold">CasinFreight Driver</div>
             <div className="text-xs text-slate-500">{currentUser.name || currentUser.email}</div>
           </div>
-          <button
-            type="button"
-            onClick={() => logout()}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-slate-500 active:bg-slate-100"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPasswordOpen(true)}
+              className="min-h-11 px-3 rounded-xl text-sm font-semibold text-slate-700 active:bg-slate-100"
+            >
+              Password
+            </button>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl text-slate-500 active:bg-slate-100"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </header>
+        {passwordSheet}
         <div className="m-4 rounded-2xl p-4 text-sm text-amber-900 bg-amber-50 border border-amber-200 leading-relaxed">
           Your login works, but Driver Roster has no matching email. Ask dispatch to save your email on your driver
           record.
@@ -312,15 +339,25 @@ export const DriverFieldApp: React.FC = () => {
             {currentUser.name || currentUser.email} · Driver
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => logout()}
-          className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl text-sm font-semibold text-slate-600 active:bg-slate-100 touch-manipulation"
-        >
-          <LogOut className="w-4 h-4" />
-          Sign out
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setPasswordOpen(true)}
+            className="inline-flex items-center min-h-11 px-3 rounded-xl text-sm font-semibold text-slate-700 active:bg-slate-100 touch-manipulation"
+          >
+            Password
+          </button>
+          <button
+            type="button"
+            onClick={() => logout()}
+            className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl text-sm font-semibold text-slate-600 active:bg-slate-100 touch-manipulation"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        </div>
       </header>
+      {passwordSheet}
 
       <div className="px-4 pt-3">
         <TextSizeControl />

@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   reauthenticateWithCredential,
   sendPasswordResetEmail,
+  updatePassword,
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
@@ -185,6 +186,7 @@ interface FreightContextType {
   joinTeam: (payload: { name: string; email: string; password: string; privacyAcceptedAt?: string }) => Promise<{ success: boolean; error?: string; clientPortal?: boolean }>;
   acceptPrivacyNotice: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (currentPassword: string, nextPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   switchUserAccount: (userId: string) => void;
   switchUserRole: (role: UserRole) => void;
@@ -1919,6 +1921,33 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: true };
     } catch (error) {
       return { success: false, error: mapAuthError(error) };
+    }
+  };
+
+  const changePassword = async (currentPassword: string, nextPassword: string) => {
+    if (!isFirebaseConfigured()) {
+      throw new Error('Firebase is not configured. Add your project keys to .env and restart the app.');
+    }
+    const fbUser = getFirebaseAuth().currentUser;
+    if (!fbUser?.email) {
+      throw new Error('Sign in again, then change your password.');
+    }
+    const current = currentPassword.trim();
+    const next = nextPassword.trim();
+    if (!current) throw new Error('Enter your current password.');
+    if (next.length < MIN_SIGNUP_PASSWORD_LENGTH) {
+      throw new Error(`Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`);
+    }
+    if (next === current) throw new Error('Choose a password that is different from the current one.');
+    try {
+      await reauthenticateWithCredential(fbUser, EmailAuthProvider.credential(fbUser.email, current));
+      await updatePassword(fbUser, next);
+    } catch (error) {
+      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
+      if (code.includes('wrong-password') || code.includes('invalid-credential') || code.includes('invalid-login')) {
+        throw new Error('That current password is not correct.');
+      }
+      throw new Error(mapAuthError(error));
     }
   };
 
@@ -5007,6 +5036,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       joinTeam,
       acceptPrivacyNotice,
       requestPasswordReset,
+      changePassword,
       logout,
       switchUserAccount,
       switchUserRole,

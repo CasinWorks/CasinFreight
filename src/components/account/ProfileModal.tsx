@@ -4,6 +4,7 @@ import { useFreight } from '../../context/FreightContext';
 import { closeIfBackdrop } from '../../lib/modal';
 import { LegalNoticeLinks } from '../legal/LegalPage';
 import { TextSizeControl } from './TextSizeControl';
+import { PasswordSettings } from './PasswordSettings';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -182,6 +183,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, onO
           {saved && !error && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 p-2.5">Profile saved.</div>
           )}
+
+          <PasswordSettings />
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
             <LegalNoticeLinks />

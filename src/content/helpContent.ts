@@ -328,11 +328,12 @@ export const HELP_GUIDES: HelpGuide[] = [
   {
     id: 'profile',
     title: 'My profile',
-    summary: 'Your photo, name, mobile, and account delete.',
+    summary: 'Your photo, name, mobile, password, and account delete.',
     steps: [
       'Open My profile from your name in the top bar or the account block in the sidebar.',
       'Change your photo, name, mobile, and department. Email and role stay as they are.',
       'Save profile.',
+      'To change your password, enter the current one, then the new one twice, and tap Change password. If you forgot it, tap Email me a reset link and check Inbox and Spam. Drivers can open Password next to Sign out on the phone.',
       'Delete account permanently only if you are not the only Owner. Type your email, DELETE, and your password.',
     ],
     tips: [
