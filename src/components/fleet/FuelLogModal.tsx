@@ -268,7 +268,7 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto" onClick={closeIfBackdrop(onClose)}>
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-xs text-slate-900 my-auto overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-xs text-slate-900 my-auto overflow-hidden">
         
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between">
@@ -309,33 +309,33 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
 
         {/* Live Calculation Preview Banner */}
         <div className="bg-slate-900 text-white p-3.5 border-b border-slate-800">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg p-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2 py-2 min-h-[58px] flex flex-col items-center justify-center">
               <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Distance Run</div>
-              <div className="text-sm sm:text-base font-mono font-bold text-amber-400 mt-0.5">
+              <div className="text-sm font-mono font-bold text-amber-400 mt-1 leading-none">
                 {distanceTraveled.toLocaleString()} km
               </div>
             </div>
 
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg p-2">
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2 py-2 min-h-[58px] flex flex-col items-center justify-center">
               <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Computed KM/L</div>
-              <div className="text-sm sm:text-base font-mono font-black text-emerald-400 mt-0.5 flex items-center justify-center gap-1">
-                <span>{calculatedKmPerLiter > 0 ? `${calculatedKmPerLiter} km/L` : '--'}</span>
+              <div className="text-sm font-mono font-black text-emerald-400 mt-1 leading-none">
+                {calculatedKmPerLiter > 0 ? `${calculatedKmPerLiter} km/L` : '--'}
               </div>
             </div>
 
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg p-2">
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2 py-2 min-h-[58px] flex flex-col items-center justify-center">
               <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Cost per Km</div>
-              <div className="text-sm sm:text-base font-mono font-bold text-blue-300 mt-0.5">
+              <div className="text-sm font-mono font-bold text-blue-300 mt-1 leading-none">
                 {calculatedCostPerKm > 0 ? `₱${calculatedCostPerKm}/km` : '--'}
               </div>
             </div>
 
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg p-2 flex flex-col justify-center items-center">
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2 py-2 min-h-[58px] flex flex-col items-center justify-center">
               <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Target vs Actual</div>
-              <div className="mt-0.5">
+              <div className="mt-1 h-4 flex items-center">
                 {calculatedKmPerLiter > 0 ? (
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full leading-none ${
                     isOptimal ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
                     isNormal ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' :
                     'bg-rose-500/20 text-rose-300 border border-rose-500/40'
@@ -351,30 +351,30 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
         </div>
 
         {/* Main Form */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 max-h-[68vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-3 max-h-[68vh] overflow-y-auto">
           
           {/* Section 1: Vehicle & Odometer Readings */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                <TruckIcon className="w-4 h-4 text-blue-600" />
-                Vehicle & Odometer Traveled
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5 min-w-0">
+                <TruckIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                Vehicle & odometer
               </span>
               {selectedTruck && (
-                <span className="text-[11px] font-semibold text-slate-500">
-                  {selectedTruck.type} • Target: <strong className="text-slate-700">{targetKmPerLiter} km/L</strong>
+                <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+                  {selectedTruck.type} · Target {targetKmPerLiter} km/L
                 </span>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Truck *</label>
+                <label className="block h-4 font-semibold text-slate-700 mb-1 leading-4">Truck *</label>
                 <select
                   value={truckId}
                   onChange={(e) => handleTruckChange(e.target.value)}
                   required
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
                 >
                   {trucks.map(t => (
                     <option key={t.id} value={t.id}>
@@ -385,8 +385,8 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Previous Fill-up Odometer (km)
+                <label className="block h-4 font-semibold text-slate-700 mb-1 leading-4">
+                  Previous odometer (km)
                 </label>
                 <input
                   type="number"
@@ -394,14 +394,14 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
                   onChange={(e) => setPreviousOdometerKm(Number(e.target.value))}
                   required
                   min="0"
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono font-semibold text-slate-700 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 font-mono font-semibold text-slate-700 focus:outline-none focus:border-blue-500 shadow-2xs"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-blue-700 mb-1 flex items-center justify-between">
-                  <span>Current Fill-up Odometer (km) *</span>
-                  <Gauge className="w-3 h-3 text-blue-600" />
+                <label className="flex h-4 items-center justify-between font-semibold text-blue-700 mb-1 leading-4">
+                  <span>Current odometer (km) *</span>
+                  <Gauge className="w-3 h-3 text-blue-600 shrink-0" />
                 </label>
                 <input
                   type="number"
@@ -409,7 +409,7 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
                   onChange={(e) => setOdometerKm(Number(e.target.value))}
                   required
                   min={previousOdometerKm || 0}
-                  className="w-full bg-blue-50/50 border border-blue-300 rounded-lg px-2.5 py-1.5 font-mono font-bold text-blue-900 focus:bg-white focus:outline-none focus:border-blue-600 shadow-2xs"
+                  className="w-full h-9 bg-blue-50/50 border border-blue-300 rounded-lg px-2.5 font-mono font-bold text-blue-900 focus:bg-white focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
               </div>
             </div>
@@ -417,25 +417,25 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
 
           {/* Section 2: Liters, Cost, Price / Liter */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                Fuel Quantity & Cost Breakdown (PHP)
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5 min-w-0">
+                <DollarSign className="w-4 h-4 text-emerald-600 shrink-0" />
+                Fuel quantity & cost
               </span>
-              <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-slate-600">
+              <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-slate-600 shrink-0">
                 <input
                   type="checkbox"
                   checked={fullTank}
                   onChange={(e) => setFullTank(e.target.checked)}
                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
-                <span>Full Tank Top-up (Recommended for KM/L)</span>
+                <span>Full tank</span>
               </label>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Fuel Pumped (Liters) *</label>
+                <label className="block h-4 font-semibold text-slate-700 mb-1 leading-4">Liters pumped *</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -444,7 +444,7 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
                     value={liters}
                     onChange={(e) => handleLitersChange(Number(e.target.value))}
                     required
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 pr-8 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                    className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 pr-8 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-[10px]">
                     L
@@ -453,7 +453,7 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Price per Liter (₱/L)</label>
+                <label className="block h-4 font-semibold text-slate-700 mb-1 leading-4">Price per liter (₱)</label>
                 <div className="relative">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono">₱</span>
                   <input
@@ -463,13 +463,13 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
                     value={pricePerLiter}
                     onChange={(e) => handlePricePerLiterChange(Number(e.target.value))}
                     required
-                    className="w-full bg-white border border-slate-200 rounded-lg pl-6 pr-2.5 py-1.5 font-mono text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                    className="w-full h-9 bg-white border border-slate-200 rounded-lg pl-6 pr-2.5 font-mono text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-emerald-800 mb-1">Total Fuel Cost (₱) *</label>
+                <label className="block h-4 font-semibold text-emerald-800 mb-1 leading-4">Total cost (₱) *</label>
                 <div className="relative">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 font-bold font-mono">₱</span>
                   <input
@@ -479,170 +479,173 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
                     value={costPhp}
                     onChange={(e) => handleCostChange(Number(e.target.value))}
                     required
-                    className="w-full bg-emerald-50/60 border border-emerald-300 rounded-lg pl-6 pr-2.5 py-1.5 font-mono font-black text-emerald-900 focus:bg-white focus:outline-none focus:border-emerald-600 shadow-2xs"
+                    className="w-full h-9 bg-emerald-50/60 border border-emerald-300 rounded-lg pl-6 pr-2.5 font-mono font-black text-emerald-900 focus:bg-white focus:outline-none focus:border-emerald-600 shadow-2xs"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Station, Date, Fuel Grade */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  Gas / Fuel Station *
-                </span>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
+                Station, payment & trip
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+              <div>
+                <label className="flex h-4 items-center justify-between font-semibold text-slate-700 mb-1 leading-4">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    Fuel station *
+                  </span>
+                </label>
+                {isCustomStation ? (
+                  <input
+                    type="text"
+                    value={customStation}
+                    onChange={(e) => setCustomStation(e.target.value)}
+                    placeholder="e.g. Petron Tagaytay Bypass Rd"
+                    required
+                    className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                ) : (
+                  <select
+                    value={fuelStation}
+                    onChange={(e) => setFuelStation(e.target.value)}
+                    className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  >
+                    {POPULAR_PH_STATIONS.map(st => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsCustomStation(!isCustomStation)}
-                  className="text-[10px] text-blue-600 hover:underline font-normal"
+                  className="mt-1 text-[10px] text-blue-600 hover:underline font-semibold"
                 >
-                  {isCustomStation ? 'Choose from list' : '+ Enter custom station'}
+                  {isCustomStation ? 'Choose from list' : 'Enter a station not on the list'}
                 </button>
-              </label>
-              {isCustomStation ? (
+              </div>
+
+              <div>
+                <label className="flex h-4 items-center gap-1 font-semibold text-slate-700 mb-1 leading-4">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  Fill-up date *
+                </label>
                 <input
-                  type="text"
-                  value={customStation}
-                  onChange={(e) => setCustomStation(e.target.value)}
-                  placeholder="e.g. Petron Tagaytay Bypass Rd"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
                   required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-slate-900 font-mono focus:outline-none focus:border-blue-500 shadow-2xs"
                 />
-              ) : (
+              </div>
+
+              <div>
+                <label className="flex h-4 items-center gap-1 font-semibold text-slate-700 mb-1 leading-4">
+                  <CreditCard className="w-3.5 h-3.5 text-slate-400" />
+                  Payment
+                </label>
                 <select
-                  value={fuelStation}
-                  onChange={(e) => setFuelStation(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as FuelPaymentMethod)}
+                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
                 >
-                  {POPULAR_PH_STATIONS.map(st => (
-                    <option key={st} value={st}>{st}</option>
+                  {PAYMENT_METHODS.map(pm => (
+                    <option key={pm} value={pm}>{pm}</option>
                   ))}
                 </select>
-              )}
+              </div>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                Fill-up Date *
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Section 4: Payment, Driver, Receipt # */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <CreditCard className="w-3.5 h-3.5 text-slate-400" />
-                Payment Method
-              </label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as FuelPaymentMethod)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
-              >
-                {PAYMENT_METHODS.map(pm => (
-                  <option key={pm} value={pm}>{pm}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <UserIcon className="w-3.5 h-3.5 text-slate-400" />
-                Driver on Duty
-              </label>
-              <select
-                value={driverId}
-                onChange={(e) => setDriverId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="">-- Unspecified Driver --</option>
-                {drivers.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5 text-slate-400" />
-                OR / POS Receipt #
-              </label>
-              <input
-                type="text"
-                value={receiptNumber}
-                onChange={(e) => setReceiptNumber(e.target.value.toUpperCase())}
-                placeholder="e.g. PET-2026-901"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Section 5: Associated Trip & Notes */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Associated Shipment / Trip</label>
-              <select
-                value={tripId}
-                onChange={(e) => setTripId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="">-- None / Yard Top-Up --</option>
-                {trips
-                  .filter(t => t.truckId === truckId || !truckId)
-                  .map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.tripNumber} ({t.originZone} ➔ {t.destinationZone}) [{t.status}]
-                    </option>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label className="flex h-4 items-center gap-1 font-semibold text-slate-700 mb-1 leading-4">
+                  <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                  Driver
+                </label>
+                <select
+                  value={driverId}
+                  onChange={(e) => setDriverId(e.target.value)}
+                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                >
+                  <option value="">No driver named</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
-              </select>
+                </select>
+              </div>
+
+              <div>
+                <label className="flex h-4 items-center gap-1 font-semibold text-slate-700 mb-1 leading-4">
+                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  OR / receipt no.
+                </label>
+                <input
+                  type="text"
+                  value={receiptNumber}
+                  onChange={(e) => setReceiptNumber(e.target.value.toUpperCase())}
+                  placeholder="OR-741308"
+                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 font-mono text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block h-4 font-semibold text-slate-700 mb-1 leading-4">Trip</label>
+                <select
+                  value={tripId}
+                  onChange={(e) => setTripId(e.target.value)}
+                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
+                >
+                  <option value="">Yard top-up</option>
+                  {trips
+                    .filter(t => t.truckId === truckId || !truckId)
+                    .map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.tripNumber} ({t.originZone} → {t.destinationZone})
+                      </option>
+                    ))}
+                </select>
+              </div>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Remarks / Fuel Notes</label>
+              <label className="block h-4 font-semibold text-slate-700 mb-1 leading-4">Notes</label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="e.g. Pre-trip top-up for Clark run"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500"
+                className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-slate-900 focus:outline-none focus:border-blue-500 shadow-2xs"
               />
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-            <div className="text-[11px] text-slate-500 flex items-center gap-1">
-              <Info className="w-3.5 h-3.5 text-blue-500" />
-              <span>Auto-updates truck's odometer to {odometerKm.toLocaleString()} km</span>
+          <div className="flex flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 min-w-0">
+              <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span>Saves the truck odometer at {odometerKm.toLocaleString()} km</span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3.5 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors"
+                className="h-9 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!permission.allowed}
-                className="px-5 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{editingLog ? 'Update Fuel Log' : 'Save Fuel Log & KM/L'}</span>
+                <span>{editingLog ? 'Update fuel log' : 'Save fuel log'}</span>
               </button>
             </div>
           </div>
