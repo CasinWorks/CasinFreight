@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useFreight } from '../../context/FreightContext';
 import { driverNextStepForTrip } from '../../lib/driverNextStep';
+import { googleMapsDirectionsUrl, wazeNavigateUrl } from '../../lib/placeMap';
 import { hasSignedInk } from '../../lib/stageGates';
 import { POD, Trip } from '../../types';
 import { DeliveryNoteModal } from '../trips/DeliveryNoteModal';
@@ -115,6 +116,7 @@ export const DriverFieldApp: React.FC = () => {
     markAssignedDriverArrived,
     saveAssignedDriverWarehousePod,
     addAssignedDriverFieldEvent,
+    stampAssignedDriverGps,
   } = useFreight();
 
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
@@ -148,10 +150,19 @@ export const DriverFieldApp: React.FC = () => {
     () => fieldEvents.filter((e) => e.tripId === selectedTripId),
     [fieldEvents, selectedTripId]
   );
-  const eventKinds = useMemo(
-    () => new Set(tripEvents.map((e) => e.kind)),
-    [tripEvents]
-  );
+  const eventKinds = useMemo(() => {
+    const kinds = new Set<string>();
+    for (const event of tripEvents) {
+      if (
+        (event.kind === 'pickup_geo' || event.kind === 'delivery_geo') &&
+        (event.lat == null || event.lng == null)
+      ) {
+        continue;
+      }
+      kinds.add(event.kind);
+    }
+    return kinds;
+  }, [tripEvents]);
 
   const flash = (text: string) => {
     setMessage(text);
@@ -252,13 +263,8 @@ export const DriverFieldApp: React.FC = () => {
           onOpenDeliveryNote={() => setDnOpen(true)}
           onStampPickup={() =>
             run(
-              () =>
-                addAssignedDriverFieldEvent({
-                  tripId: selectedTrip.id,
-                  kind: 'pickup_geo',
-                  note: 'Pickup GPS stamped (browser)',
-                }).then(() => undefined),
-              'Pickup GPS saved.'
+              () => stampAssignedDriverGps(selectedTrip.id, 'pickup_geo', 'Arrived at pickup'),
+              'Arrived at pickup. GPS is on the office map.'
             )
           }
           onSealPhoto={async (file) => {
@@ -283,22 +289,11 @@ export const DriverFieldApp: React.FC = () => {
               await saveAssignedDriverSignoff(selectedTrip.id, ink);
             }, 'Cargo receipt signed.')
           }
-          onStampDelivery={() =>
-            run(
-              () =>
-                addAssignedDriverFieldEvent({
-                  tripId: selectedTrip.id,
-                  kind: 'delivery_geo',
-                  note: 'Delivery GPS stamped (browser)',
-                }).then(() => undefined),
-              'Delivery GPS saved. Tap I have arrived to set Inbound.'
-            )
-          }
           onArrived={() =>
-            run(
-              () => markAssignedDriverArrived(selectedTrip.id),
-              'Inbound set. Hand this screen to the warehouse officer for e-POD.'
-            )
+            run(async () => {
+              await stampAssignedDriverGps(selectedTrip.id, 'delivery_geo', 'Arrived at destination');
+              await markAssignedDriverArrived(selectedTrip.id);
+            }, 'Arrived. GPS saved and the trip is Inbound.')
           }
           onSaveWarehousePod={() =>
             run(async () => {
@@ -416,6 +411,64 @@ export const DriverFieldApp: React.FC = () => {
   );
 };
 
+function DriverGoingCard({
+  origin,
+  destination,
+  nextStop,
+}: {
+  origin: string;
+  destination: string;
+  nextStop: 'pickup' | 'dropoff';
+}) {
+  const stops = [
+    { id: 'pickup' as const, label: 'Pickup', place: origin },
+    { id: 'dropoff' as const, label: 'Dropoff', place: destination },
+  ].filter((stop) => stop.place.trim()).sort((a, b) => Number(b.id === nextStop) - Number(a.id === nextStop));
+
+  if (!stops.length) return null;
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+        <Navigation className="w-3.5 h-3.5" /> Where you're going
+      </div>
+      {stops.map((stop) => {
+        const current = stop.id === nextStop;
+        return (
+          <div
+            key={stop.id}
+            className={`rounded-xl border p-3 space-y-2 ${current ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-slate-50'}`}
+          >
+            <div className="text-sm font-extrabold text-slate-900">
+              {stop.label}
+              {current ? ' · next' : ''}
+            </div>
+            <p className="text-sm text-slate-700 leading-relaxed">{stop.place}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={googleMapsDirectionsUrl(stop.place)}
+                target="_blank"
+                rel="noreferrer"
+                className={primaryBtn('inline-flex items-center justify-center bg-white text-slate-900 border border-slate-200')}
+              >
+                Google Maps
+              </a>
+              <a
+                href={wazeNavigateUrl(stop.place)}
+                target="_blank"
+                rel="noreferrer"
+                className={primaryBtn('inline-flex items-center justify-center bg-slate-900 text-white')}
+              >
+                Waze
+              </a>
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 function DriverTripDetail({
   trip,
   eventKinds,
@@ -436,7 +489,6 @@ function DriverTripDetail({
   onStampPickup,
   onSealPhoto,
   onSaveDriverSign,
-  onStampDelivery,
   onArrived,
   onSaveWarehousePod,
 }: {
@@ -459,7 +511,6 @@ function DriverTripDetail({
   onStampPickup: () => void;
   onSealPhoto: (file: File) => void;
   onSaveDriverSign: () => void;
-  onStampDelivery: () => void;
   onArrived: () => void;
   onSaveWarehousePod: () => void;
 }) {
@@ -493,7 +544,7 @@ function DriverTripDetail({
     if (next.done) return null;
     if (!pickupStamped) {
       return {
-        label: 'Stamp pickup GPS',
+        label: 'Arrived at pickup',
         onClick: onStampPickup,
         className: 'bg-slate-900 text-white',
         disabled: busy,
@@ -517,7 +568,7 @@ function DriverTripDetail({
     }
     if (trip.status === 'In Transit') {
       return {
-        label: 'I have arrived (Inbound)',
+        label: 'I have arrived',
         onClick: onArrived,
         className: 'bg-cyan-700 text-white',
         disabled: busy || !canMoveCargo,
@@ -577,6 +628,12 @@ function DriverTripDetail({
         className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3"
         style={{ paddingBottom: stickyAction ? 'calc(5.5rem + env(safe-area-inset-bottom))' : 'max(1.25rem, env(safe-area-inset-bottom))' }}
       >
+        <DriverGoingCard
+          origin={[trip.originZone, trip.originAddress].filter(Boolean).join(', ')}
+          destination={[trip.destinationZone, trip.destinationAddress].filter(Boolean).join(', ')}
+          nextStop={pickupStamped ? 'dropoff' : 'pickup'}
+        />
+
         <TextSizeControl />
         {message && (
           <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 font-medium">
@@ -601,8 +658,11 @@ function DriverTripDetail({
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" /> Now
               </div>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Tap once when you reach the pickup yard. CasinFreight saves the GPS with that tap.
+              </p>
               <button type="button" disabled={busy} onClick={onStampPickup} className={primaryBtn('bg-slate-900 text-white')}>
-                Stamp pickup GPS
+                {busy ? 'Reading location…' : 'Arrived at pickup'}
               </button>
             </section>
           )}
@@ -662,25 +722,16 @@ function DriverTripDetail({
               <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-700 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" /> At the gate
               </div>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                Tap once at the consignee gate. That saves the GPS and sets Inbound.
+              </p>
               <button
                 type="button"
                 disabled={busy || !canMoveCargo}
                 onClick={onArrived}
                 className={primaryBtn('bg-cyan-700 text-white')}
               >
-                I have arrived (Inbound)
-              </button>
-              <button
-                type="button"
-                disabled={busy || !canMoveCargo || deliveryStamped}
-                onClick={onStampDelivery}
-                className={primaryBtn(
-                  deliveryStamped
-                    ? 'bg-slate-200 text-slate-500'
-                    : 'bg-white text-slate-800 border border-slate-200'
-                )}
-              >
-                {deliveryStamped ? 'Delivery GPS stamped ✓' : 'Stamp delivery GPS only'}
+                {busy ? 'Reading location…' : 'I have arrived'}
               </button>
             </section>
           )}
@@ -771,7 +822,7 @@ function DriverTripDetail({
         </Section>
 
         <Section title="Checklist" defaultOpen={false}>
-          <GateRow done={pickupStamped} label="Pickup GPS stamped" />
+          <GateRow done={pickupStamped} label="Arrived at pickup" />
           <GateRow done={dispatcherSigned} label="Dispatcher signed yard release" />
           <GateRow done={Boolean(trip.deliveryNoteNumber?.trim())} label="Official Delivery Note" />
           <GateRow done={Boolean(trip.gatePassNumber?.trim())} label="Gate Pass" />
@@ -779,34 +830,12 @@ function DriverTripDetail({
           <GateRow done={driverSigned} label="Driver received sealed cargo" />
           <GateRow
             done={deliveryStamped || trip.status === 'Inbound' || trip.status === 'Delivered'}
-            label="Arrival / delivery GPS"
+            label="Arrived at destination"
           />
           <GateRow done={podSigned} label="Warehouse / consignee POD" />
         </Section>
 
-        <Section title="More location / photos" icon={<MapPin className="w-3.5 h-3.5" />} defaultOpen={false}>
-          <button
-            type="button"
-            disabled={busy || pickupStamped}
-            onClick={onStampPickup}
-            className={primaryBtn(
-              pickupStamped ? 'bg-slate-200 text-slate-500' : 'bg-slate-900 text-white'
-            )}
-          >
-            {pickupStamped ? 'Pickup GPS stamped ✓' : 'Stamp pickup GPS'}
-          </button>
-          <button
-            type="button"
-            disabled={busy || !canMoveCargo || deliveryStamped}
-            onClick={onStampDelivery}
-            className={primaryBtn(
-              deliveryStamped
-                ? 'bg-slate-200 text-slate-500'
-                : 'bg-white text-slate-800 border border-slate-200'
-            )}
-          >
-            {deliveryStamped ? 'Delivery GPS stamped ✓' : 'Stamp delivery GPS'}
-          </button>
+        <Section title="More photos" icon={<MapPin className="w-3.5 h-3.5" />} defaultOpen={false}>
           <input
             type="file"
             accept="image/*"
@@ -845,7 +874,11 @@ function DriverTripDetail({
               onClick={stickyAction.onClick}
               className={primaryBtn(stickyAction.className)}
             >
-              {busy ? 'Saving…' : stickyAction.label}
+              {busy && (stickyAction.label === 'Arrived at pickup' || stickyAction.label === 'I have arrived')
+                ? 'Reading location…'
+                : busy
+                  ? 'Saving…'
+                  : stickyAction.label}
             </button>
           </div>
         </div>

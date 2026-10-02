@@ -114,6 +114,7 @@ import { shrinkSignatureDataUrl } from '../lib/podSignoff';
 import { timelineRetractionFromRequest } from '../lib/tripAudit';
 import { isHelperCrew, isDriverSeatRole } from '../lib/crew';
 import { getTargetKmPerLiter } from '../lib/fuelTarget';
+import { readDevicePosition } from '../lib/devicePosition';
 import { dispatchBlockReason } from '../lib/dispatchPapers';
 import { debitMemoLine, invoiceBlockReason, openClaimForCondition } from '../lib/cargoClaim';
 import { buildStatement, nextStatementNumber, statementDraft } from '../lib/statementOfAccount';
@@ -232,6 +233,8 @@ interface FreightContextType {
   isFieldDriverSession: boolean;
   assignedDriverRosterId: string | null;
   saveAssignedDriverSignoff: (tripId: string, signatureDataUrl: string) => Promise<void>;
+  /** Reads the phone GPS, saves it on the trip, and updates the office map pin. */
+  stampAssignedDriverGps: (tripId: string, kind: 'pickup_geo' | 'delivery_geo', note: string) => Promise<void>;
   markAssignedDriverArrived: (tripId: string) => Promise<void>;
   saveAssignedDriverWarehousePod: (params: {
     tripId: string;
@@ -477,8 +480,16 @@ function mapAuthError(error: unknown): string {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: string }).code) : '';
   if (code.includes('email-already-in-use')) return 'That email already has a CasinFreight account. Sign in instead.';
   if (code.includes('too-many-requests')) return 'Too many attempts. Wait a minute and try again.';
-  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('invalid-login')) {
-    return 'Wrong email or password. If you were invited as a new hire, open the join link from your owner and choose a password there. Do not create a new company.';
+  const raw = error instanceof Error ? error.message : '';
+  const authBlob = `${code} ${raw}`.toLowerCase();
+  if (
+    authBlob.includes('invalid-credential') ||
+    authBlob.includes('wrong-password') ||
+    authBlob.includes('invalid-login') ||
+    authBlob.includes('user-not-found') ||
+    authBlob.includes('invalid-password')
+  ) {
+    return 'That password is not correct.';
   }
   if (code.includes('weak-password')) return `Password must be at least ${MIN_SIGNUP_PASSWORD_LENGTH} characters.`;
   if (code.includes('invalid-email')) return 'Enter a valid work email.';
@@ -1884,8 +1895,8 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!isFirebaseConfigured()) {
       return { success: false, error: 'Firebase is not configured. Add your project keys to .env and restart the app.' };
     }
-    // Keep BootSplash up through hydrate so the Sign In button does not look idle mid-login.
-    setIsAuthLoading(true);
+    // Stay on the sign-in form until the password is accepted. Flipping the splash
+    // here unmounts the form, so a wrong password never shows its note.
     try {
       await setAuthRememberMe(options?.rememberMe !== false);
       const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password || '');
@@ -3380,6 +3391,9 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     note?: string;
     photoUrl?: string;
     signatureDataUrl?: string;
+    lat?: number;
+    lng?: number;
+    accuracyM?: number;
   }): Promise<FieldEvent> => {
     const trip = assertAssignedDriverTrip(params.tripId);
     if (!company.id) throw new Error('Company workspace is missing.');
@@ -3394,7 +3408,10 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       photoUrl: params.photoUrl,
       signatureDataUrl: params.signatureDataUrl,
       note: params.note,
-      gpsEnabled: true,
+      lat: params.lat,
+      lng: params.lng,
+      accuracyM: params.accuracyM,
+      gpsEnabled: params.lat != null && params.lng != null,
       isMocked: false,
     };
     await upsertCollection(company.id, 'fieldEvents', [
@@ -3405,6 +3422,42 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return [...prev, event];
     });
     return event;
+  };
+
+  const stampAssignedDriverGps = async (
+    tripId: string,
+    kind: 'pickup_geo' | 'delivery_geo',
+    note: string
+  ) => {
+    const trip = assertAssignedDriverTrip(tripId);
+    if (!company.id) throw new Error('Company workspace is missing.');
+    const pos = await readDevicePosition();
+    const ping: LiveTracking = {
+      id: trip.id,
+      tripId: trip.id,
+      companyId: company.id,
+      truckId: trip.truckId,
+      driverId: trip.driverId,
+      lat: pos.lat,
+      lng: pos.lng,
+      accuracyM: pos.accuracyM,
+      updatedAt: new Date().toISOString(),
+      gpsEnabled: true,
+      isMocked: false,
+    };
+    await upsertCollection(company.id, 'liveTracking', [ping]);
+    setLiveTracking((prev) => {
+      const rest = prev.filter((row) => row.id !== ping.id && row.tripId !== ping.tripId);
+      return [...rest, ping];
+    });
+    await addAssignedDriverFieldEvent({
+      tripId,
+      kind,
+      note,
+      lat: pos.lat,
+      lng: pos.lng,
+      accuracyM: pos.accuracyM,
+    });
   };
 
   const saveAssignedDriverSignoff = async (tripId: string, signatureDataUrl: string) => {
@@ -3545,16 +3598,6 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
     tripsDirtyRef.current = true;
     tripsPersistTokenRef.current += 1;
     setTrips((prev) => prev.map((row) => (row.id === tripId ? patchedTrip : row)));
-
-    try {
-      await addAssignedDriverFieldEvent({
-        tripId,
-        kind: 'delivery_geo',
-        note: 'I have arrived (Inbound) — browser',
-      });
-    } catch (error) {
-      console.warn('Inbound saved on trip; arrival field event failed', error);
-    }
   };
 
   const saveAssignedDriverWarehousePod = async (params: {
@@ -5120,6 +5163,7 @@ export const FreightProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isFieldDriverSession,
       assignedDriverRosterId,
       saveAssignedDriverSignoff,
+      stampAssignedDriverGps,
       markAssignedDriverArrived,
       saveAssignedDriverWarehousePod,
       addAssignedDriverFieldEvent,

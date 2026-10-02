@@ -1,7 +1,9 @@
-import React from 'react';
-import { AlertTriangle, Camera, MapPin, Navigation, PenTool, Radio, ShieldAlert } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, Camera, MapPin, PenTool, Radio, ShieldAlert } from 'lucide-react';
 import { FieldEvent, FieldEventKind, LiveTracking } from '../../types';
+import { drivingRoute, geocodeLabel, googleMapsRouteUrl, wazePointUrl, type MapPoint } from '../../lib/placeMap';
 import { safeHttpsUrl } from '../../lib/safeUrl';
+import { MarkedRouteMap, RouteMark } from './MarkedRouteMap';
 
 const KIND_LABEL: Record<FieldEventKind, string> = {
   dispatch_signature: 'Dispatch signature',
@@ -30,23 +32,148 @@ interface LiveTrackingPanelProps {
   tripId: string;
   tracking?: LiveTracking;
   events: FieldEvent[];
+  origin?: string;
+  destination?: string;
+  extraDropCount?: number;
+  /** Route card on the trip: map and arrival pins only. */
+  compact?: boolean;
 }
 
-export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({ tripId, tracking, events }) => {
+type MapPin = { label: string; lat: number; lng: number; when?: string };
+
+function latestPin(events: FieldEvent[], kind: FieldEventKind, label: string): MapPin | null {
+  const hit = events.find((event) => event.kind === kind && event.lat != null && event.lng != null);
+  if (!hit || hit.lat == null || hit.lng == null) return null;
+  return { label, lat: hit.lat, lng: hit.lng, when: hit.createdAt };
+}
+
+export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({
+  tripId,
+  tracking,
+  events,
+  origin,
+  destination,
+  extraDropCount = 0,
+  compact = false,
+}) => {
   const tripEvents = events
     .filter((event) => event.tripId === tripId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+  const arrivalPins = [
+    latestPin(tripEvents, 'pickup_geo', 'Arrived at pickup'),
+    latestPin(tripEvents, 'delivery_geo', 'Arrived at destination'),
+  ].filter((pin): pin is MapPin => Boolean(pin));
+
   const stale = tracking?.updatedAt
     ? Date.now() - new Date(tracking.updatedAt).getTime() > 3 * 60 * 1000
     : true;
+
+  const [marks, setMarks] = useState<RouteMark[]>([]);
+  const [road, setRoad] = useState<MapPoint[]>([]);
+  const [routeState, setRouteState] = useState<'idle' | 'loading' | 'missing'>('idle');
+
+  const pickupEvent = tripEvents.find((event) => event.kind === 'pickup_geo');
+  const dropoffEvent = tripEvents.find((event) => event.kind === 'delivery_geo');
+  const ping =
+    tracking?.lat != null && tracking.lng != null
+      ? { lat: tracking.lat, lng: tracking.lng, when: tracking.updatedAt }
+      : null;
+  const pickupStamp = arrivalPins.find((pin) => pin.label === 'Arrived at pickup')
+    || (pickupEvent && !dropoffEvent && ping ? { ...ping, label: 'Arrived at pickup' } : null);
+  const dropoffStamp = arrivalPins.find((pin) => pin.label === 'Arrived at destination')
+    || (dropoffEvent && ping ? { ...ping, label: 'Arrived at destination' } : null);
+  const pickupKey = [
+    pickupEvent?.id || '',
+    pickupStamp ? `${pickupStamp.lat},${pickupStamp.lng}` : '',
+    ping ? `${ping.lat},${ping.lng}` : '',
+  ].join('|');
+  const dropoffKey = [
+    dropoffEvent?.id || '',
+    dropoffStamp ? `${dropoffStamp.lat},${dropoffStamp.lng}` : '',
+  ].join('|');
+
+  useEffect(() => {
+    if (!origin && !destination && !pickupKey && !dropoffKey) {
+      setMarks([]);
+      setRouteState('missing');
+      return;
+    }
+    let cancelled = false;
+    setRouteState('loading');
+    (async () => {
+      const pickupPoint = pickupStamp
+        ? { lat: pickupStamp.lat, lng: pickupStamp.lng }
+        : origin
+          ? await geocodeLabel(origin)
+          : null;
+      const dropoffPoint = dropoffStamp
+        ? { lat: dropoffStamp.lat, lng: dropoffStamp.lng }
+        : destination
+          ? await geocodeLabel(destination)
+          : null;
+      if (cancelled) return;
+      const next: RouteMark[] = [];
+      if (pickupPoint) {
+        next.push({
+          id: 'pickup',
+          label: 'Pickup',
+          detail: pickupStamp?.when
+            ? `Marked ${formatWhen(pickupStamp.when)}`
+            : pickupEvent
+              ? 'Marked, GPS not saved'
+              : 'Booked yard',
+          lat: pickupPoint.lat,
+          lng: pickupPoint.lng,
+          stamped: Boolean(pickupStamp || pickupEvent),
+        });
+      }
+      if (dropoffPoint) {
+        next.push({
+          id: 'dropoff',
+          label: 'Dropoff',
+          detail: dropoffStamp?.when
+            ? `Marked ${formatWhen(dropoffStamp.when)}`
+            : dropoffEvent
+              ? 'Marked, GPS not saved'
+              : 'Booked gate',
+          lat: dropoffPoint.lat,
+          lng: dropoffPoint.lng,
+          stamped: Boolean(dropoffStamp || dropoffEvent),
+        });
+      }
+      setMarks(next);
+      setRouteState(next.length ? 'idle' : 'missing');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [origin, destination, pickupKey, dropoffKey]);
+
+  const roadKey = marks.map((mark) => `${mark.id}:${mark.lat.toFixed(5)},${mark.lng.toFixed(5)}`).join('|');
+
+  useEffect(() => {
+    const pickup = marks.find((mark) => mark.id === 'pickup');
+    const dropoff = marks.find((mark) => mark.id === 'dropoff');
+    if (!pickup || !dropoff) {
+      setRoad([]);
+      return;
+    }
+    let cancelled = false;
+    drivingRoute([pickup, dropoff]).then((line) => {
+      if (!cancelled) setRoad(line || []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [roadKey, marks]); // pickup and dropoff stamps are included in the keys
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-2xs">
       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
         <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
           <Radio className={`w-4 h-4 ${tracking?.gpsEnabled && !stale ? 'text-emerald-600' : 'text-slate-400'}`} />
-          <span>Driver app · live GPS & field captures</span>
+          <span>{compact ? 'Route map' : 'Driver app · live GPS & field captures'}</span>
         </div>
         {tracking && (
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
@@ -56,18 +183,54 @@ export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({ tripId, tr
               ? 'bg-amber-50 text-amber-800 border-amber-200'
               : 'bg-emerald-50 text-emerald-800 border-emerald-200'
           }`}>
-            {!tracking.gpsEnabled ? 'GPS off' : tracking.isMocked ? 'Fake GPS' : stale ? 'Stale ping' : 'Live'}
+            {!tracking.gpsEnabled ? 'GPS off' : tracking.isMocked ? 'Fake GPS' : stale ? 'Last location' : 'Live'}
           </span>
         )}
       </div>
 
-      {!tracking ? (
-        <p className="text-[11px] text-slate-500">
-          No driver-app ping yet. When the assigned driver opens CasinFreight Driver with GPS on, the truck appears here.
-        </p>
-      ) : (
+      {marks.length > 0 ? (
         <div className="space-y-2">
-          {(!tracking.gpsEnabled || tracking.isMocked) && (
+          <MarkedRouteMap marks={marks} path={road} />
+          {marks.some((mark) => mark.id === 'pickup') && marks.some((mark) => mark.id === 'dropoff') && (
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={googleMapsRouteUrl(
+                  marks.find((mark) => mark.id === 'pickup') as MapPoint,
+                  marks.find((mark) => mark.id === 'dropoff') as MapPoint
+                )}
+                target="_blank"
+                rel="noreferrer"
+                className="h-9 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-900 flex items-center justify-center hover:bg-slate-50"
+              >
+                Google Maps
+              </a>
+              <a
+                href={wazePointUrl(marks.find((mark) => mark.id === 'dropoff') as MapPoint)}
+                target="_blank"
+                rel="noreferrer"
+                className="h-9 rounded-lg bg-slate-900 text-xs font-bold text-white flex items-center justify-center hover:bg-slate-800"
+              >
+                Waze
+              </a>
+            </div>
+          )}
+          {extraDropCount > 0 && (
+            <p className="text-[11px] text-slate-500">
+              This trip bills {extraDropCount} extra drop{extraDropCount > 1 ? 's' : ''}. Those stops have no address of their own, so the road shown is pickup to the final dropoff.
+            </p>
+          )}
+          <div className="flex flex-col gap-1">
+            {marks.map((mark) => (
+              <div key={mark.id} className="flex items-center justify-between gap-2 text-[11px]">
+                <span className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <span className={`h-2.5 w-2.5 rounded-full ${mark.id === 'pickup' ? 'bg-emerald-600' : 'bg-blue-600'}`} />
+                  {mark.label}
+                </span>
+                <span className={mark.stamped ? 'font-semibold text-emerald-800' : 'text-slate-500'}>{mark.detail}</span>
+              </div>
+            ))}
+          </div>
+          {tracking && (!tracking.gpsEnabled || tracking.isMocked) && (
             <div className="flex items-start gap-2 text-[11px] bg-rose-50 border border-rose-200 text-rose-800 rounded-lg p-2">
               <ShieldAlert className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span>
@@ -77,42 +240,14 @@ export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({ tripId, tr
               </span>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-              <div className="text-[10px] text-slate-400 uppercase font-semibold">Last ping</div>
-              <div className="font-semibold text-slate-900 mt-0.5">{formatWhen(tracking.updatedAt)}</div>
-            </div>
-            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-              <div className="text-[10px] text-slate-400 uppercase font-semibold">Speed / accuracy</div>
-              <div className="font-semibold text-slate-900 mt-0.5">
-                {tracking.speedKmh != null ? `${tracking.speedKmh.toFixed(0)} km/h` : '—'} · ±{tracking.accuracyM != null ? Math.round(tracking.accuracyM) : '—'} m
-              </div>
-            </div>
-          </div>
-          {tracking.lat != null && tracking.lng != null && (
-            <>
-          <a
-            href={mapsUrl(tracking.lat, tracking.lng)}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-between gap-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-100"
-          >
-            <span className="flex items-center gap-1.5">
-              <Navigation className="w-3.5 h-3.5" />
-              {tracking.lat.toFixed(5)}, {tracking.lng.toFixed(5)}
-            </span>
-            <span>Open map</span>
-          </a>
-          <iframe
-            title="Live truck map"
-            className="w-full h-44 rounded-lg border border-slate-200"
-            src={`https://www.openstreetmap.org/export/embed.html?bbox=${tracking.lng - 0.02}%2C${tracking.lat - 0.02}%2C${tracking.lng + 0.02}%2C${tracking.lat + 0.02}&layer=mapnik&marker=${tracking.lat}%2C${tracking.lng}`}
-          />
-            </>
-          )}
         </div>
+      ) : (
+        <p className="text-[11px] text-slate-500">
+          {routeState === 'loading' ? 'Loading the route map…' : 'No pickup or dropoff location yet.'}
+        </p>
       )}
 
+      {!compact && (
       <div className="pt-1">
         <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Field timeline (phone)</div>
         {tripEvents.length === 0 ? (
@@ -153,6 +288,7 @@ export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({ tripId, tr
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

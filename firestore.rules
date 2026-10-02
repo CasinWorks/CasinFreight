@@ -650,6 +650,9 @@ service cloud.firestore {
         allow read: if isClientPortalFor(companyId)
           && exists(tripPath(companyId, tripId))
           && get(tripPath(companyId, tripId)).data.clientId == portalClientId();
+        allow create, update: if inCompany(companyId)
+          && isFieldDriverMember()
+          && exists(tripPath(companyId, tripId));
         allow create, update: if isAssignedTripDriver(companyId, tripId)
           || hasPerm(companyId, 'trips.edit');
         allow delete: if isCompanyOwner(companyId);

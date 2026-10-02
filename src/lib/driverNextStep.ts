@@ -37,9 +37,9 @@ export function driverNextStepForTrip(
 
   if (status === 'In Transit' || (driverSigned && dispatcherSigned)) {
     return {
-      title: 'Next: Tap I have arrived',
+      title: 'Next: I have arrived',
       detail:
-        'When you reach the consignee gate, tap I have arrived. That sets Inbound so warehouse can sign e-POD here.',
+        'When you reach the consignee gate, tap I have arrived once. That saves the GPS and sets Inbound so warehouse can sign e-POD here.',
     };
   }
 
@@ -59,8 +59,8 @@ export function driverNextStepForTrip(
 
   if (!pickupStamped) {
     return {
-      title: 'Next: Stamp pickup GPS',
-      detail: 'Record arrival at the pickup yard before documenting the cargo.',
+      title: 'Next: Arrived at pickup',
+      detail: 'Tap once when you reach the pickup yard. That tap saves the GPS for the office map.',
     };
   }
 

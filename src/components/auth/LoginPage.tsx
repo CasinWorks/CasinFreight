@@ -281,7 +281,7 @@ export const LoginPage: React.FC = () => {
               )}
 
               {errorMessage && (
-                <div className="bg-rose-950/60 border border-rose-800 text-rose-300 p-3 rounded-xl text-xs flex items-center gap-2.5">
+                <div className="bg-rose-950/60 border border-rose-800 text-rose-200 p-3 rounded-xl text-sm font-semibold flex items-center gap-2.5">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{errorMessage}</span>
                 </div>

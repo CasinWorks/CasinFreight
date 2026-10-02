@@ -898,6 +898,9 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                 tripId={trip.id}
                 tracking={liveTracking.find((item) => item.tripId === trip.id || item.id === trip.id)}
                 events={fieldEvents}
+                origin={[trip.originZone, trip.originAddress].filter(Boolean).join(', ')}
+                destination={[trip.destinationZone, trip.destinationAddress].filter(Boolean).join(', ')}
+                extraDropCount={trip.multiStopCount || 0}
               />
 
               {/* Security Seal & Gate Pass Card */}
@@ -1031,6 +1034,16 @@ export const TripDetailModal: React.FC<TripDetailModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              <LiveTrackingPanel
+                compact
+                tripId={trip.id}
+                tracking={liveTracking.find((item) => item.tripId === trip.id || item.id === trip.id)}
+                events={fieldEvents}
+                origin={[trip.originZone, trip.originAddress].filter(Boolean).join(', ')}
+                destination={[trip.destinationZone, trip.destinationAddress].filter(Boolean).join(', ')}
+                extraDropCount={trip.multiStopCount || 0}
+              />
 
               {/* Cargo & Weight Spec */}
               <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2">

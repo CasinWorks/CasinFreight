@@ -222,7 +222,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           {errorMessage && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs flex items-center gap-2.5">
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-sm font-semibold flex items-center gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMessage}</span>
             </div>

@@ -67,7 +67,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'client-portal',
     question: 'How does the shipper / warehouse sign e-POD?',
     answer:
-      'The driver taps I have arrived (Inbound) at the gate, then hands the phone to the warehouse officer. They sign on the pad and type their full name and role. Office staff can also stamp e-POD on the website. There is no separate warehouse login.',
+      'The driver taps Arrived at pickup, then later I have arrived at the gate. Each tap saves the phone GPS for the office map. Then they hand the phone to the warehouse officer. They sign on the pad and type their full name and role. Office staff can also stamp e-POD on the website. There is no separate warehouse login.',
   },
   {
     id: 'tolls',
@@ -181,7 +181,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     steps: [
       'Open a trip from the board.',
       'Advance status when each gate is ready (seal → yard release → In Transit).',
-      'Driver taps I have arrived (Inbound). Then warehouse signs e-POD on the driver phone (name + role), or office stamps it here.',
+      'Driver taps I have arrived once at the gate. That saves the GPS and sets Inbound. Then warehouse signs e-POD on the driver phone (name + role), or office stamps it here.',
       'Add accessorials (demurrage, overweight, helper crew, overnight, etc.) if they apply.',
       'Print or share the delivery note / waybill.',
       'When Delivered, create the invoice from this file or from Invoices.',
