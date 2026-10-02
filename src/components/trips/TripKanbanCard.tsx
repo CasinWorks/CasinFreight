@@ -326,7 +326,6 @@ export const TripKanbanCard: React.FC<TripKanbanCardProps> = ({
               {trip.status === 'In Transit' && 'Arrived'}
               {trip.status === 'Inbound' && 'POD'}
               {trip.status === 'Delivered' && 'Invoice'}
-              {trip.status === 'Delivered' && 'Invoice'}
               {trip.status === 'Invoiced' && 'View'}
               {trip.status === 'On Hold' && 'Resume'}
               {trip.status === 'Cancelled' && 'Cancelled'}
