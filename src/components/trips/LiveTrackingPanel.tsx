@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Camera, MapPin, PenTool, Radio, ShieldAlert } from 'lucide-react';
 import { FieldEvent, FieldEventKind, LiveTracking } from '../../types';
-import { drivingRoute, geocodeLabel, googleMapsRouteUrl, wazePointUrl, type MapPoint } from '../../lib/placeMap';
+import { drivingRoute, geocodeLabel, googleMapsRouteUrl, reversePlace, wazePointUrl, type MapPoint } from '../../lib/placeMap';
 import { safeHttpsUrl } from '../../lib/safeUrl';
 import { MarkedRouteMap, RouteMark } from './MarkedRouteMap';
 
@@ -39,12 +39,12 @@ interface LiveTrackingPanelProps {
   compact?: boolean;
 }
 
-type MapPin = { label: string; lat: number; lng: number; when?: string };
+type MapPin = { label: string; lat: number; lng: number; when?: string; accuracyM?: number };
 
 function latestPin(events: FieldEvent[], kind: FieldEventKind, label: string): MapPin | null {
   const hit = events.find((event) => event.kind === kind && event.lat != null && event.lng != null);
   if (!hit || hit.lat == null || hit.lng == null) return null;
-  return { label, lat: hit.lat, lng: hit.lng, when: hit.createdAt };
+  return { label, lat: hit.lat, lng: hit.lng, when: hit.createdAt, accuracyM: hit.accuracyM };
 }
 
 export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({
@@ -77,7 +77,7 @@ export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({
   const dropoffEvent = tripEvents.find((event) => event.kind === 'delivery_geo');
   const ping =
     tracking?.lat != null && tracking.lng != null
-      ? { lat: tracking.lat, lng: tracking.lng, when: tracking.updatedAt }
+      ? { lat: tracking.lat, lng: tracking.lng, when: tracking.updatedAt, accuracyM: tracking.accuracyM }
       : null;
   const pickupStamp = arrivalPins.find((pin) => pin.label === 'Arrived at pickup')
     || (pickupEvent && !dropoffEvent && ping ? { ...ping, label: 'Arrived at pickup' } : null);
@@ -113,37 +113,51 @@ export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({
           ? await geocodeLabel(destination)
           : null;
       if (cancelled) return;
-      const next: RouteMark[] = [];
-      if (pickupPoint) {
-        next.push({
-          id: 'pickup',
-          label: 'Pickup',
-          detail: pickupStamp?.when
-            ? `Marked ${formatWhen(pickupStamp.when)}`
-            : pickupEvent
-              ? 'Marked, GPS not saved'
-              : 'Booked yard',
-          lat: pickupPoint.lat,
-          lng: pickupPoint.lng,
-          stamped: Boolean(pickupStamp || pickupEvent),
-        });
-      }
-      if (dropoffPoint) {
-        next.push({
-          id: 'dropoff',
-          label: 'Dropoff',
-          detail: dropoffStamp?.when
-            ? `Marked ${formatWhen(dropoffStamp.when)}`
-            : dropoffEvent
-              ? 'Marked, GPS not saved'
-              : 'Booked gate',
-          lat: dropoffPoint.lat,
-          lng: dropoffPoint.lng,
-          stamped: Boolean(dropoffStamp || dropoffEvent),
-        });
-      }
-      setMarks(next);
-      setRouteState(next.length ? 'idle' : 'missing');
+      const build = (pickupPlace?: string | null, dropoffPlace?: string | null): RouteMark[] => {
+        const next: RouteMark[] = [];
+        if (pickupPoint) {
+          next.push({
+            id: 'pickup',
+            label: 'Pickup',
+            place: pickupPlace || undefined,
+            accuracyM: pickupStamp?.accuracyM,
+            detail: pickupStamp?.when
+              ? `Marked ${formatWhen(pickupStamp.when)}`
+              : pickupEvent
+                ? 'Marked, GPS not saved'
+                : 'Booked yard',
+            lat: pickupPoint.lat,
+            lng: pickupPoint.lng,
+            stamped: Boolean(pickupStamp || pickupEvent),
+          });
+        }
+        if (dropoffPoint) {
+          next.push({
+            id: 'dropoff',
+            label: 'Dropoff',
+            place: dropoffPlace || undefined,
+            accuracyM: dropoffStamp?.accuracyM,
+            detail: dropoffStamp?.when
+              ? `Marked ${formatWhen(dropoffStamp.when)}`
+              : dropoffEvent
+                ? 'Marked, GPS not saved'
+                : 'Booked gate',
+            lat: dropoffPoint.lat,
+            lng: dropoffPoint.lng,
+            stamped: Boolean(dropoffStamp || dropoffEvent),
+          });
+        }
+        return next;
+      };
+      const first = build();
+      setMarks(first);
+      setRouteState(first.length ? 'idle' : 'missing');
+      const [pickupPlace, dropoffPlace] = await Promise.all([
+        pickupStamp && pickupPoint ? reversePlace(pickupPoint) : Promise.resolve(null),
+        dropoffStamp && dropoffPoint ? reversePlace(dropoffPoint) : Promise.resolve(null),
+      ]);
+      if (cancelled || (!pickupPlace && !dropoffPlace)) return;
+      setMarks(build(pickupPlace, dropoffPlace));
     })();
     return () => {
       cancelled = true;
@@ -219,14 +233,23 @@ export const LiveTrackingPanel: React.FC<LiveTrackingPanelProps> = ({
               This trip bills {extraDropCount} extra drop{extraDropCount > 1 ? 's' : ''}. Those stops have no address of their own, so the road shown is pickup to the final dropoff.
             </p>
           )}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             {marks.map((mark) => (
-              <div key={mark.id} className="flex items-center justify-between gap-2 text-[11px]">
-                <span className="flex items-center gap-1.5 font-semibold text-slate-800">
+              <div key={mark.id} className="text-[11px] leading-snug">
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
                   <span className={`h-2.5 w-2.5 rounded-full ${mark.id === 'pickup' ? 'bg-emerald-600' : 'bg-blue-600'}`} />
                   {mark.label}
-                </span>
-                <span className={mark.stamped ? 'font-semibold text-emerald-800' : 'text-slate-500'}>{mark.detail}</span>
+                </div>
+                {mark.stamped && mark.lat != null && (
+                  <p className="pl-4 font-semibold text-emerald-800">
+                    Stamped at {mark.place ? `${mark.place} · ` : ''}
+                    {mark.lat.toFixed(5)}, {mark.lng.toFixed(5)}
+                    {mark.accuracyM != null && Number.isFinite(mark.accuracyM)
+                      ? ` · within ${Math.round(mark.accuracyM)} m`
+                      : ''}
+                  </p>
+                )}
+                <p className={`pl-4 ${mark.stamped ? 'text-slate-600' : 'text-slate-500'}`}>{mark.detail}</p>
               </div>
             ))}
           </div>

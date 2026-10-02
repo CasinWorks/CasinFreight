@@ -53,6 +53,33 @@ export async function geocodeLabel(label: string): Promise<MapPoint | null> {
   return null;
 }
 
+const reverseCache = new Map<string, Promise<string | null>>();
+
+function shortPlace(address: Record<string, string>, displayName?: string): string | null {
+  const area = address.neighbourhood || address.suburb || address.quarter || address.village || address.hamlet;
+  const city = address.city || address.town || address.municipality || address.city_district;
+  const line = [address.road, area, city].filter((part, index, parts) => part && parts.indexOf(part) === index);
+  if (line.length) return line.join(', ');
+  const fallback = displayName?.split(',').slice(0, 3).map((part) => part.trim()).filter(Boolean).join(', ');
+  return fallback || null;
+}
+
+/** Street and barangay for a GPS reading, so the office can see where the stamp landed. */
+export function reversePlace(point: MapPoint): Promise<string | null> {
+  const key = `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`;
+  const cached = reverseCache.get(key);
+  if (cached) return cached;
+  const pending = paced(async () => {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${point.lat}&lon=${point.lng}&zoom=18&addressdetails=1`;
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { address?: Record<string, string>; display_name?: string };
+    return shortPlace(body.address || {}, body.display_name);
+  }).catch(() => null);
+  reverseCache.set(key, pending);
+  return pending;
+}
+
 export function googleMapsDirectionsUrl(destination: string) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
 }
